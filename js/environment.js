@@ -119,15 +119,13 @@
       railGrp = new THREE.Group();
       const rMat = M.ss(0x4a5a6a);
 
-      // [추가] 2. 하부 베이스 채널(Foot Plate) - 카 및 균형추 레일용 (높이 0.1m)
       const chH = 0.1;
-      const baseMat = M.paint(0x374151); // 짙은 회색
+      const baseMat = M.paint(0x374151);
       // 카 레일 지지 채널
       createBox(S.CAR_BG + 0.3, chH, 0.2, baseMat, 0, Y0 + chH / 2, 0.04, railGrp);
       // 균형추 레일 지지 채널
       createBox(S.CWT_W + 0.3, chH, 0.2, baseMat, 0, Y0 + chH / 2, CWT_CENTER_Z, railGrp);
 
-      // 가이드 레일이 기계실 바닥을 뚫고 나오지 않게 높이 조정
       const rh = TOTAL_H - 0.1 - chH;
       const rY = Y0 + chH + rh / 2;
 
@@ -135,16 +133,21 @@
         const g = new THREE.Group();
         g.add(createBox(isCwt ? 0.03 : 0.034, rh, isCwt ? 0.07 : 0.082, rMat, 0, 0, 0, g)); // web
         g.add(createBox(isCwt ? 0.1 : 0.118, rh, 0.014, rMat, 0, 0, isCwt ? 0.041 : 0.048, g)); // flange
-        g.position.set(px, rY, pz); g.rotation.y = rotY; return g;
+        g.position.set(px, rY, pz);
+        g.rotation.y = rotY;
+        return g;
       }
 
-      // 카 측 레일
-      railGrp.add(drawRail(-S.CAR_BG / 2, 0.04, false, 0), drawRail(S.CAR_BG / 2, 0.04, false, 0));
+      // [수정] 카 측 레일 방향 90도 회전 (웹이 안쪽을 바라보도록)
+      // 좌측 레일(-Math.PI / 2): 웹이 +X 방향을 향함
+      railGrp.add(drawRail(-S.CAR_BG / 2, 0.04, false, -Math.PI / 2));
+      // 우측 레일(Math.PI / 2): 웹이 -X 방향을 향함
+      railGrp.add(drawRail(S.CAR_BG / 2, 0.04, false, Math.PI / 2));
 
-      // 균형추 측 레일 (후면)
+      // 균형추 측 레일 (후면, 마주보게 회전)
       railGrp.add(
-        drawRail(-S.CWT_W / 2, CWT_CENTER_Z, true, Math.PI),
-        drawRail(S.CWT_W / 2, CWT_CENTER_Z, true, 0)
+        drawRail(-S.CWT_W / 2, CWT_CENTER_Z, true, -Math.PI / 2),
+        drawRail(S.CWT_W / 2, CWT_CENTER_Z, true, Math.PI / 2)
       );
 
       scene.add(railGrp);
@@ -154,11 +157,9 @@
       const landingDeviceGrp = new THREE.Group();
       // 레일 좌표 기준 (buildGuideRails 동일)
       const rightRailX = S.CAR_BG / 2;   // +0.975
-      const leftRailX  = -S.CAR_BG / 2;  // -0.975
       const railZ      = 0.04;            // 레일 중심 Z
       const sensorZ    = 0.10;            // 센서/베인 Z — 나중에 카 차폐판 Z와 맞춤
       const bracketMat = M.ss(0x5a6575);
-      const maxFloor   = FLOORS - 1;
 
       landingDevices.length = 0;
 
@@ -214,89 +215,148 @@
 
         landingDevices.push({ floor: fIdx, type: 'landing', mesh: sg, triggerY: triggerY });
 
-        /* ────────────────────────────────────────────
-           최하층/최상층 좌측 레일: 리미트 스위치 뭉치
-           배치 순서: 최상층 (아래→위) 감속→리미트→파이널
-                     최하층 (위→아래) 감속→리미트→파이널
-           구성: 검정 본체 + 회색 롤러 암 + 롤러 + 색상 버튼
-        ──────────────────────────────────────────── */
-        if (fIdx === 0 || fIdx === maxFloor) {
-          const lOuterX  = leftRailX - 0.017;  // -0.992
-          const lSwitchX = leftRailX - 0.18;   // -1.155
-
-          // ㄱ자 브라켓 2쌍 (스위치 클러스터 상/하단 고정)
-          const sArm1L = lOuterX - lSwitchX;   // 0.163m
-          const sArm2L = sensorZ - railZ;       // 0.060m
-          [-0.30, 0.30].forEach(yOff => {
-            const a1 = createBox(sArm1L, 0.025, 0.025, bracketMat,
-              lSwitchX + sArm1L / 2, deviceY + yOff, railZ, landingDeviceGrp);
-            a1.userData = { type: 'bracket', floor: fIdx, side: 'left' };
-            const a2 = createBox(0.025, 0.025, sArm2L, bracketMat,
-              lSwitchX, deviceY + yOff, railZ + sArm2L / 2, landingDeviceGrp);
-            a2.userData = { type: 'bracket', floor: fIdx, side: 'left' };
-          });
-
-          // 수직 마운팅 레일 (3개 스위치 공용)
-          const mRail = createBox(0.025, 0.70, 0.025, bracketMat,
-            lSwitchX, deviceY, sensorZ, landingDeviceGrp);
-          mRail.userData = { type: 'mount-rail', floor: fIdx, side: 'left' };
-
-          // 스위치 Y위치 — 최상층:아래→위(+방향), 최하층:위→아래(-방향)
-          const swDir = fIdx === maxFloor ? 1 : -1;
-          const swSp  = 0.22;
-          const swDefs = [
-            { yOff: -swDir * swSp, func: 'slowdown',    col: 0xff8800 },
-            { yOff: 0,             func: 'limit',        col: 0xff2200 },
-            { yOff:  swDir * swSp, func: 'final-limit',  col: 0xaa0000 },
-          ];
-
-          const bodyMat   = M.paint(0x1a1a1a);
-          const rollerMat = M.ss(0x9ca3af);
-
-          swDefs.forEach(sw => {
-            const swY = deviceY + sw.yOff;
-            const sg  = new THREE.Group();
-
-            // 본체 (검정 박스)
-            createBox(0.060, 0.050, 0.048, bodyMat, 0, 0, 0, sg)
-              .userData = { type: 'switch-body' };
-
-            // 롤러 암 (+X방향 = 카 쪽으로 뻗음)
-            createBox(0.100, 0.010, 0.010, M.ss(0x6b7280), 0.050, -0.015, 0, sg)
-              .userData = { type: 'roller-arm' };
-
-            // 롤러 (Z축 방향 원통 — Y방향 움직임에 구름)
-            const roller = new THREE.Mesh(
-              new THREE.CylinderGeometry(0.012, 0.012, 0.022, 10), rollerMat);
-            roller.rotation.x = Math.PI / 2;
-            roller.position.set(0.100, -0.015, 0);
-            roller.userData = { type: 'roller' };
-            sg.add(roller);
-
-            // 종류 구분 버튼 (위 돌기)
-            const btn = new THREE.Mesh(
-              new THREE.CylinderGeometry(0.007, 0.007, 0.014, 8), M.paint(sw.col));
-            btn.position.set(0, 0.032, 0);
-            btn.userData = { type: 'indicator-button' };
-            sg.add(btn);
-
-            sg.userData = { type: 'limit-switch', floor: fIdx, function: sw.func };
-            sg.position.set(lSwitchX, swY, sensorZ);
-            landingDeviceGrp.add(sg);
-
-            if (DEBUG_SENSOR) {
-              landingDeviceGrp.add(new THREE.BoxHelper(sg, sw.col));
-              const axes = new THREE.AxesHelper(0.1);
-              axes.position.set(lSwitchX, swY, sensorZ);
-              landingDeviceGrp.add(axes);
-            }
-
-            landingDevices.push({ floor: fIdx, type: sw.func, mesh: sg, triggerY: swY });
-          });
-        }
       }
 
       railGrp.add(landingDeviceGrp);
+    }
+
+    /* ==========================================================================
+       buildLimitSwitches — 안전용 물리 리미트 스위치 뭉치 (디자인 업그레이드)
+       위치: 승강로 좌측 레일 최상단·최하단
+       구성: 감속(Slowdown) → 리미트(Limit) → 파이널(Final) 3종 × 2개소
+       ========================================================================== */
+    function buildLimitSwitches() {
+      const limGrp    = new THREE.Group();
+      const leftRailX = -S.CAR_BG / 2;         // -0.975
+      const lOuterX   = leftRailX - 0.017;      // -0.992
+      const lSwitchX  = leftRailX - 0.18;       // -1.155 (스위치 본체 X)
+      const railZ     = 0.04;
+      const sensorZ   = 0.10;
+      const bktMat    = M.ss(0x5a6575);
+      const swSp      = 0.22;                   // 스위치 수직 간격 220mm
+      const camH      = S.CAR_H * 0.85;
+
+      // 사진 기반 디자인 제원
+      const rLocX     = 0.075;    // 본체 중심에서 롤러까지 X 거리 (카 방향)
+      const rLocYBase = 0.04;     // 롤러 암의 Y축 상승/하강 폭
+      const bodyMat   = M.ss(0x7a8494); // 회색 금속 본체
+      const armMat    = M.ss(0x9ca3af);
+      const boltMat   = M.ss(0xb8c0cc);
+      const rollerR   = 0.015;
+      const rollerThk = 0.012;
+
+      // 상/하부 종단 정위치 시 캠의 타격 면 모서리 Y 좌표 산출
+      // 하부: 캠 하단 모서리 / 상부: 캠 상단 모서리
+      [
+        { dir:  1, label: 'top',    edgeY: FLOOR_Y[FLOORS - 1] + S.CAR_H / 2 + camH / 2 },
+        { dir: -1, label: 'bottom', edgeY: FLOOR_Y[0] + S.CAR_H / 2 - camH / 2 },
+      ].forEach(({ dir, label, edgeY }) => {
+
+        // 사진 구조 반영: 상부는 암이 위로 뻗고, 하부는 암이 아래로 뻗음
+        const rLocY = rLocYBase * dir;
+
+        // ★ 역산: 리미트(중앙) 롤러 중심 World Y = edgeY → swY + rLocY = edgeY, swY=cy
+        const cy = edgeY - rLocY;
+
+        // ── ㄱ자 마운팅 브라켓 2쌍 (상/하 ±0.30m) ──────────────────────────
+        const arm1L = lOuterX - lSwitchX;
+        const arm2L = sensorZ - railZ;
+        [-0.30, 0.30].forEach(yOff => {
+          createBox(arm1L, 0.025, 0.025, bktMat,
+            lSwitchX + arm1L / 2, cy + yOff, railZ, limGrp)
+            .userData = { type: 'limit-bracket', floor: label };
+          createBox(0.025, 0.025, arm2L, bktMat,
+            lSwitchX, cy + yOff, railZ + arm2L / 2, limGrp)
+            .userData = { type: 'limit-bracket', floor: label };
+        });
+
+        // ── 수직 마운팅 레일 ────────────────────────────────────────────────
+        createBox(0.025, 0.70, 0.025, bktMat, lSwitchX, cy, sensorZ, limGrp)
+          .userData = { type: 'limit-mount-rail', floor: label };
+
+        // ── 스위치 3개 (dir=+1: 아래→위 감속·리미트·파이널) ───────────────
+        [
+          { yOff: -dir * swSp, func: 'slowdown',    col: 0xff8800 },
+          { yOff: 0,           func: 'limit',        col: 0xff2200 },
+          { yOff:  dir * swSp, func: 'final-limit',  col: 0xaa0000 },
+        ].forEach(sw => {
+          const swY = cy + sw.yOff;
+          const sg  = new THREE.Group();
+
+          // ① 본체: 회색 금속 하우징
+          createBox(0.042, 0.092, 0.052, bodyMat, 0, 0, 0, sg)
+            .userData = { type: 'switch-body' };
+
+          // 전면 커버 볼트 4개 (+X 면 모서리 근처)
+          const bx = 0.022, by = 0.034, bz = 0.020;
+          [[bx, by, bz], [bx, by, -bz], [bx, -by, bz], [bx, -by, -bz]].forEach(p => {
+            const bolt = new THREE.Mesh(new THREE.SphereGeometry(0.0045, 8, 6), boltMat);
+            bolt.position.set(p[0], p[1], p[2]);
+            bolt.userData = { type: 'cover-bolt' };
+            sg.add(bolt);
+          });
+
+          // 역할 표시 버튼 (전면 하단)
+          const btn = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.006, 0.006, 0.011, 10), M.paint(sw.col));
+          btn.rotation.z = Math.PI / 2;
+          btn.position.set(0.023, -0.040, 0);
+          btn.userData = { type: 'indicator-button', function: sw.func };
+          sg.add(btn);
+
+          // ② 대각선 롤러 암 (피봇 → 롤러 방향, 상·하 대칭)
+          const pivotX = 0.018;
+          const pivotY = 0.006 * dir;
+          const dx     = rLocX - pivotX;
+          const dy     = rLocY - pivotY;
+          const armLen = Math.max(0.04, Math.hypot(dx, dy) - rollerR);
+          const ang    = Math.atan2(dy, dx);
+          const arm    = createBox(armLen, 0.006, 0.010, armMat,
+            pivotX + Math.cos(ang) * armLen * 0.5,
+            pivotY + Math.sin(ang) * armLen * 0.5,
+            0, sg);
+          arm.rotation.z = ang;
+          arm.userData = { type: 'roller-arm-diagonal' };
+
+          // ③ 검은 우레탄 롤러 (Z축 관통 — 카 상·하 이동 시 회전)
+          const roller = new THREE.Mesh(
+            new THREE.CylinderGeometry(rollerR, rollerR, rollerThk, 16), M.paint(0x151515));
+          roller.rotation.x = Math.PI / 2;
+          roller.position.set(rLocX, rLocY, 0);
+          roller.userData = { type: 'roller', function: sw.func };
+          sg.add(roller);
+
+          const axle = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.003, 0.003, rollerThk + 0.004, 8), M.ss(0x9ca3af));
+          axle.rotation.x = Math.PI / 2;
+          axle.position.set(rLocX, rLocY, 0);
+          axle.userData = { type: 'roller-axle' };
+          sg.add(axle);
+
+          sg.userData = { type: 'limit-switch', floor: label, function: sw.func };
+          sg.position.set(lSwitchX, swY, sensorZ);
+          limGrp.add(sg);
+
+          const rollerWorldX = lSwitchX + rLocX;
+          const rollerWorldY = swY + rLocY;
+
+          if (DEBUG_SENSOR) {
+            limGrp.add(new THREE.BoxHelper(sg, sw.col));
+            const rSph = new THREE.Mesh(
+              new THREE.SphereGeometry(0.007, 8, 6),
+              new THREE.MeshBasicMaterial({ color: 0x00ff88, wireframe: true }));
+            rSph.position.set(rollerWorldX, rollerWorldY, sensorZ);
+            limGrp.add(rSph);
+            const rAx = new THREE.AxesHelper(0.1);
+            rAx.position.set(rollerWorldX, rollerWorldY, sensorZ);
+            limGrp.add(rAx);
+          }
+
+          landingDevices.push({ floor: label, type: sw.func, mesh: sg, triggerY: swY });
+        });
+      });
+
+      railGrp.add(limGrp);
     }
 
     function buildMachineRoom() {

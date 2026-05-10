@@ -56,35 +56,141 @@
       carSensors.landingVane = vane;
 
       /* ──────────────────────────────────────────────────────────────
-         2. 좌측 수직 캠 막대 — 레일 리미트 스위치 롤러를 스칠 정도로 통과
-            롤러 암 팁 X: lSensorX + 0.100 = -1.055
-            캠 우면  X: -1.031  →  캠 좌면: -1.049  (6mm 간극)
-            캠 중심  X: -1.040
+         2. 좌측 수직 캠 막대 (buildLimitSwitches 롤러 타격용)
+            롤러 중심 X = lSensorX + rLocX(0.075) = -1.080
+            롤러 +X 끝   = -1.065  →  캠 좌면 ≈ -1.070 (약 5mm 간극)
+            캠 중심 X    = lSensorX + 0.095 = -1.060
       ────────────────────────────────────────────────────────────── */
-      const camX       = lSensorX + 0.115;              // -1.040
-      const camRFace   = camX + 0.009;                  // -1.031 (캠 우면, 18mm 폭)
-      const camArmLen  = lWallOuter - camRFace;          // -0.9125 - (-1.031) = 0.1185m
-      const camArmCtrX = (lWallOuter + camRFace) / 2;   // -0.972
+      const camX      = lSensorX + 0.095;              // -1.060
+      const camRFace  = camX + 0.010;                  // -1.020 (캠 우면, 20mm 폭)
+      const camArmLen = lWallOuter - camRFace;          // 0.1075m
+      const camArmCx  = (lWallOuter + camRFace) / 2;   // -0.966
+      const camH      = H * 0.85;                      // 2.125m (거의 전체 카 높이)
 
-      // 마운팅 암 (카 좌측벽 → 캠)
-      const camArm = createBox(camArmLen, 0.015, 0.015, M.ss(0x5a6575),
-        camArmCtrX, 0, cSensorZ, carSensorGrp);
-      camArm.userData = { type: 'cam-bracket' };
+      // 상/하단 마운팅 암 (카 좌측벽 ↔ 캠, 2개)
+      [camH / 2 - 0.08, -(camH / 2 - 0.08)].forEach(y => {
+        createBox(camArmLen, 0.012, 0.012, M.ss(0x5a6575),
+          camArmCx, y, cSensorZ, carSensorGrp)
+          .userData = { type: 'cam-bracket' };
+      });
 
-      // 수직 캠 막대 (어두운 철재, 거의 전체 카 높이)
-      const camBar = createBox(0.018, H * 0.85, 0.035, M.ss(0x2d3748),
+      // 수직 캠 막대 (스테인리스, 롤러 접촉면)
+      const camBar = createBox(0.020, camH, 0.035, M.ss(0xc0c8d8),
         camX, 0, cSensorZ, carSensorGrp);
       camBar.userData = { type: 'car-cam' };
       carSensors.cam = camBar;
 
       if (DEBUG_SENSOR) {
+        // 캠 전체 바운딩박스 (형광 주황)
         carSensorGrp.add(new THREE.BoxHelper(camBar, 0xff8800));
-        const axes = new THREE.AxesHelper(0.1);
-        axes.position.set(camX, 0, cSensorZ);
-        carSensorGrp.add(axes);
+        // 캠 기하 중심(롤러 도킹 높이 비교 기준)
+        const camAx = new THREE.AxesHelper(0.1);
+        camAx.position.set(camX, 0, cSensorZ);
+        carSensorGrp.add(camAx);
+        // 캠 접촉면 구형 헬퍼 3개 (형광 녹색, 롤러 맞물림 확인용)
+        const sGeo = new THREE.SphereGeometry(0.007, 8, 6);
+        const sMat = new THREE.MeshBasicMaterial({ color: 0x00ff88, wireframe: true });
+        [-camH / 3, 0, camH / 3].forEach(y => {
+          const s = new THREE.Mesh(sGeo, sMat);
+          s.position.set(camX - 0.010, y, cSensorZ);
+          carSensorGrp.add(s);
+        });
       }
 
       carGrp.add(carSensorGrp);
+
+      /* ──────────────────────────────────────────────────────────────
+         [수정] 카 상/하부 가이드 롤러 어셈블리 (High-Detail 3-Roller Guide Shoe)
+      ────────────────────────────────────────────────────────────── */
+      // 1. 하부 체대 (Safety Plank) 빔 추가
+      createBox(W + 0.1, 0.12, 0.16, M.ss(0x2a3a50), 0, -H / 2 - 0.06, 0, carGrp);
+
+      const rollerGuideGrp = new THREE.Group();
+
+      const rMat = M.paint(0x1a1a1a); // 우레탄 롤러 (무광 블랙)
+      const bMat = M.paint(0x3a4a5a); // 짙은 스틸 블루 브라켓 (기계 느낌)
+      const axMat = M.ss(0xb0b5bb);   // 금속 축 및 로드 (은색)
+      const spMat = M.paint(0xf1c40f); // 텐션 스프링 (아연 도금 옐로우)
+
+      const railX = S.CAR_BG / 2;     // 0.975 (레일 중심 X)
+      const railZ = 0.04;             // 레일 웹 중심 Z
+
+      // 개별 가이드 슈 생성 함수 (방향이 바뀐 레일에 완벽 도킹)
+      function createGuideShoe(xSign, isTop) {
+        const shoe = new THREE.Group();
+        const rX = railX * xSign;     // 레일 중심 X 좌표 (±0.975)
+
+        // ① 베이스 플레이트
+        createBox(0.20, 0.02, 0.26, bMat, rX - (0.05 * xSign), 0, railZ, shoe);
+
+        // ② 메인 롤러 (레일 웹 끝단 X축 면에 수직으로 접촉)
+        // 레일 웹 끝단 X = 레일중심(±0.975) ∓ 절반(0.041)
+        const mR = 0.060, mT = 0.026;
+        const mX = rX - (0.041 + mR) * xSign; // 웹 끝단과 맞물림
+        const mY = 0.065;
+
+        const mRoller = new THREE.Mesh(new THREE.CylinderGeometry(mR, mR, mT, 24), rMat);
+        // Z축을 중심축으로 위아래로 구름
+        mRoller.rotation.x = Math.PI / 2;
+        mRoller.position.set(mX, mY, railZ);
+        shoe.add(mRoller);
+
+        // 메인 롤러 지지 브라켓
+        createBox(0.05, 0.07, mT + 0.02, bMat, mX + (0.02 * xSign), 0.035, railZ, shoe);
+        createCylinder(0.008, 0.008, mT + 0.03, axMat, mX, mY, railZ, shoe).rotation.x = Math.PI / 2;
+
+        // ③ 사이드 롤러 2개 (레일 웹 좌우 Z면 측면에 접촉)
+        const sR = 0.050, sT = 0.020;
+        const sY = 0.055;
+        const sX = rX - (0.02 * xSign); // 레일 웹 중간 지점
+
+        // 레일 웹 폭(0.034)을 고려한 앞뒤 타격점 Z
+        const frontZ = railZ - 0.017 - sR;
+        const backZ  = railZ + 0.017 + sR;
+
+        [frontZ, backZ].forEach(rz => {
+          const sRoller = new THREE.Mesh(new THREE.CylinderGeometry(sR, sR, sT, 24), rMat);
+          // X축을 중심축으로 수직면을 따라 구름
+          sRoller.rotation.z = Math.PI / 2;
+          sRoller.position.set(sX, sY, rz);
+          shoe.add(sRoller);
+
+          // 피봇 암 (집게 형태)
+          const offsetDir = Math.sign(rz - railZ);
+          createBox(0.08, 0.08, 0.016, bMat, sX + (0.02 * xSign), 0.04, rz + offsetDir * 0.022, shoe);
+          // 사이드 롤러 축
+          createCylinder(0.006, 0.006, 0.05, axMat, sX, sY, rz + offsetDir * 0.01, shoe).rotation.z = Math.PI / 2;
+        });
+
+        // ④ 텐션 스프링 메커니즘
+        const rodY = 0.075;
+        // 레일 웹을 가로지르도록 X축 방향으로 로드 설치
+        const rodX = rX - (0.02 * xSign);
+        const rodLen = Math.abs(backZ - frontZ) + 0.06;
+
+        createCylinder(0.004, 0.004, rodLen, axMat, rodX, rodY, railZ, shoe).rotation.x = Math.PI / 2;
+
+        for (let i = 0; i < 7; i++) {
+          const coil = new THREE.Mesh(new THREE.TorusGeometry(0.008, 0.003, 8, 16), spMat);
+          coil.rotation.x = Math.PI / 2;
+          coil.position.set(rodX, rodY, railZ + 0.015 + i * 0.012);
+          shoe.add(coil);
+        }
+
+        shoe.position.set(0, isTop ? (H / 2 + 0.12 + 0.01) : (-H / 2 - 0.12 - 0.01), 0);
+        if (!isTop) shoe.scale.y = -1;
+        return shoe;
+      }
+
+      // 상/하, 좌/우 4세트의 고정밀 3롤러 장착
+      rollerGuideGrp.add(
+        createGuideShoe(1, true),   // 상단 우측
+        createGuideShoe(-1, true),  // 상단 좌측
+        createGuideShoe(1, false),  // 하단 우측
+        createGuideShoe(-1, false)  // 하단 좌측
+      );
+
+      carGrp.add(rollerGuideGrp);
 
       carGrp.position.y = FLOOR_Y[0] + H / 2;
       scene.add(carGrp);

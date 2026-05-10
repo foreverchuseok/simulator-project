@@ -2,7 +2,7 @@
 
 ## 프로젝트 개요
 
-- 작업 파일은 `index.html` 단일 파일이다.
+- 작업 파일은 아래 멀티 파일 구조로 분리되어 있다.
 - 목적은 KoELSA 경기북부지사 전기식 엘리베이터 3D 시뮬레이터 제작이다.
 - 사용 라이브러리는 Three.js r128, OrbitControls, GSAP 3.12.2이다.
 - 실행은 Live Server로 `index.html`을 브라우저에서 확인한다.
@@ -11,10 +11,15 @@
 
 현재 작업 폴더(`simmul`)에 존재하는 파일.
 
-- `index.html`
-- `디자인.pdf`
-- `logo.png`
-- `AGENTS.md`
+- `index.html` — HTML 뼈대 및 전역 변수, 초기화 진입점
+- `config.js` — 도면 제원 `const S`, PBR 재질 라이브러리 `const M` 정의
+- `environment.js` — 정적 배경 객체 (조명, 벽, 레일, 기계실, 피트 등)
+- `elevator.js` — 동적 객체 (카, 도어, 균형추, 로프 등)
+- `ui.js` — 엘리베이터 상태 제어 및 UI 이벤트 로직
+- `디자인.pdf` — 초기 부품 디자인 참고 자료
+- 한국승강기안전공단 유튜브 영상 — 리미트 스위치, 조속기 등 복잡한 부품 및 구동 메커니즘의 **최우선 참고 자료**. AI는 해당 부품 작업 전 실제 기계 구조를 반드시 먼저 이해할 것.
+- `logo.png` — 현판 로고 이미지
+- `AGENTS.md` — 이 파일
 
 ---
 
@@ -30,9 +35,9 @@
 
 ```
 예시.
-1. buildMachineRoom() 내 조속기 블록 위치 확인
-2. tensGuard 회전 보정 수정
-3. pitGrp에 추가 확인
+1. elevator.js — buildMachineRoom() 내 조속기 블록 위치 확인
+2. environment.js — tensGuard 회전 보정 수정
+3. elevator.js — pitGrp에 추가 확인
 ```
 
 ---
@@ -40,7 +45,7 @@
 ## 역할
 
 - 이 프로젝트의 코드 수정 실행자다.
-- 사용자의 설명, 화면 캡처, PDF 부품 디자인 자료를 참고해 `index.html`을 부분 수정한다.
+- 사용자의 설명, 화면 캡처, PDF 부품 디자인 자료를 참고해 해당 파일을 부분 수정한다.
 - 좌표, 부품 위치, 재질, 그룹 구조를 임의로 크게 바꾸지 않는다.
 - 기존 구조를 먼저 읽고, 필요한 함수 블록만 최소 범위로 수정한다.
 
@@ -48,8 +53,7 @@
 
 ## 절대 금지
 
-- `index.html` 전체 재출력 금지.
-- `<script>` 전체 재출력 금지.
+- 각 파일(`index.html`, `config.js`, `environment.js`, `elevator.js`, `ui.js`) 전체 재출력 금지.
 - CSS 불필요 수정 금지.
 - Three.js / OrbitControls / GSAP 버전 변경 금지.
 - 전역 도면 제원 `const S = { ... }` 값 임의 수정 금지.
@@ -82,7 +86,8 @@
 어떤 부품을 왜 수정하는지 한 줄 설명.
 
 [수정 위치]
-함수명 및 대략적인 줄 번호. 예. buildMachineRoom() 862~920줄 내 tensGuard 블록.
+파일명 / 함수명 / 대략적인 줄 번호.
+예. elevator.js — buildMachineRoom() 약 862~920줄 내 tensGuard 블록.
 
 [수정 코드]
 변경 전/후를 명확히 구분하여 해당 블록만 제시.
@@ -102,11 +107,24 @@
 - 균형추는 항상 카 후면, Z 마이너스 방향에 위치한다.
 - 카와 균형추는 반대 방향으로 움직인다.
 
+### 센서 도킹 좌표 규칙
+
+- 승강로(레일) 측 센서·스위치의 Y축 높이는 층 바닥(`FLOOR_Y`) 기준으로 단순 배치하지 않는다.
+- **"카가 해당 층에 정위치했을 때, 카에 부착된 타격 부품(차폐판, 캠 등)의 중심 Y 좌표"** 를 먼저 계산하고, 그 값에 승강로 측 센서를 역산하여 맞춘다.
+- 공식 예시.
+
+```js
+// 카 중심 Y = FLOOR_Y[i] + S.CAR_H / 2
+// 캠 중심 Y = 카 중심 Y + 카 로컬 캠 오프셋
+// 스위치 트리거 Y = 캠 중심 Y (롤러 리프트 보정 포함)
+const deviceY = FLOOR_Y[fIdx] + S.CAR_H / 2;
+```
+
 ---
 
 ## 재질 규칙
 
-새 부품은 기존 재질 함수를 우선 사용한다.
+새 부품은 기존 재질 함수를 우선 사용한다. 재질 정의는 `config.js`에 있다.
 
 - `M.ss()` → 스테인리스/금속
 - `M.paint()` → 도장 부품
@@ -130,6 +148,33 @@
 - 복잡한 회전체나 표식은 Three.js 기본 Geometry 사용 가능.
 - 회전 부품은 반드시 `THREE.Group()`에 묶는다.
 - 보호커버처럼 고정되어야 하는 부품은 상위 고정 그룹에 둔다.
+
+### 데이터 라벨링 (필수)
+
+- 모든 동적·센서 메시 생성 시 반드시 `userData`로 이름표를 부착한다.
+
+```js
+mesh.userData = { type: 'limit-switch', floor: fIdx, function: 'slowdown' };
+```
+
+- `type` 키는 부품 식별자로, 충돌 감지·상태 업데이트·디버그 모두에 활용된다.
+
+### 디버그 시각화 (필수)
+
+- 센서·충돌 처리가 필요한 객체는 생성 시 반드시 `if (DEBUG_SENSOR)` 블록을 함께 작성한다.
+
+```js
+if (DEBUG_SENSOR) {
+  // mesh 자체에 자식으로 추가하면 좌표와 회전을 자동으로 따라간다.
+  mesh.add(new THREE.BoxHelper(mesh, 0x00ff44));    // 바운딩박스
+  mesh.add(new THREE.AxesHelper(0.1));              // 방향축
+}
+```
+
+### 안전 간극 (Clearance)
+
+- 승강로 측 부품은 카 외곽선(`S.CAR_W / 2`, `S.CAR_D / 2`) 기준으로 실제 현장과 같은 충돌 여유 공간을 계산하여 배치한다.
+- 간극 없이 카에 바짝 붙이지 않는다.
 
 ---
 
@@ -159,7 +204,7 @@
 - 신규 상태는 상태 변수 영역에만 추가한다.
 - 상태 충돌 가능성을 먼저 확인한다.
 
-예상 상태.
+### 예상 상태 (FSM)
 
 ```js
 IDLE
@@ -171,6 +216,21 @@ DOOR_CLOSING
 INSPECTION
 FAULT
 EMERGENCY_STOP
+```
+
+### 물리 센서 상태 객체
+
+- 아래 구조를 적극 활용하며, 카 이동 중 매 프레임 동기화한다.
+
+```js
+elevatorState = {
+  direction:        '',       // 'up' | 'down' | ''
+  speed:            0,        // m/min
+  targetFloor:      0,
+  slowdownActive:   false,    // 감속 리미트 스위치 작동 여부
+  limitActive:      false,    // 리미트 스위치 작동 여부
+  finalLimitActive: false     // 파이널 리미트 스위치 작동 여부
+};
 ```
 
 ---
