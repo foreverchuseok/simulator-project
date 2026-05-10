@@ -152,41 +152,104 @@
 
     function buildShaftLandingDevices() {
       const landingDeviceGrp = new THREE.Group();
-      const rightRailX = S.CAR_BG / 2;
-      const leftRailX = -S.CAR_BG / 2;
-      const sensorZ = 0.04;
-      const bracketMat = M.ss(0x6b7280);
-      const maxFloor = FLOORS - 1;
+      // 레일 좌표 기준 (buildGuideRails 동일)
+      const rightRailX = S.CAR_BG / 2;   // +0.975
+      const leftRailX  = -S.CAR_BG / 2;  // -0.975
+      const railZ      = 0.04;            // 레일 중심 Z
+      const sensorZ    = 0.10;            // 센서/베인 Z — 나중에 카 차폐판 Z와 맞춤
+      const bracketMat = M.ss(0x5a6575);
+      const maxFloor   = FLOORS - 1;
 
       landingDevices.length = 0;
 
       for (let fIdx = 0; fIdx < FLOORS; fIdx++) {
         const triggerY = FLOOR_Y[fIdx];
-        const deviceY = triggerY + S.CAR_H / 2;
+        const deviceY  = triggerY + S.CAR_H / 2; // 카 정위치 시 차폐판 중심 Y
 
-        // 전 층 우측 레일: 카 통로 반대편(+X)으로 뻗는 브라켓과 90도 회전한 ㄷ자 센서
-        const landingBracket = createBox(0.32, 0.035, 0.05, bracketMat, rightRailX + 0.16, deviceY, sensorZ, landingDeviceGrp);
-        const landingSwitch = new THREE.Group();
-        const landingMat = DEBUG_SENSOR ? M.emit(0x00ff44, 1.8) : M.paint(0x1e3a8a);
-        createBox(0.022, 0.16, 0.07, landingMat, 0, 0, 0, landingSwitch);
-        createBox(0.11, 0.022, 0.07, landingMat, 0.045, 0.069, 0, landingSwitch);
-        createBox(0.11, 0.022, 0.07, landingMat, 0.045, -0.069, 0, landingSwitch);
-        landingSwitch.position.set(rightRailX + 0.33, deviceY, sensorZ);
-        landingDeviceGrp.add(landingSwitch);
+        /* ────────────────────────────────────────────
+           우측 레일: ㄱ자 브라켓 + ㄷ자 Landing Switch
+           브라켓 arm1: 레일 외면(X) → +X방향 (카 경로 밖으로)
+           브라켓 arm2: arm1 끝 → +Z방향 (railZ→sensorZ 꺾임)
+           센서 ㄷ: 개구부가 카(-X 방향)를 바라봄, Y갭에 차폐판 수직 진입
+        ──────────────────────────────────────────── */
+        const rOuterX  = rightRailX + 0.017; // 레일 웹 우측 외면
+        const rSensorX = rightRailX + 0.18;  // 센서 감지점 X (카 외벽 대비 +24cm clearance)
+
+        // arm1 (X방향)
+        const arm1L    = rSensorX - rOuterX;
+        const arm1mesh = createBox(arm1L, 0.035, 0.035, bracketMat,
+          rOuterX + arm1L / 2, deviceY, railZ, landingDeviceGrp);
+        arm1mesh.userData = { type: 'bracket', floor: fIdx, side: 'right', arm: 1 };
+
+        // arm2 (Z방향 꺾임)
+        const arm2L    = sensorZ - railZ;
+        const arm2mesh = createBox(0.035, 0.035, arm2L, bracketMat,
+          rSensorX, deviceY, railZ + arm2L / 2, landingDeviceGrp);
+        arm2mesh.userData = { type: 'bracket', floor: fIdx, side: 'right', arm: 2 };
+
+        // ㄷ자 센서 블록 — 개구부(-X)가 카를 정면으로 바라봄
+        const sg      = new THREE.Group();
+        const sMat    = DEBUG_SENSOR ? M.emit(0x00ff44, 1.6) : M.paint(0x5c3a1e); // 갈색
+        const aLen    = 0.08;   // 암 길이 (X방향, 카 쪽으로 뻗음)
+        const gHalf   = 0.065;  // 갭 반경 (Y방향, 차폐판 두께 12mm 여유 충분)
+        const aThick  = 0.014;  // 암 두께
+        const sDepth  = 0.06;   // 센서 Z방향 깊이
+        // 뒷판: +X쪽 (카 반대방향 끝)
+        createBox(aThick, gHalf * 2 + aThick * 2, sDepth, sMat,
+          aLen + aThick / 2, 0, 0, sg);
+        // 상부 암
+        createBox(aLen, aThick, sDepth, sMat,  aLen / 2,  gHalf + aThick / 2, 0, sg);
+        // 하부 암
+        createBox(aLen, aThick, sDepth, sMat,  aLen / 2, -gHalf - aThick / 2, 0, sg);
+        sg.userData = { type: 'landing-switch', floor: fIdx, side: 'right' };
+        sg.position.set(rSensorX, deviceY, sensorZ);
+        landingDeviceGrp.add(sg);
+
         if (DEBUG_SENSOR) {
-          landingDeviceGrp.add(new THREE.BoxHelper(landingSwitch, 0x00ff44));
+          landingDeviceGrp.add(new THREE.BoxHelper(sg, 0x00ff44));
+          const axes = new THREE.AxesHelper(0.1); // 감지 방향 시각화
+          axes.position.set(rSensorX, deviceY, sensorZ);
+          landingDeviceGrp.add(axes);
         }
-        landingDevices.push({ floor: fIdx, type: 'landing', bracket: landingBracket, mesh: landingSwitch, triggerY: triggerY });
 
-        // 최하층/최상층 좌측 레일: 카 통로 반대편(-X) 브라켓과 짧은 Slow Down Vane
+        landingDevices.push({ floor: fIdx, type: 'landing', mesh: sg, triggerY: triggerY });
+
+        /* ────────────────────────────────────────────
+           최하층/최상층 좌측 레일: ㄱ자 브라켓 + Slow Down Vane
+           브라켓 arm1: 레일 외면(X) → -X방향
+           브라켓 arm2: arm1 끝 → +Z방향 꺾임
+           베인: 0.8m 세로 철판
+        ──────────────────────────────────────────── */
         if (fIdx === 0 || fIdx === maxFloor) {
-          const slowdownBracket = createBox(0.32, 0.035, 0.05, bracketMat, leftRailX - 0.16, deviceY, sensorZ, landingDeviceGrp);
-          const vaneMat = DEBUG_SENSOR ? M.emit(0xff3300, 1.4) : M.ss(0x9ca3af);
-          const slowdownVane = createBox(0.035, 0.65, 0.055, vaneMat, leftRailX - 0.33, deviceY, sensorZ, landingDeviceGrp);
+          const lOuterX  = leftRailX - 0.017;
+          const lSensorX = leftRailX - 0.18;
+
+          // arm1 (-X방향)
+          const sArm1L    = lOuterX - lSensorX;
+          const sArm1mesh = createBox(sArm1L, 0.035, 0.035, bracketMat,
+            lSensorX + sArm1L / 2, deviceY, railZ, landingDeviceGrp);
+          sArm1mesh.userData = { type: 'bracket', floor: fIdx, side: 'left', arm: 1 };
+
+          // arm2 (Z방향 꺾임)
+          const sArm2L    = sensorZ - railZ;
+          const sArm2mesh = createBox(0.035, 0.035, sArm2L, bracketMat,
+            lSensorX, deviceY, railZ + sArm2L / 2, landingDeviceGrp);
+          sArm2mesh.userData = { type: 'bracket', floor: fIdx, side: 'left', arm: 2 };
+
+          // Slow Down Vane: 0.8m 세로 철판, DEBUG 시 주황 발광
+          const vMat  = DEBUG_SENSOR ? M.emit(0xff8800, 1.5) : M.paint(0xf59e0b);
+          const vane  = createBox(0.012, 0.8, 0.055, vMat,
+            lSensorX, deviceY, sensorZ, landingDeviceGrp);
+          vane.userData = { type: 'slowdown-vane', floor: fIdx, side: 'left' };
+
           if (DEBUG_SENSOR) {
-            landingDeviceGrp.add(new THREE.BoxHelper(slowdownVane, 0xff3300));
+            landingDeviceGrp.add(new THREE.BoxHelper(vane, 0xff8800));
+            const axes = new THREE.AxesHelper(0.1);
+            axes.position.set(lSensorX, deviceY, sensorZ);
+            landingDeviceGrp.add(axes);
           }
-          landingDevices.push({ floor: fIdx, type: 'slowdown', bracket: slowdownBracket, mesh: slowdownVane, triggerY: triggerY });
+
+          landingDevices.push({ floor: fIdx, type: 'slowdown', mesh: vane, triggerY: triggerY });
         }
       }
 
