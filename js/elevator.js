@@ -28,6 +28,65 @@
       // 조작반 (OPB)
       createBox(0.12, 0.55, 0.015, M.paint(0x111827), W / 2 - 0.04, -0.15, D / 2 - 0.03, carGrp);
 
+      // === 카 측 센서 모듈 ===
+      const carSensorGrp = new THREE.Group();
+
+      // 승강로 센서 기준 좌표 (buildShaftLandingDevices 동일)
+      const rSensorX   = S.CAR_BG / 2 + 0.18;         // +1.155
+      const lSensorX   = -(S.CAR_BG / 2 + 0.18);      // -1.155
+      const cSensorZ   = 0.10;
+      const rWallOuter = W / 2 + 0.0125;               // +0.9125 (카 우측벽 외면)
+      const lWallOuter = -(W / 2 + 0.0125);            // -0.9125 (카 좌측벽 외면)
+
+      /* ──────────────────────────────────────────────────────────────
+         1. 우측 Landing Vane — 레일 ㄷ자 센서 Y갭을 수직 관통하는 차폐판
+            vaneX = rSensorX + aLen/2 = 1.155 + 0.04 = 1.195 (ㄷ 암 중간)
+      ────────────────────────────────────────────────────────────── */
+      const vaneX = rSensorX + 0.04;
+      const bktLR = vaneX - rWallOuter;                // 0.2825 m
+
+      const bktR  = createBox(bktLR, 0.018, 0.018, M.ss(0x5a6575),
+        rWallOuter + bktLR / 2, 0, cSensorZ, carSensorGrp);
+      bktR.userData = { type: 'car-vane-bracket' };
+
+      const vane  = createBox(0.006, 0.10, 0.050, M.ss(0x9ca3af),
+        vaneX, 0, cSensorZ, carSensorGrp);
+      vane.userData = { type: 'car-vane' };
+      if (DEBUG_SENSOR) carSensorGrp.add(new THREE.BoxHelper(vane, 0x00ff44));
+      carSensors.landingVane = vane;
+
+      /* ──────────────────────────────────────────────────────────────
+         2. 좌측 Slowdown Sensors (상/하) — 레일 주황 베인이 ㄷ갭 관통
+            ㄷ 치수 = 승강로 Landing Switch 동일 (개구부 +X 방향 = 카 중심 향)
+            감속 센서 Y = ±(H/2 - 0.20) = ±1.05 (카 상단·하단 근방)
+      ────────────────────────────────────────────────────────────── */
+      const bktLL  = Math.abs(lSensorX) - Math.abs(lWallOuter); // 0.2425 m
+      const saLen  = 0.08, sgHalf = 0.065, saThick = 0.014, ssDepth = 0.06;
+      const ssMat  = DEBUG_SENSOR ? M.emit(0xff8800, 1.5) : M.paint(0x5c3a1e);
+
+      [H / 2 - 0.20, -(H / 2 - 0.20)].forEach((localY, i) => {
+        const posKey = i === 0 ? 'top' : 'bottom';
+
+        const bktL = createBox(bktLL, 0.018, 0.018, M.ss(0x5a6575),
+          lWallOuter - bktLL / 2, localY, cSensorZ, carSensorGrp);
+        bktL.userData = { type: 'car-slowdown-bracket', pos: posKey };
+
+        // ㄷ자 블록: 개구부 +X (카 중심 방향), 뒷판 -X
+        const ss = new THREE.Group();
+        createBox(saThick, sgHalf * 2 + saThick * 2, ssDepth, ssMat,
+          -(saLen + saThick / 2), 0, 0, ss);                      // 뒷판
+        createBox(saLen, saThick, ssDepth, ssMat, -saLen / 2,  sgHalf + saThick / 2, 0, ss); // 상부 암
+        createBox(saLen, saThick, ssDepth, ssMat, -saLen / 2, -sgHalf - saThick / 2, 0, ss); // 하부 암
+        ss.userData = { type: `car-slowdown-${posKey}` };
+        ss.position.set(lSensorX, localY, cSensorZ);
+        carSensorGrp.add(ss);
+
+        if (DEBUG_SENSOR) carSensorGrp.add(new THREE.BoxHelper(ss, 0xff8800));
+        carSensors[i === 0 ? 'slowdownTop' : 'slowdownBottom'] = ss;
+      });
+
+      carGrp.add(carSensorGrp);
+
       carGrp.position.y = FLOOR_Y[0] + H / 2;
       scene.add(carGrp);
     }
