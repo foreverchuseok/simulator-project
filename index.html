@@ -597,6 +597,8 @@
        2. 상태 변수 및 Three.js 핵심 객체
        ========================================================================== */
     let curFloor = 0, moving = false, doorOpen = false, estop = false, autoTimer = null;
+    const ELEVATOR_STATE = { IDLE: 'IDLE', MOVING: 'MOVING', DOOR_OPENING: 'DOOR_OPENING', DOOR_OPEN: 'DOOR_OPEN', DOOR_CLOSING: 'DOOR_CLOSING', ESTOP: 'ESTOP' };
+    let currentState = ELEVATOR_STATE.IDLE;
     let targetSpeed = 60;
 
     let scene, camera, renderer, controls, clock;

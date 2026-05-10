@@ -1,9 +1,11 @@
 // 엘리베이터 상태 제어와 UI 이벤트 로직을 정의한다.
-    function updateStatus(id, txt, col) { const e = document.getElementById(id); if (e) { e.textContent = txt; if (col) e.style.color = col; } }
+    function updateStatus(id, txt, col) { const e = document.getElementById(id); if (e) { e.textContent = txt; if (col) e.style.color = col; } console.log("Current FSM State:", currentState); }
 
     function openDoors(cb) {
       if (gsap.isTweening(carDoorL.position) || moving || estop) return;
+      currentState = ELEVATOR_STATE.DOOR_OPENING;
       doorOpen = true; updateStatus('v-door', '열리는 중', '#f0883e'); clearTimeout(autoTimer);
+      currentState = ELEVATOR_STATE.DOOR_OPEN;
       gsap.to(carDoorL.position, { x: carDoorL.userData.ox, duration: 1.15, ease: 'power2.out' });
       gsap.to(carDoorR.position, {
         x: carDoorR.userData.ox, duration: 1.15, ease: 'power2.out', onComplete: () => {
@@ -17,11 +19,13 @@
 
     function closeDoors(cb) {
       if (!doorOpen) { if (cb) cb(); return; }
+      currentState = ELEVATOR_STATE.DOOR_CLOSING;
       clearTimeout(autoTimer); updateStatus('v-door', '닫히는 중', '#f0883e');
       gsap.to(carDoorL.position, { x: carDoorL.userData.cx, duration: 0.95, ease: 'power2.inOut' });
       gsap.to(carDoorR.position, {
         x: carDoorR.userData.cx, duration: 0.95, ease: 'power2.inOut', onComplete: () => {
           doorOpen = false; updateStatus('v-door', '닫힘', '#3fb950'); if (cb) cb();
+          currentState = ELEVATOR_STATE.IDLE;
         }
       });
       const h = hatchDoors[curFloor];
@@ -40,6 +44,7 @@
       if (doorOpen || gsap.isTweening(carDoorL.position)) { closeDoors(() => moveElevator(fIdx)); return; }
 
       moving = true;
+      currentState = ELEVATOR_STATE.MOVING;
       const ty = FLOOR_Y[fIdx] + S.CAR_H / 2, cy = carGrp.position.y;
       const cwtY = cwtGrp.position.y;
       let prevCarY = cy;
@@ -72,6 +77,7 @@
         },
         onComplete: () => {
           curFloor = fIdx; moving = false;
+          currentState = ELEVATOR_STATE.IDLE;
           // 도착 완료 시 화살표 제거하고 해당 층수만 표시
           syncAllIndicators(fIdx + 1, '');
           updateStatus('v-dir', '정지 대기', '#8b949e');
@@ -108,6 +114,7 @@
         estop = !estop;
         if (estop) {
           gsap.killTweensOf(carGrp.position); gsap.killTweensOf(cwtGrp.position); moving = false;
+          currentState = ELEVATOR_STATE.ESTOP;
           updateStatus('v-dir', '■ 비상정지', '#f85149'); updateStatus('v-spd', '0 m/min');
           e.target.textContent = '▶ 운전 재개 (RESET)'; e.target.className = 'c-btn blue';
         } else {
