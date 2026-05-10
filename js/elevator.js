@@ -56,34 +56,33 @@
       carSensors.landingVane = vane;
 
       /* ──────────────────────────────────────────────────────────────
-         2. 좌측 Slowdown Sensors (상/하) — 레일 주황 베인이 ㄷ갭 관통
-            ㄷ 치수 = 승강로 Landing Switch 동일 (개구부 +X 방향 = 카 중심 향)
-            감속 센서 Y = ±(H/2 - 0.20) = ±1.05 (카 상단·하단 근방)
+         2. 좌측 수직 캠 막대 — 레일 리미트 스위치 롤러를 스칠 정도로 통과
+            롤러 암 팁 X: lSensorX + 0.100 = -1.055
+            캠 우면  X: -1.031  →  캠 좌면: -1.049  (6mm 간극)
+            캠 중심  X: -1.040
       ────────────────────────────────────────────────────────────── */
-      const bktLL  = Math.abs(lSensorX) - Math.abs(lWallOuter); // 0.2425 m
-      const saLen  = 0.08, sgHalf = 0.065, saThick = 0.014, ssDepth = 0.06;
-      const ssMat  = DEBUG_SENSOR ? M.emit(0xff8800, 1.5) : M.paint(0x5c3a1e);
+      const camX       = lSensorX + 0.115;              // -1.040
+      const camRFace   = camX + 0.009;                  // -1.031 (캠 우면, 18mm 폭)
+      const camArmLen  = lWallOuter - camRFace;          // -0.9125 - (-1.031) = 0.1185m
+      const camArmCtrX = (lWallOuter + camRFace) / 2;   // -0.972
 
-      [H / 2 - 0.20, -(H / 2 - 0.20)].forEach((localY, i) => {
-        const posKey = i === 0 ? 'top' : 'bottom';
+      // 마운팅 암 (카 좌측벽 → 캠)
+      const camArm = createBox(camArmLen, 0.015, 0.015, M.ss(0x5a6575),
+        camArmCtrX, 0, cSensorZ, carSensorGrp);
+      camArm.userData = { type: 'cam-bracket' };
 
-        const bktL = createBox(bktLL, 0.018, 0.018, M.ss(0x5a6575),
-          lWallOuter - bktLL / 2, localY, cSensorZ, carSensorGrp);
-        bktL.userData = { type: 'car-slowdown-bracket', pos: posKey };
+      // 수직 캠 막대 (어두운 철재, 거의 전체 카 높이)
+      const camBar = createBox(0.018, H * 0.85, 0.035, M.ss(0x2d3748),
+        camX, 0, cSensorZ, carSensorGrp);
+      camBar.userData = { type: 'car-cam' };
+      carSensors.cam = camBar;
 
-        // ㄷ자 블록: 개구부 +X (카 중심 방향), 뒷판 -X
-        const ss = new THREE.Group();
-        createBox(saThick, sgHalf * 2 + saThick * 2, ssDepth, ssMat,
-          -(saLen + saThick / 2), 0, 0, ss);                      // 뒷판
-        createBox(saLen, saThick, ssDepth, ssMat, -saLen / 2,  sgHalf + saThick / 2, 0, ss); // 상부 암
-        createBox(saLen, saThick, ssDepth, ssMat, -saLen / 2, -sgHalf - saThick / 2, 0, ss); // 하부 암
-        ss.userData = { type: `car-slowdown-${posKey}` };
-        ss.position.set(lSensorX, localY, cSensorZ);
-        carSensorGrp.add(ss);
-
-        if (DEBUG_SENSOR) carSensorGrp.add(new THREE.BoxHelper(ss, 0xff8800));
-        carSensors[i === 0 ? 'slowdownTop' : 'slowdownBottom'] = ss;
-      });
+      if (DEBUG_SENSOR) {
+        carSensorGrp.add(new THREE.BoxHelper(camBar, 0xff8800));
+        const axes = new THREE.AxesHelper(0.1);
+        axes.position.set(camX, 0, cSensorZ);
+        carSensorGrp.add(axes);
+      }
 
       carGrp.add(carSensorGrp);
 

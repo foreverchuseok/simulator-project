@@ -608,6 +608,7 @@
     const DEBUG_SENSOR = true;
     const landingDevices = [];
     const carSensors = {};
+    const elevatorState = { direction: 0, speed: 0, slowdownActive: false, limitActive: false, finalLimitActive: false };
 
     function createBox(w, h, d, mat, px = 0, py = 0, pz = 0, parent = scene) {
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);

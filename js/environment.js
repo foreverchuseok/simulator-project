@@ -215,41 +215,84 @@
         landingDevices.push({ floor: fIdx, type: 'landing', mesh: sg, triggerY: triggerY });
 
         /* ────────────────────────────────────────────
-           최하층/최상층 좌측 레일: ㄱ자 브라켓 + Slow Down Vane
-           브라켓 arm1: 레일 외면(X) → -X방향
-           브라켓 arm2: arm1 끝 → +Z방향 꺾임
-           베인: 0.8m 세로 철판
+           최하층/최상층 좌측 레일: 리미트 스위치 뭉치
+           배치 순서: 최상층 (아래→위) 감속→리미트→파이널
+                     최하층 (위→아래) 감속→리미트→파이널
+           구성: 검정 본체 + 회색 롤러 암 + 롤러 + 색상 버튼
         ──────────────────────────────────────────── */
         if (fIdx === 0 || fIdx === maxFloor) {
-          const lOuterX  = leftRailX - 0.017;
-          const lSensorX = leftRailX - 0.18;
+          const lOuterX  = leftRailX - 0.017;  // -0.992
+          const lSwitchX = leftRailX - 0.18;   // -1.155
 
-          // arm1 (-X방향)
-          const sArm1L    = lOuterX - lSensorX;
-          const sArm1mesh = createBox(sArm1L, 0.035, 0.035, bracketMat,
-            lSensorX + sArm1L / 2, deviceY, railZ, landingDeviceGrp);
-          sArm1mesh.userData = { type: 'bracket', floor: fIdx, side: 'left', arm: 1 };
+          // ㄱ자 브라켓 2쌍 (스위치 클러스터 상/하단 고정)
+          const sArm1L = lOuterX - lSwitchX;   // 0.163m
+          const sArm2L = sensorZ - railZ;       // 0.060m
+          [-0.30, 0.30].forEach(yOff => {
+            const a1 = createBox(sArm1L, 0.025, 0.025, bracketMat,
+              lSwitchX + sArm1L / 2, deviceY + yOff, railZ, landingDeviceGrp);
+            a1.userData = { type: 'bracket', floor: fIdx, side: 'left' };
+            const a2 = createBox(0.025, 0.025, sArm2L, bracketMat,
+              lSwitchX, deviceY + yOff, railZ + sArm2L / 2, landingDeviceGrp);
+            a2.userData = { type: 'bracket', floor: fIdx, side: 'left' };
+          });
 
-          // arm2 (Z방향 꺾임)
-          const sArm2L    = sensorZ - railZ;
-          const sArm2mesh = createBox(0.035, 0.035, sArm2L, bracketMat,
-            lSensorX, deviceY, railZ + sArm2L / 2, landingDeviceGrp);
-          sArm2mesh.userData = { type: 'bracket', floor: fIdx, side: 'left', arm: 2 };
+          // 수직 마운팅 레일 (3개 스위치 공용)
+          const mRail = createBox(0.025, 0.70, 0.025, bracketMat,
+            lSwitchX, deviceY, sensorZ, landingDeviceGrp);
+          mRail.userData = { type: 'mount-rail', floor: fIdx, side: 'left' };
 
-          // Slow Down Vane: 0.8m 세로 철판, DEBUG 시 주황 발광
-          const vMat  = DEBUG_SENSOR ? M.emit(0xff8800, 1.5) : M.paint(0xf59e0b);
-          const vane  = createBox(0.012, 0.8, 0.055, vMat,
-            lSensorX, deviceY, sensorZ, landingDeviceGrp);
-          vane.userData = { type: 'slowdown-vane', floor: fIdx, side: 'left' };
+          // 스위치 Y위치 — 최상층:아래→위(+방향), 최하층:위→아래(-방향)
+          const swDir = fIdx === maxFloor ? 1 : -1;
+          const swSp  = 0.22;
+          const swDefs = [
+            { yOff: -swDir * swSp, func: 'slowdown',    col: 0xff8800 },
+            { yOff: 0,             func: 'limit',        col: 0xff2200 },
+            { yOff:  swDir * swSp, func: 'final-limit',  col: 0xaa0000 },
+          ];
 
-          if (DEBUG_SENSOR) {
-            landingDeviceGrp.add(new THREE.BoxHelper(vane, 0xff8800));
-            const axes = new THREE.AxesHelper(0.1);
-            axes.position.set(lSensorX, deviceY, sensorZ);
-            landingDeviceGrp.add(axes);
-          }
+          const bodyMat   = M.paint(0x1a1a1a);
+          const rollerMat = M.ss(0x9ca3af);
 
-          landingDevices.push({ floor: fIdx, type: 'slowdown', mesh: vane, triggerY: triggerY });
+          swDefs.forEach(sw => {
+            const swY = deviceY + sw.yOff;
+            const sg  = new THREE.Group();
+
+            // 본체 (검정 박스)
+            createBox(0.060, 0.050, 0.048, bodyMat, 0, 0, 0, sg)
+              .userData = { type: 'switch-body' };
+
+            // 롤러 암 (+X방향 = 카 쪽으로 뻗음)
+            createBox(0.100, 0.010, 0.010, M.ss(0x6b7280), 0.050, -0.015, 0, sg)
+              .userData = { type: 'roller-arm' };
+
+            // 롤러 (Z축 방향 원통 — Y방향 움직임에 구름)
+            const roller = new THREE.Mesh(
+              new THREE.CylinderGeometry(0.012, 0.012, 0.022, 10), rollerMat);
+            roller.rotation.x = Math.PI / 2;
+            roller.position.set(0.100, -0.015, 0);
+            roller.userData = { type: 'roller' };
+            sg.add(roller);
+
+            // 종류 구분 버튼 (위 돌기)
+            const btn = new THREE.Mesh(
+              new THREE.CylinderGeometry(0.007, 0.007, 0.014, 8), M.paint(sw.col));
+            btn.position.set(0, 0.032, 0);
+            btn.userData = { type: 'indicator-button' };
+            sg.add(btn);
+
+            sg.userData = { type: 'limit-switch', floor: fIdx, function: sw.func };
+            sg.position.set(lSwitchX, swY, sensorZ);
+            landingDeviceGrp.add(sg);
+
+            if (DEBUG_SENSOR) {
+              landingDeviceGrp.add(new THREE.BoxHelper(sg, sw.col));
+              const axes = new THREE.AxesHelper(0.1);
+              axes.position.set(lSwitchX, swY, sensorZ);
+              landingDeviceGrp.add(axes);
+            }
+
+            landingDevices.push({ floor: fIdx, type: sw.func, mesh: sg, triggerY: swY });
+          });
         }
       }
 
