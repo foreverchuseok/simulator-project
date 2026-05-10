@@ -605,6 +605,9 @@
     let carGrp, cwtGrp, railGrp, mrGrp, wallGrp, bufferGrp, pitGrp;
     let carDoorL, carDoorR, hatchDoors = [], ropeObjs = [];
     let mainSheaveGrp = null, governorWheelGrp = null, tensionSheaveGrp = null, sheaveSpeed = 0;
+    const DEBUG_SENSOR = true;
+    const landingDevices = [];
+    const carSensors = {};
 
     function createBox(w, h, d, mat, px = 0, py = 0, pz = 0, parent = scene) {
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
@@ -647,6 +650,7 @@
       buildBackground();
       buildFrontWallAndLobby(); // 승장 및 점자블록
       buildGuideRails();        // 레일 (후면 균형추)
+      buildShaftLandingDevices(); // 승강로 레일 측 센서
       buildMachineRoom();       // 기계실 및 도르래
       buildCarCabin();          // 엘리베이터 카 내부
       buildCarDoors();          // 유리 타공 카 도어

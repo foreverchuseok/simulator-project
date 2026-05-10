@@ -147,76 +147,50 @@
         drawRail(S.CWT_W / 2, CWT_CENTER_Z, true, 0)
       );
 
-      // Final Cam 작동용 상/하 한계 스위치류(레일측 고정)
-      const switchRailX = S.CAR_BG / 2;
-      const switchX = switchRailX - 0.22;
-      const switchZ = 0.10;
-      const switchMat = M.paint(0x7c3f12);
-      const bracketMat = M.paint(0x5b6b84);
-      const rollerMat = M.gold();
-
-      function addRollerSwitch(y, kind = 'limit') {
-        const sw = new THREE.Group();
-        const bodyColor = kind === 'final' ? 0x7f1d1d : (kind === 'limit' ? 0xf59e0b : 0x8b4513);
-        createBox(0.12, 0.38, 0.055, M.paint(bodyColor), 0, 0, 0, sw);
-        createBox(0.22, 0.035, 0.045, bracketMat, -0.15, 0.14, 0, sw);
-        createBox(0.22, 0.035, 0.045, bracketMat, -0.15, -0.14, 0, sw);
-        createBox(0.035, 0.42, 0.04, M.paint(0x3b1f0f), 0.055, 0, -0.052, sw);
-
-        const arm = createBox(0.12, 0.018, 0.018, switchMat, 0.09, 0, 0, sw);
-        arm.rotation.z = -Math.PI / 12;
-        const roller = createCylinder(0.018, 0.018, 0.035, rollerMat, 0.16, 0.012, 0, sw);
-        roller.rotation.x = Math.PI / 2;
-
-        sw.position.set(switchX, y, switchZ);
-        railGrp.add(sw);
-        return sw;
-      }
-
-      // 층 고정 Landing Switch: 자석식이 아닌 기계식 롤러형 3단 스위치
-      function addLandingSwitch(y) {
-        const landingSwGrp = new THREE.Group();
-        const bodyMat = M.paint(0x3b2313);
-        const supportMat = M.paint(0x4b5563);
-        const landingBracketMat = M.paint(0x6b7280);
-        const railFaceX = switchRailX - 0.017;
-        const switchCenterX = switchRailX - 0.07;
-        const bracketLen = Math.max(0.06, railFaceX - switchCenterX);
-
-        // 레일에서 카 쪽으로 뻗는 가로 브라켓 + 지지 마스트
-        createBox(bracketLen, 0.032, 0.05, landingBracketMat, (railFaceX + switchCenterX) / 2, y, switchZ, railGrp);
-        createBox(0.042, 0.34, 0.055, supportMat, switchCenterX, y, switchZ, railGrp);
-
-        const stagePitch = 0.12;
-
-        // 3단 롤러 레버: 카측 베인이 지나가며 롤러를 누르는 구조
-        for (let i = 0; i < 3; i++) {
-          const sy = (i - 1) * stagePitch;
-          createBox(0.085, 0.055, 0.045, bodyMat, 0.0, sy, 0, landingSwGrp);
-          const arm = createBox(0.08, 0.014, 0.014, M.paint(0x7c3f12), 0.06, sy + 0.005, 0, landingSwGrp);
-          arm.rotation.z = -Math.PI / 16;
-          const roller = createCylinder(0.012, 0.012, 0.028, M.gold(), 0.102, sy + 0.008, 0, landingSwGrp);
-          roller.rotation.x = Math.PI / 2;
-          createBox(0.02, 0.022, 0.012, M.emit(0xfacc15, 0.7), -0.038, sy, 0.026, landingSwGrp);
-        }
-        createBox(0.02, 0.34, 0.028, supportMat, -0.058, 0, 0, landingSwGrp);
-
-        landingSwGrp.position.set(switchCenterX, y, switchZ);
-        railGrp.add(landingSwGrp);
-      }
-
-      FLOOR_Y.forEach(fy => addLandingSwitch(fy + S.CAR_H - 0.35));
-
-      const topLimitY = FLOOR_Y[FLOORS - 1] + S.CAR_H + 0.25;
-      const topFinalY = topLimitY + 0.45;
-      const bottomLimitY = FLOOR_Y[0] + 0.55;
-      const bottomFinalY = FLOOR_Y[0] - 0.15;
-      [
-        [topLimitY, 'limit'], [topFinalY, 'final'],
-        [bottomLimitY, 'limit'], [bottomFinalY, 'final']
-      ].forEach(([y, kind]) => addRollerSwitch(y, kind));
-
       scene.add(railGrp);
+    }
+
+    function buildShaftLandingDevices() {
+      const landingDeviceGrp = new THREE.Group();
+      const rightRailX = S.CAR_BG / 2;
+      const leftRailX = -S.CAR_BG / 2;
+      const sensorZ = 0.04;
+      const bracketMat = M.ss(0x6b7280);
+      const maxFloor = FLOORS - 1;
+
+      landingDevices.length = 0;
+
+      for (let fIdx = 0; fIdx < FLOORS; fIdx++) {
+        const triggerY = FLOOR_Y[fIdx];
+        const deviceY = triggerY + S.CAR_H / 2;
+
+        // 전 층 우측 레일: 카 통로 반대편(+X)으로 뻗는 브라켓과 90도 회전한 ㄷ자 센서
+        const landingBracket = createBox(0.32, 0.035, 0.05, bracketMat, rightRailX + 0.16, deviceY, sensorZ, landingDeviceGrp);
+        const landingSwitch = new THREE.Group();
+        const landingMat = DEBUG_SENSOR ? M.emit(0x00ff44, 1.8) : M.paint(0x1e3a8a);
+        createBox(0.022, 0.16, 0.07, landingMat, 0, 0, 0, landingSwitch);
+        createBox(0.11, 0.022, 0.07, landingMat, 0.045, 0.069, 0, landingSwitch);
+        createBox(0.11, 0.022, 0.07, landingMat, 0.045, -0.069, 0, landingSwitch);
+        landingSwitch.position.set(rightRailX + 0.33, deviceY, sensorZ);
+        landingDeviceGrp.add(landingSwitch);
+        if (DEBUG_SENSOR) {
+          landingDeviceGrp.add(new THREE.BoxHelper(landingSwitch, 0x00ff44));
+        }
+        landingDevices.push({ floor: fIdx, type: 'landing', bracket: landingBracket, mesh: landingSwitch, triggerY: triggerY });
+
+        // 최하층/최상층 좌측 레일: 카 통로 반대편(-X) 브라켓과 짧은 Slow Down Vane
+        if (fIdx === 0 || fIdx === maxFloor) {
+          const slowdownBracket = createBox(0.32, 0.035, 0.05, bracketMat, leftRailX - 0.16, deviceY, sensorZ, landingDeviceGrp);
+          const vaneMat = DEBUG_SENSOR ? M.emit(0xff3300, 1.4) : M.ss(0x9ca3af);
+          const slowdownVane = createBox(0.035, 0.65, 0.055, vaneMat, leftRailX - 0.33, deviceY, sensorZ, landingDeviceGrp);
+          if (DEBUG_SENSOR) {
+            landingDeviceGrp.add(new THREE.BoxHelper(slowdownVane, 0xff3300));
+          }
+          landingDevices.push({ floor: fIdx, type: 'slowdown', bracket: slowdownBracket, mesh: slowdownVane, triggerY: triggerY });
+        }
+      }
+
+      railGrp.add(landingDeviceGrp);
     }
 
     function buildMachineRoom() {
@@ -714,8 +688,8 @@
       const tensBaseZ = 0.22;                    // 가이드 레일 파묻힘 방지 — Z축으로 전방 이격
       const tensionerY = Y0 + 0.5;               // 피트 바닥 +500mm
 
-      // ── 1. 가이드 레일 고정 브라켓 (실사 반영: 적색, 베이스/연장암 분리)
-      const bracketMat = M.paint(0xd32f2f);     // 강한 붉은 방청·우레탄 도장 느낌
+      // ── 1. 가이드 레일 고정 브라켓 (베이스/연장암 분리)
+      const bracketMat = M.ss(0x4b5563);
 
       // 수직 베이스판 (가이드 레일 웹/플랜지 측면에 체결되는 지지대)
       createBox(0.04, 0.45, 0.08, bracketMat,

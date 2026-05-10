@@ -20,9 +20,6 @@
       const hr = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, W * 0.72, 14), gMat);
       hr.rotation.z = Math.PI / 2; hr.position.set(0, -0.32, -D / 2 + 0.075); carGrp.add(hr);
 
-      // 추락방지안전장치 (GSB320DK)
-      createBox(W - 0.06, 0.14, 0.16, M.paint(0xef4444), 0, -H / 2 - 0.07, 0, carGrp);
-
       // 크로스헤드 & 서스펜션 쉬브
       createBox(W + 0.1, 0.12, 0.16, M.ss(0x2a3a50), 0, H / 2 + 0.06, 0, carGrp);
       const susp = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.025, 10, 28), M.ss(0x2a3a50));
@@ -30,29 +27,6 @@
 
       // 조작반 (OPB)
       createBox(0.12, 0.55, 0.015, M.paint(0x111827), W / 2 - 0.04, -0.15, D / 2 - 0.03, carGrp);
-
-      // 카 측 Landing Vane: 길쭉한 금속 베인(카 외측 배치)
-      const landingVaneGrp = new THREE.Group();
-      const vanePlateMat = M.paint(0xaaaaaa);
-      const vaneFrameMat = M.paint(0x5b6b84);
-      const vaneH = H - 0.18;
-      createBox(0.012, vaneH, 0.014, vanePlateMat, 0, 0, 0, landingVaneGrp);
-      createBox(0.065, 0.028, 0.028, vaneFrameMat, -0.028, vaneH / 2 - 0.08, 0, landingVaneGrp);
-      createBox(0.065, 0.028, 0.028, vaneFrameMat, -0.028, -vaneH / 2 + 0.08, 0, landingVaneGrp);
-      landingVaneGrp.position.set(W / 2 + 0.028, 0, 0.10);
-      carGrp.add(landingVaneGrp);
-
-      // Final Cam: 우측 카 외부에 길게 붙는 검정색 캠. 상/하 Final Limit 스위치를 작동시키는 교육용 형상
-      const finalCamGrp = new THREE.Group();
-      const finalCamMat = M.paint(0x0b1020);
-      createBox(0.045, H + 0.35, 0.035, finalCamMat, 0, 0, 0, finalCamGrp);
-      createCylinder(0.026, 0.026, 0.038, finalCamMat, 0, (H + 0.35) / 2, 0, finalCamGrp);
-      createCylinder(0.026, 0.026, 0.038, finalCamMat, 0, -(H + 0.35) / 2, 0, finalCamGrp);
-      [-0.85, 0, 0.85].forEach(y => {
-        createBox(0.18, 0.035, 0.035, M.paint(0x5b6b84), -0.10, y, -0.05, finalCamGrp);
-      });
-      finalCamGrp.position.set(S.CAR_BG / 2 - 0.04, 0, 0.22);
-      carGrp.add(finalCamGrp);
 
       carGrp.position.y = FLOOR_Y[0] + H / 2;
       scene.add(carGrp);
