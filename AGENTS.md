@@ -53,8 +53,9 @@ https://raw.githubusercontent.com/foreverchuseok/simulator-project/main/index.ht
 
 ### 배포 상태
 
-- GitHub: Public (Claude.ai raw 읽기용)
-- Vercel: GitHub 연동 해제 상태 (작업 중 자동배포 차단)
+- GitHub: Public (Claude.ai raw 읽기용) — `foreverchuseok/simulator-project`
+- Vercel: GitHub `main` 브랜치 연동 (push 시 자동 배포)
+- 태블릿 브리핑: Vercel 배포 URL로 접속
 - 로컬 확인: Cursor Live Server
 
 ---
