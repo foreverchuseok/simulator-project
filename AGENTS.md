@@ -12,14 +12,50 @@
 현재 작업 폴더(`simmul`)에 존재하는 파일.
 
 - `index.html` — HTML 뼈대 및 전역 변수, 초기화 진입점
-- `config.js` — 도면 제원 `const S`, PBR 재질 라이브러리 `const M` 정의
-- `environment.js` — 정적 배경 객체 (조명, 벽, 레일, 기계실, 피트 등)
-- `elevator.js` — 동적 객체 (카, 도어, 균형추, 로프 등)
-- `ui.js` — 엘리베이터 상태 제어 및 UI 이벤트 로직
-- `디자인.pdf` — 초기 부품 디자인 참고 자료
-- 한국승강기안전공단 유튜브 영상 — 리미트 스위치, 조속기 등 복잡한 부품 및 구동 메커니즘의 **최우선 참고 자료**. AI는 해당 부품 작업 전 실제 기계 구조를 반드시 먼저 이해할 것.
+- `js/config.js` — 도면 제원 `const S`, PBR 재질 라이브러리 `const M` 정의
+- `js/environment.js` — 정적 배경 객체 (조명, 벽, 레일, 기계실, 피트 등)
+- `js/elevator.js` — 동적 객체 (카, 도어, 균형추, 로프 등)
+- `js/ui.js` — 엘리베이터 상태 제어 및 UI 이벤트 로직
+- `디자인.pdf` — 초기 부품 디자인 참고 자료 (TK동양 시스템 구성도 31페이지)
 - `logo.png` — 현판 로고 이미지
-- `AGENTS.md` — 이 파일
+- `.cursor/rules/elevator.mdc` — Cursor AI 규칙 파일 (이 파일과 동일 내용)
+- `AGENTS.md` — 이 파일 (Claude.ai 및 Claude Code용)
+
+### 참고 영상 (최우선)
+
+리미트 스위치, 조속기, 랜딩 디바이스 등 복잡한 부품 작업 전 반드시 실제 기계 구조를 먼저 확인할 것.
+
+- 한국승강기안전공단 유튜브: https://youtu.be/ZjjRp3onkZs?si=ub_PiOvDpLuGE2b_
+
+---
+
+## 워크플로우
+
+### 역할 분담
+
+- **Claude.ai** — 설계 상담, 프롬프트 작성, 코드 리뷰, 이 파일 관리
+- **Cursor 에디터 모드** — 좌표 미세조정, 부품 위치 수정, 눈으로 보면서 수정
+- **Cursor 에이전트 모드** — 복잡한 로직, 다중 파일 동시 수정
+- **Gemini** — 유튜브 영상 분석 후 부품 구조 설명 전달
+- **Claude Code (터미널)** — 추후 검토, 현재 미정
+
+### GitHub 코드 공유
+
+Cursor 수정 → GitHub 푸시 → Claude.ai에 raw 링크 붙여넣기 → 최신 코드 기준 대화.
+
+```
+https://raw.githubusercontent.com/foreverchuseok/simulator-project/main/js/elevator.js
+https://raw.githubusercontent.com/foreverchuseok/simulator-project/main/js/environment.js
+https://raw.githubusercontent.com/foreverchuseok/simulator-project/main/js/config.js
+https://raw.githubusercontent.com/foreverchuseok/simulator-project/main/js/ui.js
+https://raw.githubusercontent.com/foreverchuseok/simulator-project/main/index.html
+```
+
+### 배포 상태
+
+- GitHub: Public (Claude.ai raw 읽기용)
+- Vercel: GitHub 연동 해제 상태 (작업 중 자동배포 차단)
+- 로컬 확인: Cursor Live Server
 
 ---
 
@@ -35,9 +71,9 @@
 
 ```
 예시.
-1. elevator.js — buildMachineRoom() 내 조속기 블록 위치 확인
-2. environment.js — tensGuard 회전 보정 수정
-3. elevator.js — pitGrp에 추가 확인
+1. js/elevator.js — buildMachineRoom() 내 조속기 블록 위치 확인
+2. js/environment.js — tensGuard 회전 보정 수정
+3. js/elevator.js — pitGrp에 추가 확인
 ```
 
 ---
@@ -53,7 +89,7 @@
 
 ## 절대 금지
 
-- 각 파일(`index.html`, `config.js`, `environment.js`, `elevator.js`, `ui.js`) 전체 재출력 금지.
+- 각 파일(`index.html`, `config.js`, `environment.js`, `elevator.js`, `ui.js`) 전체 재출력 절대 금지.
 - CSS 불필요 수정 금지.
 - Three.js / OrbitControls / GSAP 버전 변경 금지.
 - 전역 도면 제원 `const S = { ... }` 값 임의 수정 금지.
@@ -87,7 +123,7 @@
 
 [수정 위치]
 파일명 / 함수명 / 대략적인 줄 번호.
-예. elevator.js — buildMachineRoom() 약 862~920줄 내 tensGuard 블록.
+예. js/elevator.js — buildMachineRoom() 약 862~920줄 내 tensGuard 블록.
 
 [수정 코드]
 변경 전/후를 명확히 구분하여 해당 블록만 제시.
@@ -111,7 +147,6 @@
 
 - 승강로(레일) 측 센서·스위치의 Y축 높이는 층 바닥(`FLOOR_Y`) 기준으로 단순 배치하지 않는다.
 - **"카가 해당 층에 정위치했을 때, 카에 부착된 타격 부품(차폐판, 캠 등)의 중심 Y 좌표"** 를 먼저 계산하고, 그 값에 승강로 측 센서를 역산하여 맞춘다.
-- 공식 예시.
 
 ```js
 // 카 중심 Y = FLOOR_Y[i] + S.CAR_H / 2
@@ -124,7 +159,7 @@ const deviceY = FLOOR_Y[fIdx] + S.CAR_H / 2;
 
 ## 재질 규칙
 
-새 부품은 기존 재질 함수를 우선 사용한다. 재질 정의는 `config.js`에 있다.
+새 부품은 기존 재질 함수를 우선 사용한다. 재질 정의는 `js/config.js`에 있다.
 
 - `M.ss()` → 스테인리스/금속
 - `M.paint()` → 도장 부품
@@ -157,17 +192,14 @@ const deviceY = FLOOR_Y[fIdx] + S.CAR_H / 2;
 mesh.userData = { type: 'limit-switch', floor: fIdx, function: 'slowdown' };
 ```
 
-- `type` 키는 부품 식별자로, 충돌 감지·상태 업데이트·디버그 모두에 활용된다.
-
 ### 디버그 시각화 (필수)
 
 - 센서·충돌 처리가 필요한 객체는 생성 시 반드시 `if (DEBUG_SENSOR)` 블록을 함께 작성한다.
 
 ```js
 if (DEBUG_SENSOR) {
-  // mesh 자체에 자식으로 추가하면 좌표와 회전을 자동으로 따라간다.
-  mesh.add(new THREE.BoxHelper(mesh, 0x00ff44));    // 바운딩박스
-  mesh.add(new THREE.AxesHelper(0.1));              // 방향축
+  mesh.add(new THREE.BoxHelper(mesh, 0x00ff44));
+  mesh.add(new THREE.AxesHelper(0.1));
 }
 ```
 
@@ -207,20 +239,10 @@ if (DEBUG_SENSOR) {
 ### 예상 상태 (FSM)
 
 ```js
-IDLE
-MOVING
-LEVELING
-DOOR_OPENING
-DOOR_OPEN
-DOOR_CLOSING
-INSPECTION
-FAULT
-EMERGENCY_STOP
+IDLE / MOVING / LEVELING / DOOR_OPENING / DOOR_OPEN / DOOR_CLOSING / INSPECTION / FAULT / EMERGENCY_STOP
 ```
 
 ### 물리 센서 상태 객체
-
-- 아래 구조를 적극 활용하며, 카 이동 중 매 프레임 동기화한다.
 
 ```js
 elevatorState = {

@@ -17,8 +17,97 @@
       scene.add(carLight);
     }
 
+    function buildMountainRange(parent) {
+      const layers = [
+        { z: -40, color: 0x7a9470, peaks: [[-32, 10], [-18, 14], [-4, 16], [10, 13], [24, 11], [36, 9]] },
+        { z: -44, color: 0x5f7d58, peaks: [[-28, 12], [-12, 17], [4, 19], [18, 14], [32, 10]] },
+        { z: -48, color: 0x4a6348, peaks: [[-22, 9], [0, 15], [22, 11]] }
+      ];
+      layers.forEach((layer) => {
+        layer.peaks.forEach(([x, h]) => {
+          const mesh = new THREE.Mesh(
+            new THREE.ConeGeometry(h * 0.58, h, 6),
+            M.paint(layer.color)
+          );
+          mesh.position.set(x, Y0 + h / 2, layer.z);
+          mesh.userData = { type: 'bg-mountain' };
+          parent.add(mesh);
+        });
+      });
+    }
+
+    // koelsa2 참고 — 승강기 시험탑 캠퍼스 (왼쪽 -X)
+    function buildKoelsaTowerCampus(parent) {
+      const grp = new THREE.Group();
+      grp.name = 'koelsa2-campus';
+      grp.position.set(-17, 0, -28);
+
+      const white = M.ss(0xf0f2f5);
+      const grey = M.conc(0xc5cad0);
+      const blueRoof = M.paint(0x3b6ea5);
+
+      const towerH = 22;
+      createCylinder(1.1, 1.1, towerH, white, 0, Y0 + towerH / 2, 0, grp);
+      createBox(3.2, 1.8, 3.2, M.glass(), 0, Y0 + towerH + 0.9, 0, grp);
+      createBox(3.6, 0.3, 3.6, white, 0, Y0 + towerH + 1.9, 0, grp);
+      createCylinder(0.04, 0.04, 1.2, M.ss(0x888888), 0, Y0 + towerH + 2.6, 0, grp);
+
+      createBox(2.0, 0.8, 0.05, M.paint(0xffffff), 0, Y0 + towerH * 0.72, 1.15, grp);
+      createBox(0.45, 0.45, 0.06, M.paint(0xf08820), -0.45, Y0 + towerH * 0.72, 1.16, grp);
+      createBox(0.45, 0.45, 0.06, M.paint(0x2080d0), 0.15, Y0 + towerH * 0.72, 1.16, grp);
+
+      createBox(6, 2.5, 4, grey, -5, Y0 + 1.25, -2, grp);
+      createBox(6, 0.15, 4.2, blueRoof, -5, Y0 + 2.55, -2, grp);
+      createBox(4, 2, 3, grey, -5, Y0 + 1, 3, grp);
+      createBox(4, 0.12, 3.2, blueRoof, -5, Y0 + 2.06, 3, grp);
+      createBox(5, 2.8, 4, white, 4, Y0 + 1.4, 1, grp);
+      createBox(4.5, 1.8, 0.08, M.glass(), 4, Y0 + 1.6, 3.05, grp);
+
+      createBox(14, 0.05, 10, M.paint(0x555a60), 0, Y0 + 0.025, 0, grp);
+      createBox(10, 0.04, 6, M.paint(0x5a8a48), -1, Y0 + 0.03, -4, grp);
+
+      grp.userData = { type: 'bg-koelsa2' };
+      parent.add(grp);
+    }
+
+    // koelsa 참고 — 한국승강기안전공단 본관 (오른쪽 +X)
+    function buildKoelsaHQ(parent) {
+      const grp = new THREE.Group();
+      grp.name = 'koelsa-hq';
+      grp.position.set(17, 0, -28);
+
+      const wall = M.ss(0xe8eaed);
+      const glass = M.glass();
+      const floorH = 2.8;
+      const floors = 6;
+      const mainH = floors * floorH;
+      const mainW = 10;
+      const mainD = 7;
+
+      createBox(mainW, mainH, mainD, wall, 0, Y0 + mainH / 2, 0, grp);
+      createBox(2.2, mainH - 1, 0.08, glass, 0, Y0 + mainH / 2, mainD / 2 + 0.02, grp);
+      for (let f = 0; f < floors; f++) {
+        createBox(mainW - 3, 1.6, 0.05, glass, 0, Y0 + floorH * f + floorH * 0.55, mainD / 2 + 0.03, grp);
+      }
+
+      const pilotH = 3.2;
+      for (let i = -3; i <= 3; i += 2) {
+        createCylinder(0.22, 0.22, pilotH, M.paint(0xd4842a), i * 1.1, Y0 + pilotH / 2, mainD / 2 + 1.2, grp);
+      }
+      createBox(mainW + 1, 0.15, 2.5, wall, 0, Y0 + pilotH, mainD / 2 + 1.2, grp);
+
+      createBox(4, 0.6, 0.08, M.paint(0xffffff), -1, Y0 + mainH + 0.3, mainD / 2 + 0.05, grp);
+      createBox(0.55, 0.55, 0.09, M.paint(0xe84040), -2.2, Y0 + mainH + 0.3, mainD / 2 + 0.06, grp);
+      createBox(0.55, 0.55, 0.09, M.paint(0x2080d0), -1.5, Y0 + mainH + 0.3, mainD / 2 + 0.06, grp);
+      createBox(0.55, 0.55, 0.09, M.paint(0x58a832), -0.8, Y0 + mainH + 0.3, mainD / 2 + 0.06, grp);
+
+      createBox(12, 0.05, 8, M.paint(0x5a5f66), 0, Y0 + 0.025, 6, grp);
+
+      grp.userData = { type: 'bg-koelsa' };
+      parent.add(grp);
+    }
+
     function buildBackground() {
-      // 1. 어두운 땅바닥 생성 (기존 유지)
       const ground = new THREE.Mesh(
         new THREE.PlaneGeometry(150, 150),
         new THREE.MeshStandardMaterial({ color: 0x4a453f, roughness: 0.95 })
@@ -28,6 +117,14 @@
       ground.receiveShadow = true;
       scene.add(ground);
 
+      const bgGrp = new THREE.Group();
+      bgGrp.name = 'outdoorBackground';
+
+      buildMountainRange(bgGrp);
+      buildKoelsaTowerCampus(bgGrp);
+      buildKoelsaHQ(bgGrp);
+
+      scene.add(bgGrp);
     }
 
     function buildFrontWallAndLobby() {
@@ -91,25 +188,21 @@
 
       createBox(S.WALL_T, sideWallH, sideWallD, wallMat, sideWallX, Y0 + sideWallH / 2, S.WALL_T / 2, wallGrp);
 
-      // --- 세로형 지사 로고 현판 (사용자가 직접 디자인한 통이미지 사용) ---
-      const logoTex = new THREE.TextureLoader().load('logo.png', 
-        undefined, // onProgress
-        undefined, 
+      // --- 세로형 지사 로고 현판 (assets/bg/logo.png) ---
+      const logoTex = new THREE.TextureLoader().load('assets/bg/logo.png',
+        undefined,
+        undefined,
         (err) => {
-          alert("⚠️ [오류] logo.png 파일을 불러올 수 없습니다!\n\n1. 바탕화면 simmul 폴더 안에 'logo.png' 파일이 있는지 확인하세요.\n2. 웹 브라우저 보안(CORS) 문제일 수 있습니다. 파일을 더블클릭해서 열지 마시고, VS Code의 'Live Server'를 이용해 열어주세요!");
+          alert("⚠️ [오류] logo.png 파일을 불러올 수 없습니다!\n\n1. simmul/assets/bg/ 폴더 안에 'logo.png'가 있는지 확인하세요.\n2. Live Server로 index.html을 열어주세요.");
           console.error("Texture Load Error:", err);
         }
       );
-      // 양면 렌더링(DoubleSide)을 추가하여 카메라 각도와 무관하게 무조건 보이도록 설정
+      logoTex.encoding = THREE.sRGBEncoding;
       const logoMat = new THREE.MeshBasicMaterial({ map: logoTex, transparent: true, side: THREE.DoubleSide });
-
-      // 벽면에 현판 부착 (약간 띄워서 Z-fighting 방지)
-      // 넓이를 기존 2.2에서 80%인 1.76으로 축소, 길이는 8.8 유지
       const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.76, 8.8), logoMat);
       sign.rotation.y = -Math.PI / 2;
-      // [수정] 현판 중심 높이(Y 좌표)를 9.5 -> 7.8로 낮춤
-      // (현판 상단이 3층 캐노피 라인과 정렬되도록 조정)
       sign.position.set(sideWallX - 0.15, Y0 + 7.8, S.WALL_T / 2);
+      sign.userData = { type: 'branch-logo' };
       scene.add(sign);
 
       scene.add(wallGrp);
