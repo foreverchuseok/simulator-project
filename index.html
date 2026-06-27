@@ -607,6 +607,7 @@
     let carDoorL, carDoorR, hatchDoors = [], ropeObjs = [];
     let mainSheaveGrp = null, governorWheelGrp = null, tensionSheaveGrp = null, sheaveSpeed = 0;
     const DEBUG_SENSOR = true;
+    const USE_PHOTO_BG_PREVIEW = true; // true: koelsa/koelsa2 좌우 원경(흐림) / false: 3D 배경
     const landingDevices = [];
     const carSensors = {};
     const elevatorState = { direction: 0, speed: 0, slowdownActive: false, limitActive: false, finalLimitActive: false };

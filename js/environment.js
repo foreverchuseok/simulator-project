@@ -107,22 +107,178 @@
       parent.add(grp);
     }
 
+    const BG_SKY = 0x5a8cd9;
+    const BG_GROUND = 'rgba(74,69,63,1)';
+
+    function createBgGradientTexture(w, h, drawFn) {
+      const cvs = document.createElement('canvas');
+      cvs.width = w;
+      cvs.height = h;
+      const ctx = cvs.getContext('2d');
+      drawFn(ctx, w, h);
+      return new THREE.CanvasTexture(cvs);
+    }
+
+    function createSoftPhotoTexture(img) {
+      const targetW = 1024;
+      const scale = Math.min(1, targetW / img.width);
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const cvs = document.createElement('canvas');
+      cvs.width = w;
+      cvs.height = h;
+      const ctx = cvs.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+
+      const data = ctx.getImageData(0, 0, w, h);
+      const px = data.data;
+      const dim = 0.8;
+      for (let i = 0; i < px.length; i += 4) {
+        px[i] *= dim;
+        px[i + 1] *= dim;
+        px[i + 2] *= dim;
+      }
+      ctx.putImageData(data, 0, 0);
+
+      const tex = new THREE.CanvasTexture(cvs);
+      tex.encoding = THREE.sRGBEncoding;
+      return tex;
+    }
+
+    function addPhotoSidePanel(parent, path, side, bgZ, onLoaded, onError) {
+      new THREE.TextureLoader().load(path, (tex) => {
+        const softTex = createSoftPhotoTexture(tex.image);
+        const viewH = 58;
+        const aspect = tex.image.width / tex.image.height;
+        const viewW = Math.max(viewH * aspect, 62);
+        const x = side === 'left' ? -viewW * 0.44 : viewW * 0.44;
+        const bgY = Y0 + viewH * 0.52;
+
+        const panel = new THREE.Mesh(
+          new THREE.PlaneGeometry(viewW, viewH),
+          new THREE.MeshBasicMaterial({
+            map: softTex,
+            fog: false,
+            depthWrite: false,
+            side: THREE.DoubleSide
+          })
+        );
+        panel.position.set(x, bgY, bgZ);
+        panel.renderOrder = -10;
+        panel.userData = { type: side === 'left' ? 'bg-koelsa2-photo' : 'bg-koelsa-photo' };
+        parent.add(panel);
+
+        const fadeH = viewH * 0.22;
+        const bottomFade = createBgGradientTexture(4, 128, (ctx, cw, ch) => {
+          const g = ctx.createLinearGradient(0, 0, 0, ch);
+          g.addColorStop(0, 'rgba(74,69,63,0)');
+          g.addColorStop(0.65, 'rgba(74,69,63,0.55)');
+          g.addColorStop(1, BG_GROUND);
+          ctx.fillStyle = g;
+          ctx.fillRect(0, 0, cw, ch);
+        });
+        const bottomMesh = new THREE.Mesh(
+          new THREE.PlaneGeometry(viewW, fadeH),
+          new THREE.MeshBasicMaterial({ map: bottomFade, transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide })
+        );
+        bottomMesh.position.set(x, Y0 + fadeH * 0.42, bgZ + 0.4);
+        bottomMesh.renderOrder = -9;
+        parent.add(bottomMesh);
+
+        if (onLoaded) onLoaded();
+      }, undefined, (err) => {
+        console.error('Background photo load error:', path, err);
+        if (onError) onError(err);
+      });
+    }
+
+    function buildSplitPhotoBackdrop(parent, bg3dGrp) {
+      let loaded = 0;
+      let failed = false;
+      const tryHide3d = () => {
+        loaded++;
+        if (loaded >= 2 && !failed && bg3dGrp) bg3dGrp.visible = false;
+      };
+      const onFail = () => {
+        failed = true;
+        if (bg3dGrp) bg3dGrp.visible = true;
+        scene.background = new THREE.Color(0x5a8cd9);
+        scene.fog = new THREE.FogExp2(0x5a8cd9, 0.015);
+      };
+
+      const bgZ = -36;
+      addPhotoSidePanel(parent, 'assets/bg/koelsa2.png', 'left', bgZ, tryHide3d, onFail);
+      addPhotoSidePanel(parent, 'assets/bg/koelsa.png', 'right', bgZ, tryHide3d, onFail);
+    }
+
+    function buildGrassPatch(parent, cx, cz, w, d) {
+      const patch = new THREE.Group();
+      patch.userData = { type: 'grass-patch' };
+      const grassA = M.paint(0x5a8a48);
+      const grassB = M.paint(0x4a7340);
+
+      createBox(w, 0.03, d, M.paint(0x567a46), cx, Y0 + 0.045, cz, patch);
+
+      const count = Math.min(2200, Math.floor(w * d * 0.14));
+      for (let i = 0; i < count; i++) {
+        const lx = (Math.random() - 0.5) * w * 0.94;
+        const lz = (Math.random() - 0.5) * d * 0.94;
+        const h = 0.14 + Math.random() * 0.32;
+        const blade = new THREE.Mesh(
+          new THREE.BoxGeometry(0.055, h, 0.035),
+          Math.random() > 0.45 ? grassA : grassB
+        );
+        blade.position.set(cx + lx, Y0 + 0.06 + h / 2, cz + lz);
+        blade.rotation.y = Math.random() * Math.PI;
+        blade.rotation.x = (Math.random() - 0.5) * 0.25;
+        blade.rotation.z = (Math.random() - 0.5) * 0.15;
+        blade.userData = { type: 'grass-blade' };
+        patch.add(blade);
+      }
+      parent.add(patch);
+    }
+
+    function buildOutdoorGround(parent) {
+      const g = new THREE.Group();
+      g.name = 'outdoorGround';
+      g.userData = { type: 'outdoor-ground' };
+
+      const span = 280;
+      createBox(span, 0.25, span, M.conc(0x3d3a36), 0, Y0 - 0.125, 0, g);
+      createBox(span, 0.05, span, M.paint(0x52575e), 0, Y0 + 0.025, 0, g);
+
+      buildGrassPatch(g, -58, 0, 95, span * 0.88);
+      buildGrassPatch(g, 58, 0, 95, span * 0.88);
+      buildGrassPatch(g, 0, -55, span * 0.55, 45);
+
+      createBox(S.SHAFT_W + S.WALL_T * 2 + 2.4, 0.03, 3.2, M.ss(0xb0b5bb), 0, Y0 + 0.04, S.SHAFT_D / 2 + 2.2, g);
+
+      parent.add(g);
+    }
+
     function buildBackground() {
-      const ground = new THREE.Mesh(
-        new THREE.PlaneGeometry(150, 150),
-        new THREE.MeshStandardMaterial({ color: 0x4a453f, roughness: 0.95 })
-      );
-      ground.rotation.x = -Math.PI / 2;
-      ground.position.y = Y0 - 0.01;
-      ground.receiveShadow = true;
-      scene.add(ground);
+      if (typeof USE_PHOTO_BG_PREVIEW !== 'undefined' && USE_PHOTO_BG_PREVIEW) {
+        scene.background = new THREE.Color(BG_SKY);
+        scene.fog = new THREE.FogExp2(BG_SKY, 0.005);
+      }
+
+      buildOutdoorGround(scene);
 
       const bgGrp = new THREE.Group();
       bgGrp.name = 'outdoorBackground';
 
-      buildMountainRange(bgGrp);
-      buildKoelsaTowerCampus(bgGrp);
-      buildKoelsaHQ(bgGrp);
+      const bg3dGrp = new THREE.Group();
+      bg3dGrp.name = 'bg3d';
+      if (!(typeof USE_PHOTO_BG_PREVIEW !== 'undefined' && USE_PHOTO_BG_PREVIEW)) {
+        buildMountainRange(bg3dGrp);
+      }
+      buildKoelsaTowerCampus(bg3dGrp);
+      buildKoelsaHQ(bg3dGrp);
+      bgGrp.add(bg3dGrp);
+
+      if (typeof USE_PHOTO_BG_PREVIEW !== 'undefined' && USE_PHOTO_BG_PREVIEW) {
+        buildSplitPhotoBackdrop(bgGrp, bg3dGrp);
+      }
 
       scene.add(bgGrp);
     }
