@@ -607,7 +607,7 @@
     let carDoorL, carDoorR, hatchDoors = [], ropeObjs = [];
     let mainSheaveGrp = null, governorWheelGrp = null, tensionSheaveGrp = null, sheaveSpeed = 0;
     const DEBUG_SENSOR = true;
-    const USE_PHOTO_BG_PREVIEW = true; // true: koelsa/koelsa2 좌우 원경(흐림) / false: 3D 배경
+    const USE_PHOTO_BG_PREVIEW = false; // true: koelsa/koelsa2 좌우 원경(흐림) / false: 3D 배경
     const landingDevices = [];
     const carSensors = {};
     const elevatorState = { direction: 0, speed: 0, slowdownActive: false, limitActive: false, finalLimitActive: false };
@@ -629,7 +629,7 @@
     function init() {
       scene = new THREE.Scene();
       scene.background = new THREE.Color(0x5a8cd9); // 맑은 하늘색 배경
-      scene.fog = new THREE.FogExp2(0x5a8cd9, 0.015);
+      scene.fog = new THREE.FogExp2(0x5a8cd9, 0.006);
 
       const wrap = document.getElementById('canvas-wrap');
       camera = new THREE.PerspectiveCamera(50, wrap.clientWidth / wrap.clientHeight, 0.1, 200);

@@ -70,38 +70,165 @@
       parent.add(grp);
     }
 
-    // koelsa 참고 — 한국승강기안전공단 본관 (오른쪽 +X)
+    // koelsa.png 참고 — 한국승강기안전공단 본관 정밀 3D 모델 (오른쪽 +X)
     function buildKoelsaHQ(parent) {
       const grp = new THREE.Group();
       grp.name = 'koelsa-hq';
-      grp.position.set(17, 0, -28);
+      grp.position.set(17, 0, -26);
 
-      const wall = M.ss(0xe8eaed);
-      const glass = M.glass();
-      const floorH = 2.8;
-      const floors = 6;
-      const mainH = floors * floorH;
-      const mainW = 10;
-      const mainD = 7;
+      // ── 공용 재질 ──
+      const panelW   = M.ss(0xeceae5);     // 크림화이트 알루미늄 패널 (외벽)
+      const panelBnd = M.ss(0xd5d2cc);     // 스팬드럴 밴드 (층간 솔리드)
+      const mulliMat = M.ss(0xb8bdc4);     // 알루미늄 뮬리언 (유리 격자)
+      const colMat   = M.paint(0x9e6420);  // 브론즈/목재 원형 기둥
+      const paveConc = M.conc(0xc4c0ba);   // 콘크리트 포장
+      const parkMat  = M.conc(0x50545a);   // 주차장 아스팔트
+      const grassMat = M.conc(0x4d7a36);   // 잔디
+      const leafMat  = M.conc(0x3d6e28);   // 나뭇잎
+      const trunkMat = M.conc(0x52341a);   // 나무 줄기
 
-      createBox(mainW, mainH, mainD, wall, 0, Y0 + mainH / 2, 0, grp);
-      createBox(2.2, mainH - 1, 0.08, glass, 0, Y0 + mainH / 2, mainD / 2 + 0.02, grp);
-      for (let f = 0; f < floors; f++) {
-        createBox(mainW - 3, 1.6, 0.05, glass, 0, Y0 + floorH * f + floorH * 0.55, mainD / 2 + 0.03, grp);
+      // 파란 커튼월 유리 (공용 인스턴스)
+      const glassBlue = new THREE.MeshPhysicalMaterial({
+        color: 0x3a6ea8, transmission: 0.65, opacity: 1, transparent: true,
+        roughness: 0.08, ior: 1.52, metalness: 0.1, side: THREE.DoubleSide
+      });
+
+      const FH = 3.3;          // 층고 (m)
+      const NF = 7;            // 층수
+      const MH = FH * NF;     // 타워 전체 높이 = 23.1m
+      const MW = 15.0;         // 타워 폭
+      const MD = 8.0;          // 타워 깊이
+      const FZ = MD / 2;       // 타워 전면 로컬 Z
+
+      // ════════════════════════════════════════════════
+      //  1. 메인 타워 코어 (Main Tower)
+      // ════════════════════════════════════════════════
+      createBox(MW, MH, 0.3, panelW, 0, Y0 + MH / 2, -MD / 2, grp);         // 후면벽
+      createBox(0.3, MH, MD, panelW, -MW / 2, Y0 + MH / 2, 0, grp);          // 좌측벽
+      createBox(0.3, MH, MD, panelW,  MW / 2, Y0 + MH / 2, 0, grp);          // 우측벽
+
+      // 전면 커튼월 — 층별 유리 패널 + 스팬드럴 밴드
+      for (let f = 0; f < NF; f++) {
+        const fy  = Y0 + f * FH;
+        const spH = f === 0 ? 0.7 : 0.5;  // 1층 스팬드럴 두께
+        const glH = FH - spH - 0.05;
+        const glY = fy + spH + glH / 2;
+
+        // 수평 스팬드럴 밴드 (슬래브 엣지)
+        createBox(MW + 0.2, spH, 0.28, panelBnd, 0, fy + spH / 2, FZ + 0.1, grp);
+
+        // 유리 패널
+        createBox(MW - 0.7, glH, 0.06, glassBlue, 0, glY, FZ + 0.04, grp);
+
+        // 수직 뮬리언 — 5 베이 × 6선
+        for (let v = 0; v <= 5; v++) {
+          const vx = -MW / 2 + 0.35 + v * (MW - 0.7) / 5;
+          createBox(0.065, glH + 0.12, 0.10, mulliMat, vx, glY, FZ + 0.07, grp);
+        }
       }
 
-      const pilotH = 3.2;
-      for (let i = -3; i <= 3; i += 2) {
-        createCylinder(0.22, 0.22, pilotH, M.paint(0xd4842a), i * 1.1, Y0 + pilotH / 2, mainD / 2 + 1.2, grp);
+      // 최상층 처마 코니스
+      createBox(MW + 0.4, 0.35, 0.38, panelW, 0, Y0 + MH + 0.18, FZ + 0.14, grp);
+
+      // ════════════════════════════════════════════════
+      //  2. 파라펫 & 옥상
+      // ════════════════════════════════════════════════
+      const PH = 1.1;
+      createBox(MW + 0.5, PH, 0.28, panelW, 0, Y0 + MH + PH / 2, FZ, grp);          // 전면
+      createBox(0.28, PH, MD + 0.5, panelW, -MW / 2, Y0 + MH + PH / 2, 0, grp);     // 좌측
+      createBox(0.28, PH, MD + 0.5, panelW,  MW / 2, Y0 + MH + PH / 2, 0, grp);     // 우측
+      createBox(MW + 0.5, PH, 0.28, panelW, 0, Y0 + MH + PH / 2, -MD / 2, grp);     // 후면
+      // 옥상 슬래브
+      createBox(MW + 0.5, 0.18, MD + 0.5, M.conc(0xdddad4), 0, Y0 + MH + 0.09, 0, grp);
+
+      // 옥상 간판 "한국승강기안전공단"
+      createBox(8.5, 0.75, 0.14, M.ss(0xf2f2f2), 0, Y0 + MH + PH + 0.38, FZ + 0.14, grp);
+      createBox(8.0, 0.55, 0.17, M.paint(0x0055cc), 0, Y0 + MH + PH + 0.38, FZ + 0.18, grp);
+      // KoELSA 로고 마크 (빨강 원형)
+      createCylinder(0.22, 0.22, 0.06, M.paint(0xe02020), -3.7, Y0 + MH + PH + 0.38, FZ + 0.22, grp);
+
+      // 옥상 기계 설비 (에어컨 실외기, 덕트)
+      createBox(3.5, 1.1, 2.0, M.ss(0xc8ccd2), 3.0, Y0 + MH + 0.65, -2.5, grp);
+      createBox(2.0, 0.75, 1.5, M.ss(0xbfc4ca), -4.0, Y0 + MH + 0.47, -3.0, grp);
+      for (let i = 0; i < 3; i++) {
+        createBox(0.6, 0.25, 0.6, M.ss(0xb0b5bc), 2.0 + i * 1.1, Y0 + MH + 0.27, -3.5, grp);
       }
-      createBox(mainW + 1, 0.15, 2.5, wall, 0, Y0 + pilotH, mainD / 2 + 1.2, grp);
 
-      createBox(4, 0.6, 0.08, M.paint(0xffffff), -1, Y0 + mainH + 0.3, mainD / 2 + 0.05, grp);
-      createBox(0.55, 0.55, 0.09, M.paint(0xe84040), -2.2, Y0 + mainH + 0.3, mainD / 2 + 0.06, grp);
-      createBox(0.55, 0.55, 0.09, M.paint(0x2080d0), -1.5, Y0 + mainH + 0.3, mainD / 2 + 0.06, grp);
-      createBox(0.55, 0.55, 0.09, M.paint(0x58a832), -0.8, Y0 + mainH + 0.3, mainD / 2 + 0.06, grp);
+      // ════════════════════════════════════════════════
+      //  3. 입구 로비 윙 (Curved Entrance Wing)
+      //  사진 특징: 타워보다 넓게 펼쳐지는 곡선 지붕 + 브론즈 기둥
+      // ════════════════════════════════════════════════
+      const LW  = MW + 10;         // 로비 윙 폭 (타워보다 넓음)
+      const LH  = 5.2;             // 로비 높이 (~1.5층)
+      const LD  = 6.5;             // 로비 전방 돌출 깊이
+      const LMZ = FZ + LD / 2;     // 로비 중심 Z
+      const LFZ = FZ + LD;         // 로비 전면 Z
 
-      createBox(12, 0.05, 8, M.paint(0x5a5f66), 0, Y0 + 0.025, 6, grp);
+      // 로비 후면벽 (타워 전면에 연결)
+      createBox(LW, LH, 0.25, panelW, 0, Y0 + LH / 2, FZ + 0.12, grp);
+      // 로비 측벽
+      createBox(0.25, LH, LD, panelW, -LW / 2, Y0 + LH / 2, LMZ, grp);
+      createBox(0.25, LH, LD, panelW,  LW / 2, Y0 + LH / 2, LMZ, grp);
+
+      // 로비 지붕 메인 슬래브
+      createBox(LW + 0.6, 0.3, LD + 0.6, panelW, 0, Y0 + LH + 0.15, LMZ, grp);
+
+      // 곡선 지붕 엣지 — 전면 위로 들림 (사진 웨이브 라인)
+      const fe = createBox(LW + 1.4, 0.22, 1.1, panelW, 0, Y0 + LH + 0.52, LFZ + 0.3, grp);
+      fe.rotation.x = -0.3;
+      // 좌우 날개 들림 엣지
+      const leW = createBox(1.1, 0.2, LD + 1.0, panelW, -LW / 2 - 0.35, Y0 + LH + 0.52, LMZ, grp);
+      leW.rotation.z = 0.22;
+      const reW = createBox(1.1, 0.2, LD + 1.0, panelW,  LW / 2 + 0.35, Y0 + LH + 0.52, LMZ, grp);
+      reW.rotation.z = -0.22;
+
+      // 로비 전면 유리
+      createBox(LW - 3.2, LH - 0.45, 0.06, glassBlue, 0, Y0 + (LH - 0.45) / 2 + 0.22, LFZ + 0.03, grp);
+      // 수평 유리 분할 레일
+      for (let r = 0; r < 3; r++) {
+        createBox(LW - 3.2, 0.08, 0.09, mulliMat, 0, Y0 + 1.0 + r * 1.4, LFZ + 0.06, grp);
+      }
+
+      // ── 브론즈 원형 기둥 8개 (로비 정면) ──
+      const numP = 8;
+      const pillarSpan = LW - 2.5;
+      for (let p = 0; p < numP; p++) {
+        const px = -pillarSpan / 2 + p * pillarSpan / (numP - 1);
+        createCylinder(0.26, 0.26, LH, colMat, px, Y0 + LH / 2, LFZ, grp);
+        createBox(0.60, 0.09, 0.60, M.ss(0x8a8e94), px, Y0 + 0.045, LFZ, grp);   // 베이스 플레이트
+        createBox(0.55, 0.07, 0.55, M.ss(0x9a9ea4), px, Y0 + LH - 0.03, LFZ, grp); // 캐피탈
+      }
+
+      // 중앙 정문 캐노피 (돌출 차양)
+      createBox(5.5, 0.18, 2.8, panelW, 0, Y0 + LH + 0.1, LFZ + 1.3, grp);
+      // 캐노피 지지 슬림 기둥 2개
+      createCylinder(0.07, 0.07, LH - 0.28, M.ss(0xcdd2d8), -2.0, Y0 + (LH - 0.28) / 2 + 0.14, LFZ + 2.6, grp);
+      createCylinder(0.07, 0.07, LH - 0.28, M.ss(0xcdd2d8),  2.0, Y0 + (LH - 0.28) / 2 + 0.14, LFZ + 2.6, grp);
+
+      // ════════════════════════════════════════════════
+      //  4. 부지 (Site)
+      // ════════════════════════════════════════════════
+      // 전면 콘크리트 포장
+      createBox(LW + 14, 0.06, 12, paveConc, 0, Y0 + 0.03, LFZ + 4.5, grp);
+      // 주차장 아스팔트
+      createBox(LW + 14, 0.04, 9,  parkMat,  0, Y0 + 0.02, LFZ + 11.5, grp);
+      // 측면 잔디
+      createBox(7, 0.04, LD + 4, grassMat, -LW / 2 - 3.5, Y0 + 0.02, FZ + LD / 2, grp);
+      createBox(7, 0.04, LD + 4, grassMat,  LW / 2 + 3.5, Y0 + 0.02, FZ + LD / 2, grp);
+
+      // ── 가로수 ──
+      // 로비 정면 가로수
+      [-11, -8, -5, 5, 8, 11].forEach(tx => {
+        createCylinder(0.10, 0.12, 2.3, trunkMat, tx, Y0 + 1.15, LFZ + 2.5, grp);
+        createCylinder(1.25, 0.85, 2.6, leafMat,  tx, Y0 + 3.15, LFZ + 2.5, grp);
+      });
+      // 측면 가로수
+      [-LW / 2 - 1, LW / 2 + 1].forEach(tx => {
+        [2, 6, 10].forEach(tz => {
+          createCylinder(0.09, 0.11, 2.0, trunkMat, tx, Y0 + 1.0, FZ + tz, grp);
+          createCylinder(1.10, 0.70, 2.2, leafMat,  tx, Y0 + 2.9, FZ + tz, grp);
+        });
+      });
 
       grp.userData = { type: 'bg-koelsa' };
       parent.add(grp);
