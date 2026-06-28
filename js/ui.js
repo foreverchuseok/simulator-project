@@ -128,7 +128,7 @@
       const midY = Y0 + TOTAL_H * 0.4;
       document.getElementById('c-front').addEventListener('click', () => moveCam(14, midY, 16, 0, midY, 0));
       document.getElementById('c-iso').addEventListener('click', () => moveCam(16, midY + 6, 16, 0, midY, 0));
-      document.getElementById('c-mr').addEventListener('click', () => moveCam(5, Y0 + TOTAL_H + 1.5, 5, 0, Y0 + TOTAL_H + 1.5, 0));
+      document.getElementById('c-mr').addEventListener('click', () => moveCam(6, Y0 + TOTAL_H + 5, 6, 0, Y0 + TOTAL_H + 0.8, 0));
       document.getElementById('c-pit').addEventListener('click', () => moveCam(5, Y0 + 1.0, 5, 0, Y0 + 1.0, 0));
       document.getElementById('c-car').addEventListener('click', () => {
         const cy = carGrp.position.y; moveCam(0, cy, S.CAR_D / 2 + 0.5, 0, cy - 0.1, 0);

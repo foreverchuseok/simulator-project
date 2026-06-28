@@ -639,8 +639,9 @@
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       renderer.shadowMap.enabled = true;
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-      renderer.physicallyCorrectLights = true;
+      renderer.physicallyCorrectLights = false;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.2;
       renderer.setSize(wrap.clientWidth, wrap.clientHeight);
 
       controls = new THREE.OrbitControls(camera, renderer.domElement);

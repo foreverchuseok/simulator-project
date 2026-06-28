@@ -2,7 +2,7 @@
     function buildCarCabin() {
       carGrp = new THREE.Group();
       const W = S.CAR_W, D = S.CAR_D, H = S.CAR_H;
-      const extMat = M.ss(0xd8e0e8);
+      const extMat = M.ss(0xa8aeb5);
       const intMat = M.ss(0xe5e7eb);
 
       createBox(0.025, H, D, extMat, -W / 2, 0, 0, carGrp);
@@ -243,7 +243,7 @@
 
       function makeDoor(xSign) {
         const g = new THREE.Group();
-        createBox(dw, dh, dt, M.ss(0xd8e0e8), 0, 0, 0, g);
+        createBox(dw, dh, dt, M.ss(0xa8aeb5), 0, 0, 0, g);
         createBox(dw * 0.55, dh * 0.26, dt + 0.005, M.glass(), 0, dh * 0.3, 0, g); 
         
         const isLeftFromInside = xSign > 0;
@@ -295,7 +295,7 @@
       const hz = S.SHAFT_D / 2 + S.WALL_T * 0.3 + dt / 2;
       const jambZ = S.SHAFT_D / 2 + S.WALL_T / 2 + 0.04;
       const cx = dw / 2 + 0.006, ox = dw * 1.5 - 0.01;
-      const panMat = M.ss(0x9ea4ac), jambMat = M.ss(0xb8bec7);
+      const panMat = M.ss(0x868c94), jambMat = M.ss(0x989ea6);
       const mats = getStickerMats(); // 스티커 로드
 
       for (let i = 0; i < FLOORS; i++) {
