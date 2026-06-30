@@ -944,286 +944,116 @@
         createCylinder(0.042, 0.042, 0.055, M.ss(0x9ca3af), dx, defY, CWT_CENTER_Z, mrGrp);
       });
 
-      /* ══════════════════════════════════════════════════════════════
-         5. 권상기 (Traction Machine) - 웜기어식
-         PDF 4/31 참고:
-           ① 권상 전동기 (냉각핀 포함)
-           ② 메인 시브 (6스포크, 5홈)
-           ③ 시브 커버 (황금색 C자형)
-           ④ 엔코더
-           ⑤ 브레이크 (드럼 + 캘리퍼 + 솔레노이드)
-           ⑥ 개방 레버 (Y형 포크)
-           ⑦ 수동 핸들 (T형)
-         ══════════════════════════════════════════════════════════════ */
-      const tmBaseMat = M.paint(0x2c3e50);
-      const motorMat  = M.ss(0x88929b);
-      const darkMat   = M.paint(0x111111);
-      const shvY = bedY + bedFH + 0.16 + 0.35;
-      const tmX = -0.25;
+      // 베어링 하우징 아래 pillow-block 받침 (체대 상면 → defY)
+      const bedTopY = bedY + bedFH;
+      const pillowH = defY - bedTopY;
+      const pillowMat = M.ss(0x9ca3af);
+      [-0.27, 0.27].forEach(dx => {
+        createBox(0.07, pillowH, 0.07, pillowMat, dx, bedTopY + pillowH / 2, CWT_CENTER_Z, mrGrp);
+      });
 
-      // ─── 웜기어 박스 (Worm Gear Housing) ───
-      createBox(0.26, 0.36, 0.42, tmBaseMat, tmX, shvY - 0.10, 0, mrGrp);
-      const gearCylinder = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.20, 0.20, 0.27, 32), tmBaseMat);
-      gearCylinder.rotation.z = Math.PI / 2;
-      gearCylinder.position.set(tmX, shvY, 0);
-      mrGrp.add(gearCylinder);
-      // 기어박스 냉각 리브
-      for (let ri = 0; ri < 6; ri++) {
-        createBox(0.005, 0.30, 0.012, M.paint(0x1a2b3a),
-          tmX - 0.137, shvY - 0.04, -0.10 + ri * 0.045, mrGrp);
+      /* ⑤ 개방 레버 + ⑥ 수동 핸들 — 제어반 반대편(-Z) 좌측벽, 같은 높이·걸쇠 각각 (PDF 4·6p) */
+      const wallInnerX = -(S.SHAFT_W / 2 + S.WALL_T / 2) + S.WALL_T / 2 + 0.01;
+      const hookY = my + 0.92;
+      const hookShiftZ = -0.30;
+      const levHookZ = panelZ - 0.52 + hookShiftZ;
+      const hndHookZ = panelZ - 0.34 + hookShiftZ;
+      const hookMat = M.paint(0x333333);
+      const hookSteel = M.ss(0x777777);
+      const levMat = M.ss(0xa8b0b8);
+      const hndMat = M.ss(0x9ca3af);
+      const pegX = wallInnerX + 0.045;
+
+      function addWallHook(hy, hz, udType) {
+        createBox(0.012, 0.075, 0.055, hookMat, wallInnerX, hy, hz, mrGrp);
+        createBox(0.055, 0.012, 0.012, hookSteel, pegX, hy + 0.018, hz, mrGrp)
+          .userData = { type: udType };
       }
 
-      // ① 권상 전동기 (Traction Motor) - 냉각 핀(Cooling Fins) 포함
-      const motorZ = 0.55;
-      const motorBody = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.24, 0.24, 0.40, 36), motorMat);
-      motorBody.rotation.x = Math.PI / 2;
-      motorBody.position.set(tmX, shvY, motorZ);
-      mrGrp.add(motorBody);
+      addWallHook(hookY, levHookZ, 'release-lever-hook');
+      addWallHook(hookY, hndHookZ, 'turning-handle-hook');
 
-      // 냉각 핀 - 모터 원통 주위 링 디스크 8개
-      const finMat = M.paint(0x9aa0a8);
-      for (let fi = 0; fi < 8; fi++) {
-        const finRing = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.268, 0.268, 0.014, 32), finMat);
-        finRing.rotation.x = Math.PI / 2;
-        finRing.position.set(tmX, shvY, motorZ - 0.165 + fi * 0.047);
-        mrGrp.add(finRing);
-      }
+      // ⑤ Release Lever — 긴 로드 + 끝의 묵직한 U자(포크) 헤드 (PDF 4p ⑥)
+      // 현실 거치: 로드 상단 고리를 수평 걸쇠에 걸어 수직으로 내려오고, 포크 헤드가 맨 아래.
+      const relLevGrp = new THREE.Group();
+      relLevGrp.userData = { type: 'release-lever' };
 
-      // 전면 마운팅 플랜지 (기어박스 연결)
-      const motorFl = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.27, 0.27, 0.030, 32), M.paint(0x4a5a6a));
-      motorFl.rotation.x = Math.PI / 2;
-      motorFl.position.set(tmX, shvY, motorZ - 0.218);
-      mrGrp.add(motorFl);
+      // 상단 걸이 고리 — 보어 축을 X로 두어 수평 걸쇠에 끼움
+      const relRing = new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.004, 8, 18), levMat);
+      relRing.rotation.y = Math.PI / 2;
+      relRing.position.set(0, 0.006, 0);
+      relLevGrp.add(relRing);
 
-      // 후면 엔드 캡 (통풍구 + 슬릿)
-      const motorEndCap = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.245, 0.245, 0.048, 32), darkMat);
-      motorEndCap.rotation.x = Math.PI / 2;
-      motorEndCap.position.set(tmX, shvY, motorZ + 0.224);
-      mrGrp.add(motorEndCap);
-      for (let vi = 0; vi < 4; vi++) {
-        const va = vi * Math.PI / 4;
-        const vs = createBox(0.062, 0.009, 0.013, M.paint(0x2a2a2a),
-          tmX + Math.cos(va) * 0.145, shvY + Math.sin(va) * 0.145, motorZ + 0.224, mrGrp);
-        vs.rotation.z = va;
-      }
+      // 긴 로드 (가늘고 김)
+      const rodH = 0.34;
+      const rodMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, rodH, 12), levMat);
+      rodMesh.position.set(0, -rodH / 2, 0);
+      relLevGrp.add(rodMesh);
 
-      // ④ 엔코더 (Encoder / Pulse Generator)
-      const encoder = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.063, 0.063, 0.078, 20), M.paint(0x444444));
-      encoder.rotation.x = Math.PI / 2;
-      encoder.position.set(tmX, shvY, motorZ + 0.278);
-      mrGrp.add(encoder);
-      createBox(0.042, 0.058, 0.040, M.paint(0x333333),
-        tmX - 0.075, shvY + 0.040, motorZ + 0.278, mrGrp);
-      createCylinder(0.008, 0.008, 0.048, M.ss(0xaaaaaa), tmX, shvY, motorZ + 0.330, mrGrp);
+      // 로드 → 포크 전환 넥 (테이퍼: 가는 로드에서 굵은 헤드로 벌어짐)
+      const relNeckY = -rodH - 0.026;
+      const relNeck = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.024, 0.052, 14), levMat);
+      relNeck.position.set(0, relNeckY, 0);
+      relLevGrp.add(relNeck);
 
-      // ⑤ 브레이크 (Electromagnetic Drum Brake)
-      const brkZ = 0.22;
+      // 묵직한 포크 베이스 (쐐기 블록 — U자 윗부분 솔리드)
+      const relBaseY = relNeckY - 0.034;
+      createBox(0.024, 0.045, 0.058, levMat, 0, relBaseY, 0, relLevGrp);
 
-      // 브레이크 드럼 본체
-      const brkDrum = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.172, 0.172, 0.086, 36), M.paint(0x282828));
-      brkDrum.rotation.x = Math.PI / 2;
-      brkDrum.position.set(tmX, shvY, brkZ);
-      mrGrp.add(brkDrum);
-
-      // 드럼 사이드 플랜지 (양쪽)
-      [-0.048, 0.048].forEach(dz => {
-        const brkFl = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.198, 0.198, 0.013, 36), M.ss(0x7a8290));
-        brkFl.rotation.x = Math.PI / 2;
-        brkFl.position.set(tmX, shvY, brkZ + dz);
-        mrGrp.add(brkFl);
+      // U자 포크 — 두 갈래(Z축으로 벌어짐), 끝은 둥근 캡
+      const relProngLen = 0.10;
+      const relProngY = relBaseY - 0.022 - relProngLen / 2;
+      [-0.018, 0.018].forEach(dz => {
+        const prong = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.0085, 0.0085, relProngLen, 12), levMat);
+        prong.position.set(0, relProngY, dz);
+        relLevGrp.add(prong);
+        const tip = new THREE.Mesh(new THREE.SphereGeometry(0.0095, 10, 8), levMat);
+        tip.position.set(0, relProngY - relProngLen / 2, dz);
+        relLevGrp.add(tip);
       });
 
-      // 캘리퍼 프레임 (C형 - 드럼을 위아래에서 감싸는 구조)
-      const caliperMat = M.ss(0xccd4dc);
-      [-0.215, 0.215].forEach(dx => {
-        createBox(0.058, 0.36, 0.062, caliperMat, tmX + dx, shvY + 0.04, brkZ, mrGrp);
-      });
-      createBox(0.54, 0.058, 0.062, caliperMat, tmX, shvY + 0.21, brkZ, mrGrp);
+      relLevGrp.position.set(pegX, hookY + 0.018, levHookZ);
+      mrGrp.add(relLevGrp);
 
-      // 브레이크 라이닝 패드
-      [-0.170, 0.170].forEach(dx => {
-        createBox(0.016, 0.135, 0.088, M.paint(0x3c3028), tmX + dx, shvY, brkZ, mrGrp);
-      });
+      // ⑥ Turning Handle — 콜라(소켓)를 수평 걸쇠에 끼워 수직으로 걸린 크랭크 핸들 (PDF 4p ⑦)
+      // 현실 거치: 콜라 보어가 수평 걸쇠(+X축)에 끼워지고, 무거운 크랭크 팔은 중력으로 곧장 아래로 늘어짐.
+      // 손잡이(grip)는 팔 끝에서 좌우(Z축)로 뻗어, 벽에 평행하게 레버처럼 보임.
+      const turnHndGrp = new THREE.Group();
+      turnHndGrp.userData = { type: 'turning-handle' };
 
-      // 작동 로드 (X축 방향)
-      const rodY = shvY + 0.25;
-      const rodMesh = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.009, 0.009, 0.62, 10), darkMat);
-      rodMesh.rotation.z = Math.PI / 2;
-      rodMesh.position.set(tmX, rodY, brkZ);
-      mrGrp.add(rodMesh);
+      // 콜라(소켓) — 보어 축을 X로 두어 수평 걸쇠에 끼움
+      const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.052, 18), hndMat);
+      collar.rotation.z = Math.PI / 2; // 축을 X 방향으로 (걸쇠 방향)
+      turnHndGrp.add(collar);
+      // 보어 구멍(걸쇠가 들어가는 어두운 안쪽)
+      const bore = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.056, 14), M.paint(0x2a2a2a));
+      bore.rotation.z = Math.PI / 2;
+      turnHndGrp.add(bore);
 
-      // 복귀 스프링 코일 7개
-      for (let ci = 0; ci < 7; ci++) {
-        const brkCoil = new THREE.Mesh(
-          new THREE.TorusGeometry(0.028, 0.007, 8, 16), M.paint(0x4a6080));
-        brkCoil.rotation.x = Math.PI / 2;
-        brkCoil.position.set(tmX - 0.22 + ci * 0.027, rodY, brkZ);
-        mrGrp.add(brkCoil);
-      }
+      // 고정 나사 (콜라 위쪽)
+      const hexBolt = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.016, 6), M.ss(0x555555));
+      hexBolt.position.set(0, 0.030, 0);
+      turnHndGrp.add(hexBolt);
 
-      // 전자석 솔레노이드 액추에이터 (황금색 원통)
-      const solenoidMat = M.paint(0xf0b800);
-      const solenoid = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.060, 0.060, 0.105, 20), solenoidMat);
-      solenoid.rotation.z = Math.PI / 2;
-      solenoid.position.set(tmX + 0.235, rodY, brkZ);
-      mrGrp.add(solenoid);
-      const solCap = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.063, 0.063, 0.018, 20), M.paint(0xd4a00a));
-      solCap.rotation.z = Math.PI / 2;
-      solCap.position.set(tmX + 0.290, rodY, brkZ);
-      mrGrp.add(solCap);
-      createBox(0.055, 0.035, 0.035, M.paint(0x222222), tmX + 0.240, rodY + 0.072, brkZ, mrGrp);
+      // 크랭크 팔 — 콜라에서 아래(-Y)로 곧장 늘어짐, 벽과 평행(Y-Z 평면)
+      const thArmLen = 0.26;
+      createBox(0.014, thArmLen, 0.034, hndMat, 0, -thArmLen / 2 - 0.020, 0, turnHndGrp);
+      // 팔-손잡이 연결 허브
+      createCylinder(0.020, 0.020, 0.018, hndMat, 0, -thArmLen - 0.010, 0, turnHndGrp)
+        .rotation.x = Math.PI / 2;
 
-      // ⑥ 개방 레버 (Release Lever) - Y형(포크) 수동 브레이크 개방 레버
-      const relLevMat = M.ss(0xb8bcc4);
-      const rLevX = tmX - 0.215;
-      const rLevY = shvY - 0.12;
+      // 손잡이(grip) — 팔 끝에서 +Z 한쪽만 (중심 기준 왼쪽 제거)
+      const gripLen = 0.10;
+      const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, gripLen, 16), M.paint(0x2a2a2a));
+      grip.rotation.x = Math.PI / 2;
+      grip.position.set(0, -thArmLen - 0.010, gripLen / 2);
+      turnHndGrp.add(grip);
+      createCylinder(0.016, 0.016, 0.012, hndMat, 0, -thArmLen - 0.010, gripLen + 0.006, turnHndGrp)
+        .rotation.x = Math.PI / 2;
 
-      const rLevStem = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.011, 0.011, 0.32, 12), relLevMat);
-      rLevStem.position.set(rLevX, rLevY, brkZ);
-      mrGrp.add(rLevStem);
-
-      [-0.055, 0.055].forEach(dz => {
-        const forkArm = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.009, 0.009, 0.20, 10), relLevMat);
-        forkArm.rotation.x = dz > 0 ? -0.58 : 0.58;
-        forkArm.position.set(rLevX, rLevY + 0.12, brkZ + dz * 0.5);
-        mrGrp.add(forkArm);
-      });
-
-      const pivPin = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.013, 0.013, 0.10, 10), M.ss(0xcccccc));
-      pivPin.rotation.x = Math.PI / 2;
-      pivPin.position.set(rLevX, rLevY + 0.08, brkZ);
-      mrGrp.add(pivPin);
-
-      const rLevGrip = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.018, 0.018, 0.10, 14), M.paint(0xf57c00));
-      rLevGrip.position.set(rLevX, rLevY - 0.19, brkZ);
-      mrGrp.add(rLevGrip);
-
-      // ⑦ 수동 핸들 (Turning Handle) - T자형 비상 이동 핸들
-      const tHandleMat = M.ss(0xa8b0b8);
-      const thX = tmX + 0.42;
-      const thY = my + 0.22;
-
-      createCylinder(0.013, 0.013, 0.076, tHandleMat, thX, thY + 0.038, 0, mrGrp);
-      const thShaft = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.013, 0.013, 0.52, 14), tHandleMat);
-      thShaft.rotation.z = Math.PI / 2;
-      thShaft.position.set(thX + 0.265, thY, 0);
-      mrGrp.add(thShaft);
-      const thCross = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.013, 0.013, 0.30, 14), M.paint(0x222222));
-      thCross.rotation.x = Math.PI / 2;
-      thCross.position.set(thX + 0.505, thY, 0);
-      mrGrp.add(thCross);
-      [-0.135, 0.135].forEach(dz => {
-        const thCap = new THREE.Mesh(
-          new THREE.SphereGeometry(0.018, 12, 8), M.paint(0x333333));
-        thCap.position.set(thX + 0.505, thY, dz);
-        mrGrp.add(thCap);
-      });
-
-      // ② 메인 시브 (Main Sheave) - 6스포크 대형 로프 도르래
-      const mainShvRadius = 0.28;
-      const shvMat = M.ss(0xa0a8b0);
-      const mainGrp = new THREE.Group();
-
-      const mainDrum = new THREE.Mesh(
-        new THREE.CylinderGeometry(mainShvRadius, mainShvRadius, 0.125, 40), shvMat);
-      mainDrum.rotation.x = Math.PI / 2;
-      mainGrp.add(mainDrum);
-
-      // 로프 V-홈 5개
-      for (let gi = 0; gi < 5; gi++) {
-        const gx = -0.04 + gi * 0.02;
-        const mainGrv = new THREE.Mesh(
-          new THREE.TorusGeometry(mainShvRadius + 0.002, 0.007, 10, 40), darkMat);
-        mainGrv.position.set(0, 0, gx);
-        mainGrp.add(mainGrv);
-      }
-
-      // 중심 허브 (보스)
-      const mainHub = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.062, 0.062, 0.16, 22), M.paint(0x4a5a6a));
-      mainHub.rotation.x = Math.PI / 2;
-      mainGrp.add(mainHub);
-
-      // 스포크 6개 (대형 단면)
-      for (let si = 0; si < 6; si++) {
-        const mainSpk = createBox((mainShvRadius - 0.07) * 2, 0.042, 0.038, shvMat, 0, 0, 0, mainGrp);
-        mainSpk.rotation.z = si * Math.PI / 3;
-      }
-
-      // 림 플랜지 (양쪽 - 로프 이탈 방지)
-      [-0.068, 0.068].forEach(dx => {
-        const mainRimF = new THREE.Mesh(
-          new THREE.TorusGeometry(mainShvRadius, 0.017, 10, 40), M.ss(0x8a9298));
-        mainRimF.position.set(0, 0, dx);
-        mainGrp.add(mainRimF);
-      });
-
-      mainGrp.rotation.y = Math.PI / 2;
-      mainGrp.position.set(0, shvY, 0);
-      mrGrp.add(mainGrp);
-      mainSheaveGrp = mainGrp;
-
-      // 시브 주축 & 베어링 하우징
-      const mainAxle = createCylinder(0.030, 0.030, 1.05, M.ss(0xb0b8c0), 0, shvY, 0, mrGrp);
-      mainAxle.rotation.z = Math.PI / 2;
-      [-0.38, 0.38].forEach(dx => {
-        createCylinder(0.052, 0.052, 0.068, M.ss(0x9ca3af), dx, shvY, 0, mrGrp);
-      });
-
-      // ③ 시브 커버 (Sheave Cover) - 황금색 C자형 안전 커버
-      const coverRadius = mainShvRadius + 0.025;
-      const coverWidth = 0.17;
-
-      const coverGeom = new THREE.CylinderGeometry(
-        coverRadius, coverRadius, coverWidth, 36, 1, true,
-        -Math.PI * 0.15,
-        Math.PI * 1.3
-      );
-      const coverMat = new THREE.MeshStandardMaterial({
-        color: 0xf1c40f,
-        roughness: 0.5,
-        metalness: 0.3,
-        side: THREE.DoubleSide
-      });
-      const sheaveCover = new THREE.Mesh(coverGeom, coverMat);
-      sheaveCover.rotation.z = Math.PI / 2;
-      sheaveCover.position.set(0, shvY, 0);
-      mrGrp.add(sheaveCover);
-
-      // 커버 고정 브라켓 & 볼트
-      const cvBktMat  = M.paint(0x333333);
-      const cvBoltMat = M.ss(0xffffff);
-
-      const fZ = Math.cos(-Math.PI * 0.15) * coverRadius;
-      const fY = Math.sin(-Math.PI * 0.15) * coverRadius;
-      const fBracket = createBox(coverWidth + 0.02, 0.02, 0.04, cvBktMat, 0, shvY + fY, fZ, mrGrp);
-      fBracket.rotation.x = -Math.PI * 0.15;
-      const cb1 = createCylinder(0.005, 0.005, 0.03, cvBoltMat, -0.05, shvY + fY, fZ, mrGrp);
-      cb1.rotation.x = -Math.PI * 0.15;
-      const cb2 = createCylinder(0.005, 0.005, 0.03, cvBoltMat,  0.05, shvY + fY, fZ, mrGrp);
-      cb2.rotation.x = -Math.PI * 0.15;
-
-      const bZ = Math.cos(Math.PI * 1.15) * coverRadius;
-      const bY = Math.sin(Math.PI * 1.15) * coverRadius;
-      const bBracket = createBox(coverWidth + 0.02, 0.02, 0.04, cvBktMat, 0, shvY + bY, bZ, mrGrp);
-      bBracket.rotation.x = Math.PI * 1.15;
+      turnHndGrp.position.set(pegX, hookY + 0.018, hndHookZ);
+      mrGrp.add(turnHndGrp);
 
       /* 6. 조속기 받침대 (Governor Stand) */
       // 소장님 지시: 카 가이드 레일과 완벽히 수직선상에 오도록 정렬 & 높이는 절반
@@ -1415,7 +1245,6 @@
 
       const govWheelWorldY = govGrp.position.y + govYBase + gWY;
       mrGrp.userData = {
-        shvY: shvY,
         defY: defY,
         defZ: CWT_CENTER_Z,
         govX: govX,

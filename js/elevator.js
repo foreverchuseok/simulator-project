@@ -368,13 +368,13 @@
     }
 
     function buildWireRopes() {
-      const shvY = mrGrp.userData.shvY, defY = mrGrp.userData.defY, defZ = mrGrp.userData.defZ;
+      const defY = mrGrp.userData.defY, defZ = mrGrp.userData.defZ;
       const rMat = M.rope();
       // [수정] 3. 로프 5가닥 동기화
       for (let i = 0; i < 5; i++) {
-        const rx = -0.04 + i * 0.02; // 메인 쉬브/보조 시브 홈과 동일한 간격
+        const rx = -0.04 + i * 0.02; // 보조 시브 홈과 동일한 간격
         const line = new THREE.Line(new THREE.BufferGeometry(), rMat);
-        ropeObjs.push({ line: line, shvY: shvY, defY: defY, defZ: defZ, rx: rx });
+        ropeObjs.push({ line: line, defY: defY, defZ: defZ, rx: rx });
         scene.add(line);
       }
     }
@@ -383,10 +383,8 @@
       const cy = carGrp.position.y + S.CAR_H / 2 + 0.28;
       const wy = cwtGrp.position.y + S.CWT_H / 2 + 0.12;
       ropeObjs.forEach(r => {
-        // [수정] 카 중앙 -> 메인 쉬브 -> 보조 시브(하향 조정) -> 균형추 로핑 궤적 동기화
         const pts = [
           new THREE.Vector3(r.rx, cy, 0),
-          new THREE.Vector3(r.rx, r.shvY, 0),
           new THREE.Vector3(r.rx, r.defY, r.defZ),
           new THREE.Vector3(r.rx, wy, r.defZ),
         ];
