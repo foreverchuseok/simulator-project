@@ -996,21 +996,31 @@
       relNeck.position.set(0, relNeckY, 0);
       relLevGrp.add(relNeck);
 
-      // 묵직한 포크 베이스 (쐐기 블록 — U자 윗부분 솔리드)
+      // 묵직한 포크 베이스 (납작한 평판 블록 — U자 윗부분 솔리드)
+      const relPlateTh = 0.014;                // 평판 두께(X) — 납작함
       const relBaseY = relNeckY - 0.034;
-      createBox(0.024, 0.045, 0.058, levMat, 0, relBaseY, 0, relLevGrp);
+      createBox(relPlateTh, 0.045, 0.046, levMat, 0, relBaseY, 0, relLevGrp);
 
-      // U자 포크 — 두 갈래(Z축으로 벌어짐), 끝은 둥근 캡
-      const relProngLen = 0.10;
-      const relProngY = relBaseY - 0.022 - relProngLen / 2;
-      [-0.018, 0.018].forEach(dz => {
-        const prong = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.0085, 0.0085, relProngLen, 12), levMat);
-        prong.position.set(0, relProngY, dz);
-        relLevGrp.add(prong);
-        const tip = new THREE.Mesh(new THREE.SphereGeometry(0.0095, 10, 8), levMat);
-        tip.position.set(0, relProngY - relProngLen / 2, dz);
-        relLevGrp.add(tip);
+      // U자 포크 — 두 갈래(Z축으로 벌어짐). 납작한 평철 두 갈래, 끝단 30° 절곡(ㄷ자 갈고리)으로 브레이크에 끼움
+      // 절곡 방향: 벽(-X) 반대편 정면(+X, 체대 쪽)으로 휘어짐
+      const relStraightLen = 0.05;             // 곧게 내려오는 부분 (짧게)
+      const relTipLen = 0.038;                 // 절곡된 끝단
+      const relTineW = 0.016;                  // 갈래 폭(Z)
+      const relBend = Math.PI / 6;             // 30° 휘어짐
+      const relProngTopY = relBaseY - 0.0225;  // 베이스 블록 하단에서 시작
+      const cb = Math.cos(relBend), sb = Math.sin(relBend);
+      [-0.014, 0.014].forEach(dz => {
+        // 직선부 (납작한 평철)
+        createBox(relPlateTh, relStraightLen, relTineW, levMat,
+          0, relProngTopY - relStraightLen / 2, dz, relLevGrp);
+
+        // 절곡 끝단 — 직선부 하단을 피벗으로 정면(+X) 방향 30° 절곡
+        const pivotY = relProngTopY - relStraightLen;
+        const tipSeg = new THREE.Mesh(
+          new THREE.BoxGeometry(relPlateTh, relTipLen, relTineW), levMat);
+        tipSeg.rotation.z = relBend;
+        tipSeg.position.set((relTipLen / 2) * sb, pivotY - (relTipLen / 2) * cb, dz);
+        relLevGrp.add(tipSeg);
       });
 
       relLevGrp.position.set(pegX, hookY + 0.018, levHookZ);
