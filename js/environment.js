@@ -937,20 +937,332 @@
       defGrp.position.set(0, defY, CWT_CENTER_Z);
       mrGrp.add(defGrp);
 
-      // 디플렉터 시브 축 & 베어링 하우징
-      const defAxle = createCylinder(0.022, 0.022, 0.72, M.ss(0xb8bcc4), 0, defY, CWT_CENTER_Z, mrGrp);
+      // 디플렉터 시브 축 & 클레비스 브라켓 (PDF 5p ②: 시브 양옆을 감싸는 좁은 은색 브라켓)
+      const bedTopY = bedY + bedFH;
+      const defAxle = createCylinder(0.022, 0.022, 0.22, M.ss(0xb8bcc4), 0, defY, CWT_CENTER_Z, mrGrp);
       defAxle.rotation.z = Math.PI / 2;
-      [-0.27, 0.27].forEach(dx => {
-        createCylinder(0.042, 0.042, 0.055, M.ss(0x9ca3af), dx, defY, CWT_CENTER_Z, mrGrp);
+      const pillowMat = M.ss(0x9ca3af);
+      // 좌우 클레비스 측판 (허브 바로 바깥, 베드 프레임 안쪽으로 내려감)
+      [-0.085, 0.085].forEach(dx => {
+        createBox(0.014, 0.19, 0.16, pillowMat, dx, bedTopY + 0.035, CWT_CENTER_Z, mrGrp);
+        createCylinder(0.035, 0.035, 0.018, pillowMat, dx * (0.10 / 0.085), defY, CWT_CENTER_Z, mrGrp)
+          .rotation.z = Math.PI / 2;
+      });
+      // 클레비스 → 베드 연결 베이스 플레이트 (시브 양옆, 베드 후단 채널에 캔틸레버 거치)
+      [-0.16, 0.16].forEach(dx => {
+        createBox(0.16, 0.014, 0.22, pillowMat, dx, bedTopY + 0.007, CWT_CENTER_Z, mrGrp);
       });
 
-      // 베어링 하우징 아래 pillow-block 받침 (체대 상면 → defY)
-      const bedTopY = bedY + bedFH;
-      const pillowH = defY - bedTopY;
-      const pillowMat = M.ss(0x9ca3af);
-      [-0.27, 0.27].forEach(dx => {
-        createBox(0.07, pillowH, 0.07, pillowMat, dx, bedTopY + pillowH / 2, CWT_CENTER_Z, mrGrp);
+      /* ══════════════════════════════════════════════════════════════
+         5. 권상기 (Geared Traction Machine) — Machine Room Part 기준
+         구동 일렬(Z축, 베드 장축): ④→①→드럼→⑤→웜박스  /  ②③시브 웜박스 +X 측면 90°
+         tmGrp: 시브 world x≈0, 스핀축 X (mainSheaveGrp)
+         ══════════════════════════════════════════════════════════════ */
+      const tmGrp = new THREE.Group();
+      tmGrp.name = 'TractionMachine';
+      const tmR        = 0.22;
+      const tmAxisY    = bedTopY + 0.30;
+      const tmShvX     = 0.24;
+      const tmCenterZ  = -0.20;
+      tmGrp.position.set(-tmShvX, tmAxisY, tmCenterZ);
+      const tmBaseY    = bedTopY - tmAxisY;
+      const tmPlateY   = tmBaseY + 0.045;
+
+      const tmCastMat   = new THREE.MeshStandardMaterial({ color: 0x4d535c, metalness: 0.55, roughness: 0.75 });
+      const tmDarkCast  = new THREE.MeshStandardMaterial({ color: 0x3a4048, metalness: 0.55, roughness: 0.85 });
+      const tmSheaveMat = new THREE.MeshStandardMaterial({ color: 0x7c848e, metalness: 0.5, roughness: 0.65 });
+      const tmBrkMat    = M.ss(0xbfc6ce);
+      const tmDarkMat   = M.paint(0x181c20);
+      const tmCoverMat  = M.paint(0xB08A20);
+
+      const tmMotR   = 0.145;
+      const tmGboxZ  = 0;
+      const tmBrkZ   = 0.14;
+      const tmMotorZ = 0.32;
+      const tmEncZ   = 0.52;
+
+      const tmDriveGrp = new THREE.Group();
+      tmDriveGrp.name = 'TMDriveLine';
+      tmGrp.add(tmDriveGrp);
+
+      // tmBaseGrp — 베이스 플레이트 (Z 길이 방향)
+      const tmBaseGrp = new THREE.Group();
+      tmBaseGrp.name = 'TMBase';
+      const tmBaseCZ = (tmGboxZ + tmEncZ) / 2;
+      createBox(0.34, 0.03, 0.82, tmDarkCast, 0, tmPlateY, tmBaseCZ, tmBaseGrp);
+      createBox(0.14, 0.03, 0.20, tmDarkCast, tmShvX + 0.02, tmPlateY, tmGboxZ, tmBaseGrp);
+      [-0.18, 0.14].forEach(cx => {
+        createBox(0.10, 0.05, 0.90, bedMat, cx, tmBaseY + 0.025, tmBaseCZ, tmBaseGrp);
       });
+      tmGrp.add(tmBaseGrp);
+
+      // tmEncGrp — ④ 엔코더 (PDF 4p ④: 짙은 챠콜 납작 원반 + 중앙 관통 보어)
+      const tmEncMat = new THREE.MeshStandardMaterial({ color: 0x26292e, metalness: 0.15, roughness: 0.85 });
+      const tmEncGrp = new THREE.Group();
+      tmEncGrp.name = 'TMEncoder';
+      tmEncGrp.position.set(0, 0, tmEncZ);
+      // 모터축 스터브 (모터 전면 → 엔코더 연결)
+      createCylinder(0.017, 0.017, 0.040, M.ss(0x9aa0a8), 0, 0, -0.015, tmEncGrp).rotation.x = Math.PI / 2;
+      // 본체 원반 (지름 대비 납작한 퍽 형상)
+      createCylinder(0.047, 0.047, 0.052, tmEncMat, 0, 0, 0.028, tmEncGrp).rotation.x = Math.PI / 2;
+      // 중앙 보어 (전후면 3mm 돌출 흑색 실린더로 구멍 표현)
+      createCylinder(0.015, 0.015, 0.058, M.paint(0x14161a), 0, 0, 0.028, tmEncGrp).rotation.x = Math.PI / 2;
+      tmDriveGrp.add(tmEncGrp);
+
+      // tmMotorGrp — ① 전동기 (PDF 4p ①: 매끈한 원통 몸체 + 전면 1/3 흑색 축방향 핀 드럼 + 후면 대형 사각 플랜지)
+      const tmMotorGrp = new THREE.Group();
+      tmMotorGrp.name = 'TMMotor';
+      tmMotorGrp.position.set(0, 0, tmMotorZ);
+      // 몸체 — 리브 없는 매끈한 주물 원통 (z −0.13 ~ +0.055)
+      createCylinder(tmMotR, tmMotR, 0.185, tmCastMat, 0, 0, -0.0375, tmMotorGrp).rotation.x = Math.PI / 2;
+      // 전면(+Z, 엔코더측) 흑색 핀 드럼 — 원통 둘레 축방향 냉각핀 (z +0.055 ~ +0.165)
+      const tmFaceMat = new THREE.MeshStandardMaterial({ color: 0x141619, metalness: 0.1, roughness: 0.9 });
+      const tmVentMat = new THREE.MeshStandardMaterial({ color: 0x33383e, metalness: 0.1, roughness: 0.85 });
+      createCylinder(0.140, 0.140, 0.110, tmFaceMat, 0, 0, 0.110, tmMotorGrp).rotation.x = Math.PI / 2;
+      for (let i = 0; i < 28; i++) {
+        const finA = i * Math.PI / 14;
+        const fin = createBox(0.006, 0.011, 0.110, tmVentMat,
+          Math.cos(finA) * 0.1435, Math.sin(finA) * 0.1435, 0.110, tmMotorGrp);
+        fin.rotation.z = finA + Math.PI / 2;
+      }
+      // 핀 드럼 전면 — 방사형 통풍 리브 8줄 + 중앙 허브
+      for (let i = 0; i < 8; i++) {
+        const ventA = i * Math.PI / 4;
+        const vent = createBox(0.095, 0.011, 0.005, tmVentMat,
+          Math.cos(ventA) * 0.078, Math.sin(ventA) * 0.078, 0.1665, tmMotorGrp);
+        vent.rotation.z = ventA;
+      }
+      createCylinder(0.032, 0.032, 0.012, new THREE.MeshStandardMaterial({ color: 0x3c4046, metalness: 0.15, roughness: 0.8 }),
+        0, 0, 0.167, tmMotorGrp).rotation.x = Math.PI / 2;
+      // 후면(−Z, 브레이크측) 나팔형 확관 + 대형 사각 플랜지 판 + 모서리 볼트 4개
+      createCylinder(tmMotR, 0.165, 0.024, tmCastMat, 0, 0, -0.138, tmMotorGrp).rotation.x = Math.PI / 2;
+      createBox(0.35, 0.35, 0.014, tmCastMat, 0, 0, -0.157, tmMotorGrp);
+      [[-0.145, -0.145], [0.145, -0.145], [-0.145, 0.145], [0.145, 0.145]].forEach(([bx, by]) => {
+        createCylinder(0.009, 0.009, 0.020, M.ss(0x888e96), bx, by, -0.157, tmMotorGrp).rotation.x = Math.PI / 2;
+      });
+      // 상부 단자함 (후단 쪽) + 케이블 글랜드
+      createBox(0.09, 0.06, 0.10, tmDarkCast, 0, tmMotR + 0.028, -0.06, tmMotorGrp);
+      createCylinder(0.010, 0.010, 0.030, tmDarkCast, 0, tmMotR + 0.028, -0.125, tmMotorGrp).rotation.x = Math.PI / 2;
+      // 하부 주물 받침 페데스탈 (모터 몸체 → 베이스)
+      createBox(0.20, 0.115, 0.26, tmDarkCast, 0, -0.198, -0.02, tmMotorGrp);
+      tmDriveGrp.add(tmMotorGrp);
+
+      // tmBrkDrumGrp — 브레이크 드럼 (⑤ 암에 가려짐)
+      const tmBrkDrumGrp = new THREE.Group();
+      tmBrkDrumGrp.name = 'TMBrakeDrum';
+      tmBrkDrumGrp.position.set(0, 0, tmBrkZ);
+      createCylinder(0.10, 0.10, 0.044, tmDarkMat, 0, 0, 0, tmBrkDrumGrp).rotation.x = Math.PI / 2;
+      tmDriveGrp.add(tmBrkDrumGrp);
+
+      // tmBrakeGrp — ⑤ 브레이크 (드럼 r=0.10 감싸는 양측 슈, 스프링 −X, 솔레노이드 +X)
+      const tmBrakeGrp = new THREE.Group();
+      tmBrakeGrp.name = 'TMBrake';
+      tmBrakeGrp.position.set(0, 0, tmBrkZ);
+      const tmDrumR   = 0.10;
+      const tmArmX    = 0.145;
+      const tmPivotY  = -0.125;
+      const tmTopY    = 0.175;
+      const tmPadMat  = M.paint(0x1a1a1a);
+
+      // 양측 곡면 브레이크 슈 — 드럼 좌/우(±X)를 감쌈 (PDF 4p ⑤: 암이 옆에서 조이는 구조)
+      [[Math.PI / 2 - 0.62, 1.24], [-Math.PI / 2 - 0.62, 1.24]].forEach(([tStart, tLen]) => {
+        const tmShoeBk = new THREE.Mesh(
+          new THREE.CylinderGeometry(tmDrumR + 0.004, tmDrumR + 0.004, 0.052, 24, 1, false, tStart, tLen),
+          tmBrkMat);
+        tmShoeBk.rotation.x = Math.PI / 2;
+        tmBrakeGrp.add(tmShoeBk);
+        const tmShoePad = new THREE.Mesh(
+          new THREE.CylinderGeometry(tmDrumR + 0.022, tmDrumR + 0.022, 0.046, 24, 1, false, tStart, tLen),
+          tmPadMat);
+        tmShoePad.rotation.x = Math.PI / 2;
+        tmBrakeGrp.add(tmShoePad);
+      });
+
+      // 좌·우 수직 암 (하단 피벗, I형 리브)
+      [-1, 1].forEach(s => {
+        const ax = tmArmX * s;
+        createBox(0.042, 0.028, 0.055, tmBrkMat, ax, tmPivotY, 0, tmBrakeGrp);
+        createCylinder(0.013, 0.013, 0.048, M.ss(0x888888), ax, tmPivotY + 0.018, 0, tmBrakeGrp).rotation.x = Math.PI / 2;
+        createBox(0.022, 0.24, 0.042, tmBrkMat, ax, 0.02, 0, tmBrakeGrp);
+        createBox(0.008, 0.22, 0.052, tmBrkMat, ax + 0.014 * s, 0.02, 0, tmBrakeGrp);
+        createBox(0.008, 0.22, 0.052, tmBrkMat, ax - 0.006 * s, 0.02, 0, tmBrakeGrp);
+        createBox(0.038, 0.028, 0.038, tmBrkMat, ax, tmTopY, 0, tmBrakeGrp);
+        createCylinder(0.008, 0.008, 0.042, M.ss(0x666666), ax, tmTopY, 0, tmBrakeGrp).rotation.z = Math.PI / 2;
+      });
+
+      // 상부 관통 로드 (양 암 상부 → 좌측 스프링/우측 조정너트까지 연장)
+      createCylinder(0.007, 0.007, 0.47, M.ss(0x999999), 0, tmTopY, 0, tmBrakeGrp).rotation.z = Math.PI / 2;
+
+      // 압축 스프링 (−X, 좌측 암 외측 — 로드 축 X방향으로 코일 적층, PDF 4p ⑤ 좌상단)
+      createCylinder(0.024, 0.024, 0.006, M.ss(0xb8bdc4), -0.162, tmTopY, 0, tmBrakeGrp).rotation.z = Math.PI / 2;
+      for (let i = 0; i < 7; i++) {
+        const tmCoil = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0045, 8, 18), tmPadMat);
+        tmCoil.rotation.y = Math.PI / 2;
+        tmCoil.position.set(-0.212 + i * 0.0075, tmTopY, 0);
+        tmBrakeGrp.add(tmCoil);
+      }
+      createCylinder(0.024, 0.024, 0.006, M.ss(0xb8bdc4), -0.220, tmTopY, 0, tmBrakeGrp).rotation.z = Math.PI / 2;
+      createCylinder(0.012, 0.012, 0.016, M.ss(0x878d95), -0.230, tmTopY, 0, tmBrakeGrp).rotation.z = Math.PI / 2;
+
+      // 우측(+X) 로드 조정 너트 2개
+      createCylinder(0.013, 0.013, 0.012, M.ss(0x878d95), 0.180, tmTopY, 0, tmBrakeGrp).rotation.z = Math.PI / 2;
+      createCylinder(0.013, 0.013, 0.012, M.ss(0x878d95), 0.196, tmTopY, 0, tmBrakeGrp).rotation.z = Math.PI / 2;
+
+      // 전자석 솔레노이드 (PDF 4p ⑤: 올리브색 원통 하우징 — 상단 중앙, 축은 드럼축(Z) 방향)
+      const tmSolMat = M.paint(0x77732f);
+      // 거치 브라켓 (암 상단 로드 위에 얹힘)
+      createBox(0.105, 0.014, 0.075, tmSolMat, 0, tmTopY + 0.014, 0.005, tmBrakeGrp);
+      // 본체 원통 — 축 Z방향, 시브 쪽으로 살짝 돌출
+      createCylinder(0.047, 0.047, 0.105, tmSolMat, 0, tmTopY + 0.066, 0.012, tmBrakeGrp).rotation.x = Math.PI / 2;
+      // 전후 엔드캡
+      createCylinder(0.048, 0.048, 0.010, M.paint(0x5f5a28), 0, tmTopY + 0.066, 0.068, tmBrakeGrp).rotation.x = Math.PI / 2;
+      createCylinder(0.048, 0.048, 0.010, M.paint(0x5f5a28), 0, tmTopY + 0.066, -0.044, tmBrakeGrp).rotation.x = Math.PI / 2;
+      // 상부 소형 볼트 2개
+      [-0.02, 0.02].forEach(bz => {
+        createCylinder(0.006, 0.006, 0.014, M.ss(0xb8a84a), 0, tmTopY + 0.118, bz, tmBrakeGrp);
+      });
+      // 흑색 링크 플레이트 — 솔레노이드 → 좌우 암 상단 연결
+      [-1, 1].forEach(s => {
+        const tmLink = createBox(0.115, 0.009, 0.026, tmPadMat, s * 0.072, tmTopY + 0.032, 0, tmBrakeGrp);
+        tmLink.rotation.z = -s * 0.42;
+      });
+
+      tmDriveGrp.add(tmBrakeGrp);
+
+      // tmGboxGrp — 웜기어박스 (웜 Z축 입력, +X 시브 출력)
+      const tmGboxGrp = new THREE.Group();
+      tmGboxGrp.name = 'TMGearbox';
+      tmGboxGrp.position.set(0, 0, tmGboxZ);
+      createBox(0.22, 0.34, 0.28, tmCastMat, 0, -0.01, 0, tmGboxGrp);
+      createBox(0.24, 0.05, 0.30, tmCastMat, 0, 0.165, 0, tmGboxGrp);
+      createCylinder(0.022, 0.022, 0.12, M.ss(0xb0b6be), 0, -0.02, 0.08, tmGboxGrp).rotation.x = Math.PI / 2;
+      createCylinder(0.026, 0.026, 0.08, M.ss(0xb8bcc4), 0.08, 0, 0, tmGboxGrp).rotation.z = Math.PI / 2;
+      tmDriveGrp.add(tmGboxGrp);
+
+      // tmSheaveGrp — ②③ 메인 시브 (웜박스 +X 측면)
+      const tmSheaveGrp = new THREE.Group();
+      tmSheaveGrp.name = 'MainSheave';
+      tmSheaveGrp.position.set(tmShvX, 0, tmGboxZ);
+      const tmShvMount = new THREE.Group();
+      tmShvMount.rotation.y = Math.PI / 2;
+      tmSheaveGrp.add(tmShvMount);
+      const tmShvSpin = new THREE.Group();
+      tmShvMount.add(tmShvSpin);
+      mainSheaveGrp = tmShvSpin;
+
+      // 림 — 로프 홈 밴드 (환형 링, 스핀축 Z 압출)
+      const tmRimShape = new THREE.Shape();
+      tmRimShape.absarc(0, 0, tmR, 0, Math.PI * 2, false);
+      const tmRimHolePath = new THREE.Path();
+      tmRimHolePath.absarc(0, 0, tmR - 0.045, 0, Math.PI * 2, true);
+      tmRimShape.holes.push(tmRimHolePath);
+      const tmRimGeo = new THREE.ExtrudeGeometry(tmRimShape,
+        { depth: 0.13, bevelEnabled: false, curveSegments: 40 });
+      tmRimGeo.translate(0, 0, -0.065);
+      tmShvSpin.add(new THREE.Mesh(tmRimGeo, tmSheaveMat));
+
+      for (let i = 0; i < 5; i++) {
+        const tmGrv = new THREE.Mesh(
+          new THREE.TorusGeometry(tmR + 0.003, 0.007, 10, 40), M.paint(0x111111));
+        tmGrv.position.set(0, 0, -0.04 + i * 0.02);
+        tmShvSpin.add(tmGrv);
+      }
+
+      // 웹 디스크 — 대형 원형 경량홀 6개 관통 (PDF 4p ②)
+      const tmWebShape = new THREE.Shape();
+      tmWebShape.absarc(0, 0, tmR - 0.040, 0, Math.PI * 2, false);
+      for (let i = 0; i < 6; i++) {
+        const holeA = i * Math.PI / 3 + Math.PI / 6;
+        const tmWebHole = new THREE.Path();
+        tmWebHole.absarc(Math.cos(holeA) * 0.112, Math.sin(holeA) * 0.112, 0.048, 0, Math.PI * 2, true);
+        tmWebShape.holes.push(tmWebHole);
+      }
+      const tmWebGeo = new THREE.ExtrudeGeometry(tmWebShape,
+        { depth: 0.040, bevelEnabled: false, curveSegments: 36 });
+      tmWebGeo.translate(0, 0, -0.020);
+      tmShvSpin.add(new THREE.Mesh(tmWebGeo, tmSheaveMat));
+
+      // 방사형 리브 스포크 3줄 (홀 사이, 웹 면보다 돌출)
+      for (let i = 0; i < 3; i++) {
+        const tmSpk = createBox((tmR - 0.045) * 2, 0.034, 0.056, tmSheaveMat, 0, 0, 0, tmShvSpin);
+        tmSpk.rotation.z = i * Math.PI / 3;
+      }
+
+      // 허브 + 중앙 흑색 보어
+      const tmHub = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.055, 0.055, 0.17, 20), M.ss(0x8a9298));
+      tmHub.rotation.x = Math.PI / 2;
+      tmShvSpin.add(tmHub);
+      const tmBore = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.032, 0.032, 0.176, 16), M.paint(0x14161a));
+      tmBore.rotation.x = Math.PI / 2;
+      tmShvSpin.add(tmBore);
+
+      tmGrp.add(tmSheaveGrp);
+
+      // ③ Sheave Cover — 골드 타공 아치 가드 (PDF 4p ③: 수직→45°경사→수평 밴드 + 후방 삼각판, 비회전)
+      const tmCoverGrp = new THREE.Group();
+      tmCoverGrp.name = 'SheaveCover';
+      tmCoverGrp.position.set(tmShvX, 0, tmGboxZ);
+      tmGrp.add(tmCoverGrp);
+      const cw = 0.17;
+      const covHoleMat = M.paint(0x241d06);
+      const covHoleCols = [-0.04, 0.01, 0.06];   // 밴드 폭방향(X) 타공 3열
+
+      // ① 수직 레그 (+Z 모터측) + 타공 3×5
+      createBox(cw, 0.28, 0.012, tmCoverMat, 0.01, 0.0, 0.265, tmCoverGrp);
+      covHoleCols.forEach(hx => {
+        for (let r = 0; r < 5; r++) {
+          createBox(0.02, 0.02, 0.016, covHoleMat, hx, -0.10 + r * 0.05, 0.265, tmCoverGrp);
+        }
+      });
+
+      // ② 45° 경사 세그먼트 + 타공 3×3
+      const covSlope = createBox(cw, 0.20, 0.012, tmCoverMat, 0.01, 0.205, 0.20, tmCoverGrp);
+      covSlope.rotation.x = -Math.PI / 4;
+      const covC45 = Math.cos(Math.PI / 4);
+      covHoleCols.forEach(hx => {
+        [-0.055, 0, 0.055].forEach(t => {
+          const sHole = createBox(0.02, 0.02, 0.016, covHoleMat,
+            hx, 0.205 + t * covC45, 0.20 - t * covC45, tmCoverGrp);
+          sHole.rotation.x = -Math.PI / 4;
+        });
+      });
+
+      // ③ 수평 톱 세그먼트 + 타공 3×4
+      createBox(cw, 0.012, 0.25, tmCoverMat, 0.01, 0.275, 0.01, tmCoverGrp);
+      covHoleCols.forEach(hx => {
+        for (let r = 0; r < 4; r++) {
+          createBox(0.02, 0.016, 0.02, covHoleMat, hx, 0.275, -0.065 + r * 0.05, tmCoverGrp);
+        }
+      });
+
+      // ④ 후방 삼각판 — 톱 끝에서 디플렉터 쪽으로 45° 하강 (타공 없음)
+      const covTriShape = new THREE.Shape();
+      covTriShape.moveTo(-cw / 2, 0);
+      covTriShape.lineTo(cw / 2, 0);
+      covTriShape.lineTo(cw / 2, -0.30);
+      covTriShape.closePath();
+      const covTriGeo = new THREE.ExtrudeGeometry(covTriShape,
+        { depth: 0.012, bevelEnabled: false });
+      covTriGeo.translate(0, 0, -0.006);
+      const covTri = new THREE.Mesh(covTriGeo, tmCoverMat);
+      covTri.rotation.x = Math.PI / 4;
+      covTri.position.set(0.01, 0.275, -0.115);
+      tmCoverGrp.add(covTri);
+
+      // 상부 골드 앵글 레일 2줄 (모터측으로 돌출 — 거치 암) + 전면 수직 지지 앵글/발판
+      [-0.06, 0.08].forEach(rx => createBox(0.014, 0.014, 0.34, tmCoverMat, rx, 0.288, 0.02, tmCoverGrp));
+      createBox(0.016, 0.10, 0.016, tmCoverMat, -0.06, -0.19, 0.285, tmCoverGrp);
+      createBox(0.055, 0.010, 0.055, tmCoverMat, -0.06, -0.245, 0.285, tmCoverGrp);
+
+      // 시브 ±X 베어링 필로우 블록
+      createBox(0.06, 0.20, 0.12, tmCastMat, tmShvX + 0.115, -0.128, tmGboxZ, tmGrp);
+      createCylinder(0.055, 0.055, 0.06, M.ss(0x9ca3af), tmShvX + 0.115, 0, tmGboxZ, tmGrp).rotation.z = Math.PI / 2;
+      createBox(0.06, 0.20, 0.12, tmCastMat, tmShvX - 0.115, -0.128, tmGboxZ, tmGrp);
+      createCylinder(0.055, 0.055, 0.06, M.ss(0x9ca3af), tmShvX - 0.115, 0, tmGboxZ, tmGrp).rotation.z = Math.PI / 2;
+
+      mrGrp.add(tmGrp);
 
       /* ⑤ 개방 레버 + ⑥ 수동 핸들 — 제어반 반대편(-Z) 좌측벽, 같은 높이·걸쇠 각각 (PDF 4·6p) */
       const wallInnerX = -(S.SHAFT_W / 2 + S.WALL_T / 2) + S.WALL_T / 2 + 0.01;

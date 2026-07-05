@@ -1,3 +1,6 @@
 # 로컬 참고용 화면 녹화 (앱 실행·배포에 불필요)
 *.mp4
 Screen_Recording_*.mp4
+
+# Claude Code → Cursor 핸드오프용 임시 계획서 (GitHub 미업로드)
+PLAN.md
