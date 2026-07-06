@@ -1017,7 +1017,9 @@
       createCylinder(tmMotR, tmMotR, 0.185, tmCastMat, 0, 0, -0.0375, tmMotorGrp).rotation.x = Math.PI / 2;
       // 전면(+Z, 엔코더측) 흑색 핀 드럼 — 원통 둘레 축방향 냉각핀 (z +0.055 ~ +0.165)
       const tmFaceMat = new THREE.MeshStandardMaterial({ color: 0x141619, metalness: 0.1, roughness: 0.9 });
+      const tmFanCoverMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, metalness: 0.05, roughness: 0.8 });
       const tmVentMat = new THREE.MeshStandardMaterial({ color: 0x33383e, metalness: 0.1, roughness: 0.85 });
+      const tmShaftMat = new THREE.MeshStandardMaterial({ color: 0xcfd5dc, metalness: 0.9, roughness: 0.25 });
       createCylinder(0.140, 0.140, 0.110, tmFaceMat, 0, 0, 0.110, tmMotorGrp).rotation.x = Math.PI / 2;
       for (let i = 0; i < 28; i++) {
         const finA = i * Math.PI / 14;
@@ -1025,15 +1027,54 @@
           Math.cos(finA) * 0.1435, Math.sin(finA) * 0.1435, 0.110, tmMotorGrp);
         fin.rotation.z = finA + Math.PI / 2;
       }
-      // 핀 드럼 전면 — 방사형 통풍 리브 8줄 + 중앙 허브
+      // Fan Cover — PDF ① 정면: 흑색 림 + 이중 링 슬롯 그릴 + 은색 중앙 허브
+      const tmSlotMat = new THREE.MeshStandardMaterial({ color: 0x060606, metalness: 0.0, roughness: 0.95 });
+      const tmHubMat  = new THREE.MeshStandardMaterial({ color: 0xd8dde3, metalness: 1.0, roughness: 0.18 });
+      const tmPcbMat  = new THREE.MeshStandardMaterial({ color: 0x2d5a32, metalness: 0.1, roughness: 0.7 });
+      const tmFanZ    = 0.168;
+      const tmFaceZ   = 0.176;
+      // 외곽 두꺼운 림 + 면판
+      createCylinder(0.152, 0.152, 0.012, tmFanCoverMat, 0, 0, tmFanZ, tmMotorGrp).rotation.x = Math.PI / 2;
+      createCylinder(0.138, 0.138, 0.006, tmFanCoverMat, 0, 0, tmFaceZ, tmMotorGrp).rotation.x = Math.PI / 2;
+      // 림 둘레 8개 육각 볼트
       for (let i = 0; i < 8; i++) {
-        const ventA = i * Math.PI / 4;
-        const vent = createBox(0.095, 0.011, 0.005, tmVentMat,
-          Math.cos(ventA) * 0.078, Math.sin(ventA) * 0.078, 0.1665, tmMotorGrp);
-        vent.rotation.z = ventA;
+        const boltA = i * Math.PI / 4 + Math.PI / 8;
+        createCylinder(0.007, 0.007, 0.010, M.ss(0xb8bcc4),
+          Math.cos(boltA) * 0.132, Math.sin(boltA) * 0.132, tmFaceZ + 0.002, tmMotorGrp).rotation.x = Math.PI / 2;
+        createCylinder(0.004, 0.004, 0.004, M.paint(0x888888),
+          Math.cos(boltA) * 0.132, Math.sin(boltA) * 0.132, tmFaceZ + 0.007, tmMotorGrp).rotation.x = Math.PI / 2;
       }
-      createCylinder(0.032, 0.032, 0.012, new THREE.MeshStandardMaterial({ color: 0x3c4046, metalness: 0.15, roughness: 0.8 }),
-        0, 0, 0.167, tmMotorGrp).rotation.x = Math.PI / 2;
+      // 하단 좌측 커넥터 포트
+      createBox(0.022, 0.012, 0.008, tmFanCoverMat,
+        Math.cos(-Math.PI * 0.72) * 0.142, Math.sin(-Math.PI * 0.72) * 0.142, tmFaceZ + 0.001, tmMotorGrp);
+      // 외곽 링 — 긴 방사형 슬롯 (48개, pill형 착시)
+      for (let i = 0; i < 48; i++) {
+        const slotA = i * Math.PI / 24;
+        const rMid = 0.098;
+        const slot = createBox(0.078, 0.011, 0.005, tmSlotMat,
+          Math.cos(slotA) * rMid, Math.sin(slotA) * rMid, tmFaceZ + 0.001, tmMotorGrp);
+        slot.rotation.z = slotA;
+      }
+      // 내곽 링 — 짧은 방사형 슬롯 (24개, 외곽과 정렬)
+      for (let i = 0; i < 24; i++) {
+        const slotA = i * Math.PI / 12;
+        const slot = createBox(0.034, 0.009, 0.005, tmSlotMat,
+          Math.cos(slotA) * 0.048, Math.sin(slotA) * 0.048, tmFaceZ + 0.001, tmMotorGrp);
+        slot.rotation.z = slotA;
+      }
+      // 중앙 허브 — 다층 은색 플랜지 + 보어 + 키웨이
+      createCylinder(0.048, 0.048, 0.006, tmHubMat, 0, 0, tmFaceZ + 0.004, tmMotorGrp).rotation.x = Math.PI / 2;
+      createCylinder(0.030, 0.030, 0.010, tmHubMat, 0, 0, tmFaceZ + 0.009, tmMotorGrp).rotation.x = Math.PI / 2;
+      createCylinder(0.014, 0.014, 0.012, M.paint(0x0a0c0e), 0, 0, tmFaceZ + 0.007, tmMotorGrp).rotation.x = Math.PI / 2;
+      createBox(0.004, 0.008, 0.008, M.paint(0x1a1a1a), 0, 0.012, tmFaceZ + 0.007, tmMotorGrp);
+      [0, Math.PI * 2 / 3, Math.PI * 4 / 3].forEach(scA => {
+        createCylinder(0.0025, 0.0025, 0.004, M.ss(0x555555),
+          Math.cos(scA) * 0.024, Math.sin(scA) * 0.024, tmFaceZ + 0.014, tmMotorGrp).rotation.x = Math.PI / 2;
+      });
+      // 허브 뒤 엔코더 PCB 힌트
+      createCylinder(0.026, 0.026, 0.004, tmPcbMat, 0, 0, tmFaceZ - 0.001, tmMotorGrp).rotation.x = Math.PI / 2;
+      // Center Shaft — 엔코더 결합용 얇은 은색 금속축
+      createCylinder(0.006, 0.006, 0.088, tmShaftMat, 0, 0, tmFaceZ + 0.052, tmMotorGrp).rotation.x = Math.PI / 2;
       // 후면(−Z, 브레이크측) 나팔형 확관 + 대형 사각 플랜지 판 + 모서리 볼트 4개
       createCylinder(tmMotR, 0.165, 0.024, tmCastMat, 0, 0, -0.138, tmMotorGrp).rotation.x = Math.PI / 2;
       createBox(0.35, 0.35, 0.014, tmCastMat, 0, 0, -0.157, tmMotorGrp);
@@ -1387,33 +1428,33 @@
       const govGrp = new THREE.Group();
       govGrp.position.set(govX, govY + 0.05, govZ);
       
-      // 하판 (Bottom Plate)
-      createBox(0.15, 0.02, 0.4, govStandMat, 0, 0.01, 0, govGrp);
-      
-      // 기둥 (Pillars) - 기존 0.3에서 0.15로 높이 절반 감소
+      // 하판 (Bottom Plate) — PDF 6p ②: 긴 네이비 판, 양단 볼트 홀
+      createBox(0.16, 0.02, 0.50, govStandMat, 0, 0.01, 0, govGrp);
+
+      // 기둥 (Pillars) — 굵은 파이프 스페이서 2개
       const pHeight = 0.15;
-      const pillar1 = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, pHeight, 16), govStandMat);
-      pillar1.position.set(0, pHeight/2 + 0.02, 0.12);
+      const pillar1 = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, pHeight, 16), govStandMat);
+      pillar1.position.set(0, pHeight/2 + 0.02, 0.10);
       govGrp.add(pillar1);
-      
-      const pillar2 = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, pHeight, 16), govStandMat);
-      pillar2.position.set(0, pHeight/2 + 0.02, -0.12);
+
+      const pillar2 = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, pHeight, 16), govStandMat);
+      pillar2.position.set(0, pHeight/2 + 0.02, -0.10);
       govGrp.add(pillar2);
-      
-      // 상판 (Top Plate)
-      createBox(0.15, 0.02, 0.4, govStandMat, 0, pHeight + 0.03, 0, govGrp);
-      
-      // 디테일: 상판 중앙 관통 구멍 (기둥과 연결되는 느낌) 및 모서리 볼트 구멍
+
+      // 상판 (Top Plate) — 하판보다 짧음
+      createBox(0.16, 0.02, 0.36, govStandMat, 0, pHeight + 0.03, 0, govGrp);
+
+      // 디테일: 상판 로프 관통 홀 2개 (조속기 로프 z ±0.15 정렬) + 하판 양단 볼트 홀
       const holeMat = M.paint(0x050505);
-      createCylinder(0.025, 0.025, 0.022, holeMat, 0, pHeight + 0.03, 0.12, govGrp);
-      createCylinder(0.025, 0.025, 0.022, holeMat, 0, pHeight + 0.03, -0.12, govGrp);
-      
-      const boltHoleZ = 0.17;
+      createCylinder(0.026, 0.026, 0.024, holeMat, 0, pHeight + 0.03, 0.15, govGrp);
+      createCylinder(0.026, 0.026, 0.024, holeMat, 0, pHeight + 0.03, -0.15, govGrp);
+
+      const boltHoleZ = 0.22;
       const boltHoleX = 0.05;
-      createCylinder(0.005, 0.005, 0.022, holeMat, boltHoleX, pHeight + 0.03, boltHoleZ, govGrp);
-      createCylinder(0.005, 0.005, 0.022, holeMat, -boltHoleX, pHeight + 0.03, boltHoleZ, govGrp);
-      createCylinder(0.005, 0.005, 0.022, holeMat, boltHoleX, pHeight + 0.03, -boltHoleZ, govGrp);
-      createCylinder(0.005, 0.005, 0.022, holeMat, -boltHoleX, pHeight + 0.03, -boltHoleZ, govGrp);
+      createCylinder(0.005, 0.005, 0.022, holeMat, boltHoleX, 0.01, boltHoleZ, govGrp);
+      createCylinder(0.005, 0.005, 0.022, holeMat, -boltHoleX, 0.01, boltHoleZ, govGrp);
+      createCylinder(0.005, 0.005, 0.022, holeMat, boltHoleX, 0.01, -boltHoleZ, govGrp);
+      createCylinder(0.005, 0.005, 0.022, holeMat, -boltHoleX, 0.01, -boltHoleZ, govGrp);
       
       mrGrp.add(govGrp);
 
@@ -1426,142 +1467,141 @@
       govBodyGrp.position.set(0, govYBase, 0);
       govBodyGrp.rotation.y = Math.PI / 2; // 소장님 지시: 180도 추가 회전
 
-      const sheetMat = M.ss(0x8898a8);   // 짙은 은회색 철판 (U자형 브라켓)
-      const brassMat = M.paint(0xc8930a); // 황동색 - 휠, 레버 암
-      const goldMat  = M.paint(0xd4af37); // 금색 - 축, 볼트
-      const darkMat2 = M.paint(0x111111); // 검은색 - 스프링
+      // 실물 사진 기준 재설계 — 디스크 슈형 조속기 (도르래 홈·로프 마찰로 캐치 슈 동작)
+      // 배색: 회색 주철 베이스 + 청색 강판 프레임 + 금색 스포크 휠 + 암회색 진자
+      const govBaseMat = M.paint(0x686e76);  // 회색 주철 베이스
+      const govFrmMat  = M.paint(0x1c46a8);  // 청색 도장 강판 프레임
+      const fwMat      = M.paint(0x24282e);  // 진자(플라이웨이트) - 암회색 주물
+      const govSwMat   = M.paint(0x3a3f46);  // 과속 스위치 박스
+      const shoeMat    = M.ss(0x9aa1ab);     // 캐치 슈 - 강재
+      const silverMat  = M.ss(0xb6bcc4);
+      const goldBolt   = M.paint(0xd8b60a);
+      const darkMat2   = M.paint(0x111111);  // 검은색 - 스프링/배선
 
-      // ─── 7-1. U자형 브라켓 (휠 윗부분 시원하게 노출) ───
-      const bW = 0.38;    // 브라켓 전체 X 폭
-      const bD = 0.13;    // 브라켓 앞뒤 깊이 (Z방향)
-      const bHbot = 0.17; // 앞뒤 측판 높이 (휠 중심축 바로 아래까지 덮도록 상향)
-      const bHtop = 0.22; // 스위치쪽 좌측 측판은 더 높음
-      
-      // 하판 (바닥)
-      createBox(bW, 0.01, bD, sheetMat, 0, 0.005, 0, govBodyGrp);
-      // 앞쪽 측면판 (+ Z, 우리를 향하는 면) - 낮게
-      createBox(bW, bHbot, 0.01, sheetMat, 0, bHbot/2, bD/2, govBodyGrp);
-      // 뒤쪽 측면판 (- Z) - 낮게
-      createBox(bW, bHbot, 0.01, sheetMat, 0, bHbot/2, -bD/2, govBodyGrp);
-      // 좌측 끝판 (-X) - 스위치박스가 붙는 면, 더 높음
-      createBox(0.01, bHtop, bD, sheetMat, -bW/2, bHtop/2, 0, govBodyGrp);
-      // 우측 끝판 (+X) - 스프링 쪽, 낮게
-      createBox(0.01, bHbot, bD, sheetMat, bW/2, bHbot/2, 0, govBodyGrp);
-
-      // ─── 7-2. 메인 휠 (스포크 타입) ───
-      // 휠 중심 위치: 브라켓 중앙 X=0, 브라켓 상단 위로 적당히 노출
-      const gR = 0.14;  // 외곽 테두리 반지름
+      // 휠 기준 치수 (조속기 로프 정렬 유지: 홈 반경 ≈ 0.15)
+      const gR = 0.14;  // 림 반지름
       const gWX = 0;    // X 중심
-      const gWY = 0.18; // 브라켓 측판 높이(0.10)보다 높아서 절반 이상 노출됨
+      const gWY = 0.20; // 휠 중심 높이
 
-      // 외곽 테두리 (Rim) - TorusGeometry
+      // ─── 7-1. 주철 베이스 + 청색 사이드 프레임 ───
+      // 2단 주철 베이스 + 볼트 홀 4개
+      createBox(0.36, 0.030, 0.16, govBaseMat, 0, 0.015, 0, govBodyGrp);
+      createBox(0.28, 0.022, 0.14, govBaseMat, 0, 0.041, 0, govBodyGrp);
+      [[-0.155, -0.06], [-0.155, 0.06], [0.155, -0.06], [0.155, 0.06]].forEach(([hx, hz]) => {
+        createCylinder(0.007, 0.007, 0.032, holeMat, hx, 0.016, hz, govBodyGrp);
+      });
+      // 사이드 프레임 2장 (휠 면과 평행, 축 높이 직상까지) + 양단 스페이서
+      [-0.052, 0.052].forEach(pz => {
+        createBox(0.34, 0.175, 0.012, govFrmMat, 0, 0.1395, pz, govBodyGrp);
+      });
+      [-0.13, 0.13].forEach(sx => {
+        createBox(0.024, 0.068, 0.092, govFrmMat, sx, 0.086, 0, govBodyGrp);
+      });
+      // 축 보스 (양측 판 외면) + 전면 보스 볼트 4개
+      [-0.060, 0.060].forEach(bz => {
+        const boss = createCylinder(0.032, 0.032, 0.016, govFrmMat, gWX, gWY, bz, govBodyGrp);
+        boss.rotation.x = Math.PI / 2;
+      });
+      for (let i = 0; i < 4; i++) {
+        const ba = i * Math.PI / 2 + Math.PI / 4;
+        const bossBolt = createCylinder(0.004, 0.004, 0.008, silverMat,
+          gWX + Math.cos(ba) * 0.024, gWY + Math.sin(ba) * 0.024, 0.068, govBodyGrp);
+        bossBolt.rotation.x = Math.PI / 2;
+      }
+
+      // ─── 7-2. 금색 스포크 휠 + 진자 2개 (원심 진자 — 휠과 함께 회전) ───
       const govWheelSpinGrp = new THREE.Group();
       govWheelSpinGrp.position.set(gWX, gWY, 0);
       govBodyGrp.add(govWheelSpinGrp);
       governorWheelGrp = govWheelSpinGrp;
-      const rimMat = brassMat;
-      const rimGeo = new THREE.TorusGeometry(gR, 0.012, 10, 40);
-      const rim = new THREE.Mesh(rimGeo, rimMat);
+
+      // 림 + 외곽 로프 홈
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(gR, 0.018, 12, 44), M.gold());
       govWheelSpinGrp.add(rim);
-
-      // 중심 허브 (Hub)
-      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.05, 16), goldMat);
-      hub.rotation.x = Math.PI / 2;
-      govWheelSpinGrp.add(hub);
-
-      // 6개 살대 (Spoke) - 중심 → 테두리 방향으로 뻗는 얇은 막대
+      const groove = new THREE.Mesh(new THREE.TorusGeometry(gR + 0.009, 0.0045, 8, 44), M.paint(0x222222));
+      govWheelSpinGrp.add(groove);
+      // 스포크 6개 + 허브 + 육각 축 너트
       for (let i = 0; i < 6; i++) {
         const ang = i * Math.PI / 3;
-        const sx = gWX + Math.cos(ang) * gR / 2;
-        const sy = gWY + Math.sin(ang) * gR / 2;
-        const spoke = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.007, 0.007, gR, 8),
-          brassMat
-        );
-        // 살대를 바퀴 평면(XY plane) 위에 방사형으로 배치
-        spoke.position.set(sx - gWX, sy - gWY, 0);
+        const spoke = new THREE.Mesh(new THREE.CylinderGeometry(0.0085, 0.0085, gR - 0.024, 8), M.gold());
+        spoke.position.set(Math.cos(ang) * gR / 2, Math.sin(ang) * gR / 2, 0);
         spoke.rotation.z = ang + Math.PI / 2;
         govWheelSpinGrp.add(spoke);
       }
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.030, 0.030, 0.046, 16), M.gold());
+      hub.rotation.x = Math.PI / 2;
+      govWheelSpinGrp.add(hub);
+      const hubNut = new THREE.Mesh(new THREE.CylinderGeometry(0.020, 0.020, 0.056, 6), silverMat);
+      hubNut.rotation.x = Math.PI / 2;
+      govWheelSpinGrp.add(hubNut);
 
-      // 로프 홈 (V홈 - 테두리 위에 검은색 고무홈)
-      const grooveGeo = new THREE.TorusGeometry(gR, 0.006, 8, 40);
-      const groove = new THREE.Mesh(grooveGeo, M.paint(0x222222));
-      govWheelSpinGrp.add(groove);
-
-      // 중심 회전축 (Z축 방향으로 브라켓 앞뒤 관통)
-      const axle = createCylinder(0.016, 0.016, bD + 0.04, goldMat, gWX, gWY, 0, govBodyGrp);
-      axle.rotation.x = Math.PI / 2;
-
-      // ─── 7-3. 레버 암 & 텐션 스프링 메커니즘 ───
-      // 피벗 포인트: 휠 중심 근처 (X = -0.05, 약간 위)
-      const pivX = -0.02, pivY = gWY + 0.02;
-      // 레버 암 전체 (좌측 -X → 우측 +X 으로 길게, 살짝 대각선)
-      const leverLen = 0.34;
-      const leverMat = M.ss(0xb8a060); // 황동빛 광택 레버
-      const leverArm = new THREE.Mesh(
-        new THREE.BoxGeometry(leverLen, 0.018, 0.022), leverMat
-      );
-      leverArm.position.set(pivX + leverLen/2 * 0.2, pivY, 0); // 중심에서 살짝 우측으로 치우침
-      leverArm.rotation.z = -Math.PI / 22; // 우측이 살짝 내려오는 대각선
-      govBodyGrp.add(leverArm);
-
-      // 피벗 핀 (레버 지지 지점)
-      const govPivPin = createCylinder(0.018, 0.018, bD+0.02, M.ss(0xaaaaaa), pivX, pivY, 0, govBodyGrp);
-      govPivPin.rotation.x = Math.PI / 2;
-
-      // 우측 텐션 스프링 어셈블리 (레버 우측 끝에 대각선으로 매달림)
-      const spX = bW/2 - 0.02;
-      const spTopY = pivY - 0.01;
-      const spBotY = spTopY - 0.12;
-      // 스프링 마운트 상단 핀
-      createCylinder(0.012, 0.012, bD+0.02, goldMat, spX, spTopY, 0, govBodyGrp);
-      // 스프링 본체 (Z방향 회전 - 수직)
-      const springGeo = new THREE.CylinderGeometry(0.014, 0.014, 0.10, 12);
-      const springMesh = new THREE.Mesh(springGeo, darkMat2);
-      springMesh.position.set(spX, (spTopY + spBotY)/2, 0);
-      govBodyGrp.add(springMesh);
-      // 스프링 코일 느낌 (TorusGeometry 3개 겹치기)
-      for (let si = 0; si < 4; si++) {
-        const coil = new THREE.Mesh(
-          new THREE.TorusGeometry(0.014, 0.003, 6, 14),
-          darkMat2
-        );
-        coil.rotation.x = Math.PI / 2;
-        coil.position.set(spX, spTopY - 0.018 - si*0.022, 0);
-        govBodyGrp.add(coil);
+      // 진자 2개 — 림 안쪽 호형 주물 추 (피벗 핀 기준 원심력으로 확개)
+      const fwArc = 1.5, fwR = 0.100, fwA0 = -1.5;
+      [fwA0, fwA0 + Math.PI].forEach(fa => {
+        const fw = new THREE.Mesh(new THREE.TorusGeometry(fwR, 0.011, 8, 18, fwArc), fwMat);
+        fw.position.z = 0.024;
+        fw.rotation.z = fa;
+        govWheelSpinGrp.add(fw);
+        const fwPin = createCylinder(0.006, 0.006, 0.034, silverMat,
+          Math.cos(fa) * fwR, Math.sin(fa) * fwR, 0.020, govWheelSpinGrp);
+        fwPin.rotation.x = Math.PI / 2;
+      });
+      // 진자 조정용 인장 스프링 — 양측 진자 자유단(±X)을 잇는 코일 + 연결 링크
+      const fwSpring = createCylinder(0.0035, 0.0035, 0.13, darkMat2, 0, 0, 0.033, govWheelSpinGrp);
+      fwSpring.rotation.z = Math.PI / 2;
+      for (let si = -2; si <= 2; si++) {
+        const fwCoil = new THREE.Mesh(new THREE.TorusGeometry(0.008, 0.003, 6, 12), darkMat2);
+        fwCoil.rotation.y = Math.PI / 2;
+        fwCoil.position.set(si * 0.013, 0, 0.033);
+        govWheelSpinGrp.add(fwCoil);
       }
-      // 스프링 마운트 하단 브라켓
-      createBox(0.04, 0.01, bD, M.ss(0x888888), spX, spBotY, 0, govBodyGrp);
-      createCylinder(0.012, 0.012, bD+0.02, goldMat, spX, spBotY, 0, govBodyGrp);
+      [-0.082, 0.082].forEach(lx => createBox(0.030, 0.006, 0.006, silverMat, lx, 0, 0.033, govWheelSpinGrp));
 
-      // ─── 7-4. 안전 스위치 박스 (좌측 외벽에 부착) ───
-      const swGrp = new THREE.Group();
-      // 좌측(-X) 브라켓 외벽 바깥에 부착
-      swGrp.position.set(-bW/2 - 0.025, bHtop/2 + 0.01, 0);
-      govBodyGrp.add(swGrp);
+      // 중심 회전축 (양측 보스 관통) + 전면 고정 너트
+      const axle = createCylinder(0.013, 0.013, 0.14, silverMat, gWX, gWY, 0, govBodyGrp);
+      axle.rotation.x = Math.PI / 2;
+      const axleNut = createCylinder(0.011, 0.011, 0.014, goldBolt, gWX, gWY, 0.072, govBodyGrp);
+      axleNut.rotation.x = Math.PI / 2;
 
-      // 스위치 박스 본체 (짙은 갈색/검은색)
-      const swBoxMat = M.paint(0x2a1a0a); // 짙은 갈색
-      createBox(0.05, 0.09, bD * 0.8, swBoxMat, 0, 0, 0, swGrp);
-      // 박스 커버 테두리 (약간 밝은 갈색)
-      createBox(0.052, 0.092, bD * 0.82, M.paint(0x3a2a1a), 0.01, 0, 0, swGrp);
+      // ─── 7-3. 과속 스위치 (좌측 프레임 에지 중단 부착 — 실물 측면 사진 기준) ───
+      createBox(0.040, 0.075, 0.045, govSwMat, -0.185, 0.25, 0, govBodyGrp);
+      // 롤러 레버 (림 외곽 트립 궤도를 향해 상향 경사)
+      const swArm = createBox(0.040, 0.008, 0.008, silverMat, -0.150, 0.285, 0.010, govBodyGrp);
+      swArm.rotation.z = 0.5;
+      const swRoller = createCylinder(0.008, 0.008, 0.012, darkMat2, -0.133, 0.297, 0.010, govBodyGrp);
+      swRoller.rotation.x = Math.PI / 2;
+      // 배선 (스위치 하부 → 받침대 하향)
+      createCylinder(0.0045, 0.0045, 0.22, darkMat2, -0.190, 0.14, 0, govBodyGrp);
 
-      // 빨간색 리셋 레버 - 쐐기(쐐기형 ConeGeometry) 형태
-      // 밑면(두꺼운 쪽)이 박스에 붙고, 뾰족한 끝이 휠(+X) 방향을 향함
-      const resetLev = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.0, 0.018, 0.055, 10), // 끝이 뾰족한 원뿔
-        M.paint(0xdd0000)
-      );
-      // 원뿔 기본 축은 Y → X축 방향(휠 쪽, +X)을 향하도록 Z축 기준 -90도 회전
-      resetLev.rotation.z = -Math.PI / 2;
-      // 박스 우측면(+X, 브라켓 내부 방향)에 밑면 붙이고 뾰족한 끝이 휠 쪽으로 나옴
-      resetLev.position.set(0.04, 0.04, 0);
-      swGrp.add(resetLev);
+      // ─── 7-4. 캐치 슈 + 가압 스프링 + 트립 레버 (우측 상단 — 실물 측면 사진 기준) ───
+      // 스프링 브라켓: 후판 우상단 연장 이어 + 수평 받침 암 (휠 상부 통과)
+      createBox(0.050, 0.160, 0.012, govFrmMat, 0.165, 0.30, -0.052, govBodyGrp);
+      createBox(0.050, 0.012, 0.100, govFrmMat, 0.165, 0.385, -0.008, govBodyGrp);
+      // 캐치 슈 (강재 블록, 로프 바깥측) + 슈 홀더
+      createBox(0.022, 0.060, 0.036, shoeMat, 0.176, gWY, 0, govBodyGrp);
+      createBox(0.012, 0.130, 0.018, silverMat, 0.176, 0.275, 0, govBodyGrp);
+      // 가압 코일 스프링 (받침 암 위) + 수직 로드 + 상단 조정 너트 2개
+      createCylinder(0.006, 0.006, 0.160, silverMat, 0.176, 0.41, 0, govBodyGrp);
+      for (let si = 0; si < 5; si++) {
+        const shoeCoil = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.0045, 6, 16), darkMat2);
+        shoeCoil.rotation.x = Math.PI / 2;
+        shoeCoil.position.set(0.176, 0.398 + si * 0.014, 0);
+        govBodyGrp.add(shoeCoil);
+      }
+      [0.468, 0.480].forEach(ny => {
+        createCylinder(0.010, 0.010, 0.010, goldBolt, 0.176, ny, 0, govBodyGrp);
+      });
+      // 은색 트립 레버 — 좌하 피벗에서 휠 면을 가로질러 우상단 슈 로드까지 (프레임 전면 외측)
+      const tripLever = createBox(0.30, 0.020, 0.010, silverMat, 0.02, 0.255, 0.065, govBodyGrp);
+      tripLever.rotation.z = 0.5;
+      const tripPiv = createCylinder(0.009, 0.009, 0.030, silverMat, -0.112, 0.183, 0.045, govBodyGrp);
+      tripPiv.rotation.x = Math.PI / 2;
+      const tripLink = createCylinder(0.006, 0.006, 0.070, silverMat, 0.155, 0.325, 0.030, govBodyGrp);
+      tripLink.rotation.x = Math.PI / 2;
 
-      // 배선 (박스 하단에서 내려감)
-      createCylinder(0.004, 0.004, 0.07, M.paint(0x111111),  0.01, -0.08, 0, swGrp);
-      createCylinder(0.004, 0.004, 0.07, M.paint(0x0000cc), -0.01, -0.08, 0, swGrp);
+      // ─── 7-5. 명판 + 스티커 (전면 판 외면) ───
+      createBox(0.056, 0.038, 0.004, M.ss(0xd8dde2), 0.075, 0.135, 0.060, govBodyGrp);
+      createBox(0.024, 0.030, 0.003, M.paint(0xf2c010), -0.055, 0.135, 0.060, govBodyGrp);
 
       govGrp.add(govBodyGrp);
 
@@ -1613,17 +1653,25 @@
       const tensBaseZ = 0.22;                    // 가이드 레일 파묻힘 방지 — Z축으로 전방 이격
       const tensionerY = Y0 + 0.5;               // 피트 바닥 +500mm
 
-      // ── 1. 가이드 레일 고정 브라켓 (베이스/연장암 분리)
+      // ── 1. 가이드 레일 고정 브라켓 + 피벗 암 (PDF 6p ③: 상하 요동 가능한 플랫 암)
       const bracketMat = M.ss(0x4b5563);
+      const armMat = M.paint(0x8a5a28);   // 적동색 플랫 암
 
       // 수직 베이스판 (가이드 레일 웹/플랜지 측면에 체결되는 지지대)
       createBox(0.04, 0.45, 0.08, bracketMat,
         S.CAR_BG / 2 - 0.02, tensionerY + 0.15, 0.04, pitGrp);
 
-      // 수평 연장 암 (수직 베이스에서 풀리 축 쪽으로 Z축 방향 연장)
-      // Z 중심 (레일 0.04 + 풀리 0.22) / 2 = 0.13, 길이 약 0.22
-      createBox(0.06, 0.06, 0.22, bracketMat,
-        tensGovX, tensionerY + 0.30, 0.13, pitGrp);
+      // 레일측 피벗 클레비스 + 핀 (로프 늘어짐 시 암이 회전하며 시브가 하강)
+      createBox(0.035, 0.050, 0.050, bracketMat,
+        tensGovX + 0.030, tensionerY + 0.40, 0.055, pitGrp);
+      const tensPivPin = createCylinder(0.008, 0.008, 0.055, M.ss(0xb6bcc4),
+        tensGovX + 0.030, tensionerY + 0.40, 0.055, pitGrp);
+      tensPivPin.rotation.z = Math.PI / 2;
+
+      // 적동색 플랫 암 — 피벗(레일측 상단)에서 시브 허브까지 하향 경사
+      const tensArm = createBox(0.012, 0.045, 0.20, armMat,
+        tensGovX + 0.030, tensionerY + 0.35, 0.1375, pitGrp);
+      tensArm.rotation.x = -0.545;
 
       // ── 2. 인장추 하부 풀리 (Tension Sheave) ──
       // 조속기와 동일하게 휠 축을 X축으로 맞춤
@@ -1632,123 +1680,46 @@
       pitGrp.add(tensionWheelSpinGrp);
       tensionSheaveGrp = tensionWheelSpinGrp;
 
-      const tensionSheave = createCylinder(
-        0.15, 0.15, 0.10,
-        M.gold(),
-        0, 0, 0, tensionWheelSpinGrp
-      );
-      tensionSheave.rotation.z = Math.PI / 2;   // 실린더 기본 Y축 -> X축
+      // 금색 솔리드 디스크 시브 (PDF 6p ③) — 림 부근 장공 슬롯이 회전 확인 표식 겸용
+      const tensDisc = createCylinder(0.140, 0.140, 0.035, M.gold(), 0, 0, 0, tensionWheelSpinGrp);
+      tensDisc.rotation.z = Math.PI / 2;
 
-      // 허브
-      const tensHub = createCylinder(
-        0.03, 0.03, 0.14, M.ss(0xcccccc),
-        0, 0, 0, tensionWheelSpinGrp
-      );
-      tensHub.rotation.z = Math.PI / 2;
-
-      // V-홈 (TorusGeometry 기본 축=Z축 → X축 정렬로 변경)
-      const tensGroove = new THREE.Mesh(
-        new THREE.TorusGeometry(0.15, 0.011, 8, 32),
-        M.paint(0x222222)
-      );
-      tensGroove.position.set(0, 0, 0);
+      // 둥근 단면 림 + 외곽 로프 홈
+      const tensRim = new THREE.Mesh(new THREE.TorusGeometry(0.140, 0.012, 10, 40), M.gold());
+      tensRim.rotation.y = Math.PI / 2;
+      tensionWheelSpinGrp.add(tensRim);
+      const tensGroove = new THREE.Mesh(new THREE.TorusGeometry(0.150, 0.005, 8, 40), M.paint(0x222222));
       tensGroove.rotation.y = Math.PI / 2;
       tensionWheelSpinGrp.add(tensGroove);
 
-      // 로프 가드 느낌 스포크 (YZ 평면, 짧게 — 레일 쪽 돌출 최소화)
-      const spRad = 0.038;
-      const spLen = 0.13;
-      const spTh = 0.016;
-      for (let sp = 0; sp < 6; sp++) {
-        const ang = sp * Math.PI / 3;
-        const spk = createBox(spLen, spTh, spTh, M.paint(0xd4af37),
-          0,
-          Math.sin(ang) * spRad,
-          Math.cos(ang) * spRad,
-          tensionWheelSpinGrp);
-        spk.rotation.y = Math.PI / 2;
-        spk.rotation.x = ang;
-      }
-      // 인장시브 회전 확인용 표식: 회전체 면에 인쇄된 초승달형 양방향 화살표 1개
-      const tensSpinSymbol = new THREE.Group();
-      const crescentOuter = 0.108;
-      const crescentInner = 0.078;
-      const crescentStart = -2.35;
-      const crescentEnd = 0.85;
-      const crescentShape = new THREE.Shape();
-      for (let i = 0; i <= 28; i++) {
-        const a = crescentStart + (crescentEnd - crescentStart) * (i / 28);
-        const x = Math.cos(a) * crescentOuter;
-        const y = Math.sin(a) * crescentOuter;
-        if (i === 0) crescentShape.moveTo(x, y);
-        else crescentShape.lineTo(x, y);
-      }
-      for (let i = 28; i >= 0; i--) {
-        const a = crescentStart + (crescentEnd - crescentStart) * (i / 28);
-        crescentShape.lineTo(Math.cos(a) * crescentInner, Math.sin(a) * crescentInner);
-      }
-      const symbolMat = M.emit(0xffffff, 1.5);
-      tensSpinSymbol.add(new THREE.Mesh(new THREE.ShapeGeometry(crescentShape), symbolMat));
+      // 장공 슬롯 (디스크 관통 표현)
+      createBox(0.045, 0.028, 0.065, M.paint(0x1a1508), 0, 0.098, 0, tensionWheelSpinGrp);
 
-      [crescentStart, crescentEnd].forEach((a, idx) => {
-        const dir = idx === 0 ? -1 : 1;
-        const r = (crescentOuter + crescentInner) / 2;
-        const head = new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape([
-          new THREE.Vector2(0.030 * dir, 0),
-          new THREE.Vector2(-0.018 * dir, 0.022),
-          new THREE.Vector2(-0.012 * dir, -0.026)
-        ])), symbolMat);
-        head.position.set(Math.cos(a) * r, Math.sin(a) * r, 0);
-        head.rotation.z = a + Math.PI / 2;
-        tensSpinSymbol.add(head);
-      });
-      tensSpinSymbol.position.set(0.056, 0, 0);
-      tensSpinSymbol.rotation.y = Math.PI / 2;
-      tensionWheelSpinGrp.add(tensSpinSymbol);
+      // 허브 + 감청색 축 너트
+      const tensHub = createCylinder(0.026, 0.026, 0.055, M.gold(), 0, 0, 0, tensionWheelSpinGrp);
+      tensHub.rotation.z = Math.PI / 2;
+      const tensNut = createCylinder(0.011, 0.011, 0.062, M.paint(0x223377), 0, 0, 0, tensionWheelSpinGrp);
+      tensNut.rotation.z = Math.PI / 2;
 
-      const tensGuardMat = new THREE.MeshStandardMaterial({
-        color: 0xf1c40f,
-        roughness: 0.5,
-        metalness: 0.25,
-        side: THREE.DoubleSide
-      });
-      const tensGuard = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.18, 0.18, 0.16, 32, 1, true, Math.PI, Math.PI),
-        tensGuardMat
-      );
-      tensGuard.rotation.z = Math.PI / 2;
-      tensGuard.position.set(tensGovX, tensionerY + 0.30, tensBaseZ);
-      pitGrp.add(tensGuard);
-      const guardFaceShape = new THREE.Shape();
-      guardFaceShape.moveTo(-0.18, 0);
-      for (let i = 0; i <= 24; i++) {
-        const a = Math.PI + Math.PI * (i / 24);
-        guardFaceShape.lineTo(Math.cos(a) * 0.18, Math.sin(a) * 0.18);
-      }
-      guardFaceShape.lineTo(0.18, 0);
-      [-0.085, 0.085].forEach(dx => {
-        const face = new THREE.Mesh(new THREE.ShapeGeometry(guardFaceShape), tensGuardMat);
-        face.position.set(tensGovX + dx, tensionerY + 0.30, tensBaseZ);
-        face.rotation.y = Math.PI / 2;
-        pitGrp.add(face);
-      });
-      createBox(0.18, 0.018, 0.035, M.paint(0x333333),
-        tensGovX, tensionerY + 0.12, tensBaseZ - 0.09, pitGrp);
-      createBox(0.18, 0.018, 0.035, M.paint(0x333333),
-        tensGovX, tensionerY + 0.12, tensBaseZ + 0.09, pitGrp);
+      // 고정축 (허브 뒤 → 전면 피벗 암 연결)
+      const tensAxle = createCylinder(0.011, 0.011, 0.075, M.ss(0xb6bcc4),
+        tensGovX + 0.020, tensionerY + 0.30, tensBaseZ, pitGrp);
+      tensAxle.rotation.z = Math.PI / 2;
 
-      // ── 3. 인장추 본체 ──
-      // 풀리 축 연결 금구
-      createBox(0.06, 0.12, 0.12, M.ss(0x7a8290),
-        tensGovX, tensionerY + 0.15, tensBaseZ, pitGrp);
-      // 주물 추 (2단)
-      createBox(0.28, 0.22, 0.14, M.paint(0x777777),
-        tensGovX, tensionerY - 0.01, tensBaseZ, pitGrp);
-      createBox(0.26, 0.22, 0.12, M.paint(0x666666),
-        tensGovX, tensionerY - 0.23, tensBaseZ, pitGrp);
-      // 하단 마감판
-      createBox(0.30, 0.025, 0.16, M.ss(0x555555),
-        tensGovX, tensionerY - 0.35, tensBaseZ, pitGrp);
+      // ── 3. 인장추 본체 (시브 요크 → 적색 클레비스 → 슬래브형 주철 추) ──
+      // 축 요크 스트랩 (시브 양옆에서 하부로)
+      [-0.028, 0.028].forEach(dx => {
+        createBox(0.012, 0.17, 0.05, M.ss(0x7a8290),
+          tensGovX + dx, tensionerY + 0.225, tensBaseZ, pitGrp);
+      });
+      // 적색 클레비스 블록
+      createBox(0.045, 0.075, 0.045, M.paint(0x8a1f1f),
+        tensGovX, tensionerY + 0.135, tensBaseZ, pitGrp);
+      // 슬래브형 인장추 (시브 면과 평행한 판형 주철 추) + 상단 마감판
+      createBox(0.10, 0.34, 0.30, M.paint(0x6e737a),
+        tensGovX, tensionerY - 0.06, tensBaseZ, pitGrp);
+      createBox(0.11, 0.015, 0.31, M.ss(0x555555),
+        tensGovX, tensionerY + 0.115, tensBaseZ, pitGrp);
 
       // ── 4. 조속기 로프 루프(기계실 조속기 ↔ 피트 인장시브) ──
       const gRopeMat = M.rope();
