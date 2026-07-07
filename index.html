@@ -586,6 +586,11 @@
     // 균형추 중앙 위치 (카 후면과 승강로 뒷벽 사이)
     const CWT_CENTER_Z = CAR_BACK_Z - 0.20;
 
+    // 카문 ↔ 승강장문 간격 (도면 T-223177.A002: 30mm)
+    const DOOR_GAP = 0.03;
+    // 승강장문 안쪽면 Z = 카문 바깥면(S.CAR_D/2 + 0.04) + 간격
+    const FRONT_INNER_Z = S.CAR_D / 2 + 0.04 + DOOR_GAP;
+
     // 우측 카 가이드 레일 중심 X — 조속기/피트 인장추 (레일면에서 벽 쪽으로 동일 이격, 로프 수직 유지)
     const CAR_RAIL_REF_X = S.CAR_BG / 2;
     const GOV_TENS_OFFSET_X = 0.115; // 레일 중심 ~ 외측 인장축 (조속·인장추 동일 축)

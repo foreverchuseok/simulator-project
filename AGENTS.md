@@ -6,49 +6,41 @@
 - 라이브러리: Three.js r128, OrbitControls, GSAP 3.12.2
 - 실행: Live Server → `index.html`
 - GitHub: `foreverchuseok/simulator-project` (Public)
+- 기하 헬퍼: `createBox()`, `createCylinder()` — `index.html`에 정의
 
 ---
 
-## 워크플로우 (공통)
+## 워크플로우
 
 ### 역할 분담
 
 | 도구 | 역할 |
 |------|------|
-| **Cursor Composer 2.5 Fast** | **메인 실행자.** 스크린샷·설명 기반 세부 조정, 좌표·방향·재질 수정, 반복 작업 전부 이걸로 처리. |
-| **Claude.ai** | 설계 자문, 스크린샷·PDF 분석, Cursor에 붙여넣을 프롬프트 작성. raw 링크로 코드 확인. |
-| **Claude Code (터미널)** | **큰 구조 작업 전용.** 새 부품 전체 신설, 여러 파일 동시 로직(FSM, 충돌감지 등)일 때만 호출. 일반 세부 조정에는 쓰지 않는다. |
-| **Gemini** | 유튜브 영상 분석 후 부품 구조 설명 생성. |
+| **Claude Code — Fable 5 (Plan)** | 계획 담당. 스크린샷·PDF·파일 분석 후 `PLAN.md` 작성. 코드는 짜지 않는다. |
+| **Claude Code — Sonnet 4.6 (실행)** | 실행 담당. `PLAN.md`대로 실제 코드 작성. |
+| **Cursor** | 세부 위치 이동만. `position.set`·`rotation` 좌표값 옮기는 정도의 아주 쉬운 조정만. |
 
-### 일반 작업 흐름 (기본, 대부분의 경우)
-
-```
-스크린샷 (Win+Shift+S) → Claude.ai에 업로드 + 설명
-      ↓
-Claude.ai — 분석 + Cursor용 프롬프트 작성 (채팅으로 바로 답)
-      ↓
-Cursor Composer — 프롬프트 받아 코드 수정
-      ↓
-Live Server — 결과 확인
-      ↓
-GitHub 푸시
-```
-
-### 큰 작업 흐름 (Claude Code, 선택적)
-
-파일 여러 개를 동시에 뜯어고쳐야 하는 작업(예: 새 안전장치 전체 로직, 대규모 리팩터링)만 아래 방식을 쓴다. 일반 세부 조정에는 쓰지 않는다.
+### 기본 작업 흐름 (토큰 절약형)
 
 ```
-Claude Code (Plan Mode) — 분석 + PLAN.md 생성
-      ↓
-Cursor Composer — @PLAN.md 참조해서 코드 수정
-      ↓
-Live Server 확인 → GitHub 푸시 → PLAN.md 삭제
+① /model → Fable 5 선택, Plan Mode(Shift+Tab)
+   스크린샷·PDF 주고 "PLAN.md로 계획만 저장해줘"
+        ↓
+② /model → Sonnet 4.6 전환
+   "PLAN.md 보고 코드 작성해줘"
+        ↓
+③ Live Server 확인
+        ↓
+④ 미세한 위치 이동만 필요하면 Cursor로
+        ↓
+⑤ GitHub 푸시 → PLAN.md 삭제
 ```
+
+핵심: 비싼 판단(계획)은 Fable, 단순 실행(코딩)은 Sonnet. 계획이 정확하면 Sonnet 실행으로 충분하다.
 
 ---
 
-# 1. 공통 규칙 (Cursor · Claude Code · Claude.ai 모두 적용)
+# 1. 공통 규칙
 
 ## 좌표 기준
 
@@ -74,7 +66,7 @@ const deviceY = FLOOR_Y[fIdx] + S.CAR_H / 2;
 
 ## 생성 규칙
 
-- 직육면체: `createBox()` / 원통: `createCylinder()`
+- 직육면체: `createBox()` / 원통: `createCylinder()` (`index.html`)
 - 회전 부품: `THREE.Group()` 필수
 - renderLoop 내 Geometry·Mesh·Material 생성 금지
 - 센서 메시: `userData` 필수 부착
@@ -87,17 +79,26 @@ const deviceY = FLOOR_Y[fIdx] + S.CAR_H / 2;
 
 ## 상태 (FSM)
 
-```js
-IDLE / MOVING / LEVELING / DOOR_OPENING / DOOR_OPEN / DOOR_CLOSING / INSPECTION / FAULT / EMERGENCY_STOP
+`index.html` · `js/ui.js` 기준. 문서와 코드가 다르면 **코드가 우선**이다.
 
-elevatorState = { direction:'', speed:0, targetFloor:0,
-  slowdownActive:false, limitActive:false, finalLimitActive:false };
+```js
+// currentState — ELEVATOR_STATE (index.html)
+IDLE / MOVING / DOOR_OPENING / DOOR_OPEN / DOOR_CLOSING / ESTOP
+
+// elevatorState — 물리·센서 플래그 (index.html)
+elevatorState = {
+  direction: 0,
+  speed: 0,
+  slowdownActive: false,
+  limitActive: false,
+  finalLimitActive: false
+};
 ```
 
 ## 에셋 참조
 
-- 부품 디자인: 상위 폴더 `Part design.pdf` 최우선 → 없으면 `디자인.pdf`
-- 카·도어 치수: 상위 폴더 `size.pdf` 기준 → `const S`에 반영
+- 부품 디자인: 프로젝트 루트 `Part design.pdf`
+- 카·도어 치수: 프로젝트 루트 `size.pdf` → `const S`(`js/config.js`)에 반영
 - `const S` 변경 필요 시 사용자에게 먼저 확인
 
 ## 오류 발생 시 처리 원칙
@@ -114,50 +115,14 @@ elevatorState = { direction:'', speed:0, targetFloor:0,
 
 ---
 
-# 2. Cursor 전용 지침 (메인 실행자)
+# 2. Fable 5 (Plan) 전용 지침
 
-> 이 섹션은 Cursor Composer에만 적용된다. 대부분의 작업이 여기서 처리된다.
-
-## 역할
-
-- 이 프로젝트의 **주 코드 수정 실행자**다.
-- 사용자가 스크린샷이나 Claude.ai가 작성한 프롬프트를 붙여넣으면 그대로 실행한다.
-- `@PLAN.md`가 첨부된 경우에만 그 계획서 내용을 따른다.
-- 좌표, 부품 위치, 재질, 그룹 구조를 임의로 크게 바꾸지 않는다.
-- 기존 구조를 먼저 읽고, 필요한 함수 블록만 최소 범위로 수정한다.
-
-## 절대 금지
-
-- 파일 전체 재출력 금지.
-- `const S` 값 임의 수정 금지.
-- Three.js / OrbitControls / GSAP 버전 변경 금지.
-- 관련 없는 리팩터링, 함수 삭제, 기존 애니메이션 흐름 변경 금지.
-- 요청하지 않은 기능 추가 금지.
-- 사용자가 만든 변경 되돌리기 금지.
-
-## 수정 원칙
-
-- 요청한 것만 건드린다. 인접 코드 손대지 않는다.
-- 기존 코드 스타일·주석·포맷 그대로 유지.
-- 불필요해 보이는 코드는 삭제하지 말고 사용자에게 알린다.
-
----
-
-# 3. Claude Code 전용 지침 (큰 작업 전용, 선택적 호출)
-
-> 이 섹션은 Claude Code(터미널) 호출 시에만 적용된다. 일반 세부 조정에는 이 섹션을 쓰지 않는다.
-
-## 언제 부르는가
-
-- 새 부품·기능을 처음부터 통째로 신설할 때 (예: 조속기 전체 로직, 새 안전장치 모듈)
-- `elevator.js` + `ui.js` + `index.html` 등 3개 이상 파일을 동시에 뜯어고쳐야 할 때
-- 그 외 세부 방향·좌표·재질 조정은 Cursor로 직접 처리한다.
+> Plan Mode로 계획만 세운다. 코드를 직접 수정하지 않는다.
 
 ## 역할
 
-- Plan Mode 전용 분석가다. 코드를 직접 수정하지 않는다.
-- 분석 결과를 **`PLAN.md` 파일로 저장**한다.
-- 채팅창에 프롬프트 텍스트를 길게 출력하지 않는다. `PLAN.md` 작성 완료 여부만 짧게 보고한다.
+- 스크린샷·PDF·파일을 분석하고 결과를 `PLAN.md` 파일로 저장한다.
+- 채팅창에 긴 코드를 출력하지 않는다. `PLAN.md` 저장 완료만 짧게 보고한다.
 
 ## 고정 명령어
 
@@ -182,10 +147,62 @@ Plan Mode로 분석해줘. 코드 수정하지 말고.
 
 ```
 [분석 완료] PLAN.md 파일에 저장했습니다.
-Cursor에서 @PLAN.md 참조해서 실행하세요.
+Sonnet 4.6에서 PLAN.md 보고 코드 작성하세요.
 ```
+
+---
+
+# 3. Sonnet 4.6 (실행) 전용 지침
+
+> `PLAN.md`대로 실제 코드를 작성한다.
+
+## 역할
+
+- `PLAN.md`에 적힌 내용만 그대로 구현한다.
+- 계획서에 없는 내용은 추가하지 않는다.
+- 기존 구조를 먼저 읽고, 필요한 함수 블록만 최소 범위로 수정한다.
+
+## 고정 명령어
+
+```
+PLAN.md 보고 코드 작성해줘.
+계획서에 없는 내용은 추가하지 마.
+```
+
+## 절대 금지
+
+- 파일 전체 재출력 금지.
+- `const S` 값 임의 수정 금지.
+- Three.js / OrbitControls / GSAP 버전 변경 금지.
+- 관련 없는 리팩터링, 함수 삭제, 기존 애니메이션 흐름 변경 금지.
+- 요청하지 않은 기능 추가 금지.
+- 사용자가 만든 변경 되돌리기 금지.
+- `PLAN.md`에 없는 내용 임의 추가 금지.
+
+## 수정 원칙
+
+- 요청한 것만 건드린다. 인접 코드 손대지 않는다.
+- 기존 코드 스타일·주석·포맷 그대로 유지.
+- 불필요해 보이는 코드는 삭제하지 말고 사용자에게 알린다.
+
+---
+
+# 4. Cursor 전용 지침 (세부 위치 이동만)
+
+> Cursor는 이미 만들어진 부품의 위치를 옮기는 정도의 아주 쉬운 작업만 한다.
+
+- `position.set()`, `rotation` 좌표값 조정 정도만 처리한다.
+- 새 부품 생성, 재질 변경, 복잡한 로직은 Cursor에 맡기지 않는다.
+- `@PLAN.md`가 첨부된 경우에도 Sonnet 4.6 실행 범위에 해당하면 Cursor는 좌표 미세 조정만 한다.
+- 요청한 좌표만 수정하고 인접 코드는 손대지 않는다.
+
+---
 
 ## PLAN.md 관리
 
 - `PLAN.md`는 `.gitignore`에 등록되어 GitHub에 올라가지 않는다.
 - 작업 완료 후 삭제하거나 덮어쓴다. 다음 작업과 섞이지 않도록 매번 초기화한다.
+
+## 임시 파일 (로컬 전용)
+
+- `.shot-*.png`, `.rv-*.png`, `.pdf-*.png`, `.claude-tmp-shot*.js` — AI 캡처·PDF 추출용. `.gitignore` 등록됨. 앱 실행에 불필요.
