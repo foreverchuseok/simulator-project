@@ -63,6 +63,7 @@
           rotateGovernorTension(deltaY);
           cwtGrp.position.y = cwtY - (carGrp.position.y - cy);
           refreshRopes();
+          refreshGovernorRope();
 
           // 실시간 높이(Y축)에 따른 통과 층수 계산 및 인디케이터 업데이트
           let currentDisplayFloor = 1;
@@ -126,15 +127,15 @@
       document.getElementById('t-rope')?.addEventListener('change', e => { ropeObjs.forEach(r => r.line.visible = e.target.checked); });
 
       const midY = Y0 + TOTAL_H * 0.4;
-      document.getElementById('c-front').addEventListener('click', () => moveCam(14, midY, 16, 0, midY, 0));
-      document.getElementById('c-iso').addEventListener('click', () => moveCam(16, midY + 6, 16, 0, midY, 0));
-      document.getElementById('c-mr').addEventListener('click', () => moveCam(6, Y0 + TOTAL_H + 5, 6, 0, Y0 + TOTAL_H + 0.8, 0));
-      document.getElementById('c-pit').addEventListener('click', () => moveCam(5, Y0 + 1.0, 5, 0, Y0 + 1.0, 0));
+      document.getElementById('c-front').addEventListener('click', () => moveCam(18, midY, 21, 0, midY, 0));
+      document.getElementById('c-iso').addEventListener('click', () => moveCam(21, midY + 6, 21, 0, midY, 0));
+      document.getElementById('c-mr').addEventListener('click', () => moveCam(8, Y0 + TOTAL_H + 5, 8, 0, Y0 + TOTAL_H + 0.8, 0));
+      document.getElementById('c-pit').addEventListener('click', () => moveCam(6.5, Y0 + 1.0, 6.5, 0, Y0 + 1.0, 0));
       document.getElementById('c-car').addEventListener('click', () => {
         const cy = carGrp.position.y; moveCam(0, cy, S.CAR_D / 2 + 0.5, 0, cy - 0.1, 0);
       });
       document.getElementById('c-cwt').addEventListener('click', () => {
-        const cy = cwtGrp.position.y; moveCam(-4, cy, CWT_CENTER_Z + 2, 0, cy, CWT_CENTER_Z);
+        const cy = cwtGrp.position.y; moveCam(-5.5, cy, CWT_CENTER_Z + 2, 0, cy, CWT_CENTER_Z);
       });
     }
 

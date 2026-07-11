@@ -595,6 +595,7 @@
     const CAR_RAIL_REF_X = S.CAR_BG / 2;
     const GOV_TENS_OFFSET_X = 0.115; // 레일 중심 ~ 외측 인장축 (조속·인장추 동일 축)
     const GOV_TENS_X = CAR_RAIL_REF_X + GOV_TENS_OFFSET_X;
+    const GOV_TENS_Z = -0.22; // 조속기·피트 인장추 공통 Z (로프 상·하 정렬)
 
     // ---- [추가] 인디케이터 관리를 위한 배열 ----
     let indicators = [];
@@ -611,6 +612,7 @@
     let carGrp, cwtGrp, railGrp, mrGrp, wallGrp, bufferGrp, pitGrp;
     let carDoorL, carDoorR, hatchDoors = [], ropeObjs = [];
     let mainSheaveGrp = null, governorWheelGrp = null, tensionSheaveGrp = null, sheaveSpeed = 0;
+    let govRopeLine = null, govRopeData = null;
     const DEBUG_SENSOR = true;
     const USE_PHOTO_BG_PREVIEW = false; // true: koelsa/koelsa2 좌우 원경(흐림) / false: 3D 배경
     const landingDevices = [];
@@ -633,12 +635,12 @@
        ========================================================================== */
     function init() {
       scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x5a8cd9); // 맑은 하늘색 배경
-      scene.fog = new THREE.FogExp2(0x5a8cd9, 0.006);
+      scene.background = new THREE.Color(0x7ec8f0); // 시안 하늘 (buildBackground에서 그라데이션으로 교체)
+      scene.fog = new THREE.FogExp2(0xe8f4fc, 0.0045);
 
       const wrap = document.getElementById('canvas-wrap');
       camera = new THREE.PerspectiveCamera(50, wrap.clientWidth / wrap.clientHeight, 0.1, 200);
-      camera.position.set(14, Y0 + TOTAL_H * 0.4, 16);
+      camera.position.set(18, Y0 + TOTAL_H * 0.4, 21);
 
       renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gl'), antialias: true });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -652,6 +654,9 @@
       controls = new THREE.OrbitControls(camera, renderer.domElement);
       controls.enableDamping = true; controls.dampingFactor = 0.07;
       controls.target.set(0, Y0 + TOTAL_H * 0.4, 0);
+      controls.maxPolarAngle = Math.PI / 2 + 0.10; // 지평선 살짝 아래까지만 (지면 관통 방지)
+      controls.minDistance = 2;
+      controls.maxDistance = 90;
 
       // TEMP DEBUG: ?mrcam 쿼리로 기계실 카메라 (스크린샷 확인용)
       if (location.search.includes('mrcam')) {
@@ -698,7 +703,9 @@
       requestAnimationFrame(renderLoop);
       if (moving) sheaveSpeed = targetSpeed / 30; else { sheaveSpeed *= 0.92; if (sheaveSpeed < 0.001) sheaveSpeed = 0; }
       if (mainSheaveGrp && sheaveSpeed > 0) mainSheaveGrp.rotation.z += sheaveSpeed * clock.getDelta();
-      controls.update(); renderer.render(scene, camera);
+      controls.update();
+      if (camera.position.y < Y0 + 0.35) camera.position.y = Y0 + 0.35;
+      renderer.render(scene, camera);
     }
 
     init();

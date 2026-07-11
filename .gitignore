@@ -10,3 +10,7 @@ PLAN.md
 .rv-*.png
 .pdf-*.png
 .claude-tmp-shot*.js
+
+# Playwright 시각 검증용 (로컬 전용, 앱 실행·배포에 불필요)
+node_modules/
+package-lock.json

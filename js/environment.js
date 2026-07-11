@@ -17,19 +17,247 @@
       scene.add(carLight);
     }
 
+    // 정점 해시 — 시임(seam) 중복 정점이 같은 방향으로 움직이도록 위치 기반 난수
+    function vertHash(x, y, z, seed) {
+      const s = Math.sin(x * 12.9898 + y * 37.719 + z * 78.233 + seed) * 43758.5453;
+      return s - Math.floor(s);
+    }
+
+    // 산 지형 — 다층 노이즈 변위 + 초록→바위→설산 (procedural.eu 느낌의 실사 톤)
+    function createMountainGeometry(r, h, seed, snowy) {
+      let geo = new THREE.ConeGeometry(r, h, 16, 10);
+      const pos = geo.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+        const t = (y + h / 2) / h;
+        const n1 = vertHash(x * 0.4, y * 0.2, z * 0.4, seed);
+        const n2 = vertHash(x * 1.1, y * 0.5, z * 1.1, seed + 11);
+        const n3 = vertHash(x * 2.4, y, z * 2.4, seed + 29);
+        const amp = r * (0.28 * (1 - t * 0.55) * (0.55 + n1) + 0.08 * n2 + 0.04 * n3);
+        const ang = Math.atan2(z, x);
+        pos.setX(i, x + Math.cos(ang) * amp * (n1 - 0.35));
+        pos.setZ(i, z + Math.sin(ang) * amp * (n2 - 0.35));
+        if (t > 0.02 && t < 0.97) {
+          pos.setY(i, y + (n3 - 0.5) * h * 0.08 * (1 - t));
+        }
+      }
+      geo = geo.toNonIndexed();
+      const p2 = geo.attributes.position;
+      const colors = new Float32Array(p2.count * 3);
+      const cBase = new THREE.Color(0x3d6b28);
+      const cMid  = new THREE.Color(0x5a7a48);
+      const cRock = new THREE.Color(0x7a8580);
+      const cSnow = new THREE.Color(0xf2f6fa);
+      const cTop  = new THREE.Color(0x2f5224);
+      const tmp = new THREE.Color();
+      for (let i = 0; i < p2.count; i++) {
+        const t = Math.max(0, Math.min(1, (p2.getY(i) + h / 2) / h));
+        const shade = 0.88 + 0.14 * vertHash(p2.getX(i), p2.getY(i), p2.getZ(i), seed + 3);
+        if (snowy) {
+          if (t < 0.38) tmp.copy(cBase).lerp(cMid, t / 0.38);
+          else if (t < 0.62) tmp.copy(cMid).lerp(cRock, (t - 0.38) / 0.24);
+          else tmp.copy(cRock).lerp(cSnow, Math.min(1, (t - 0.62) / 0.22));
+        } else {
+          tmp.copy(cBase).lerp(cTop, t * 0.85);
+          if (t > 0.75) tmp.lerp(cRock, (t - 0.75) / 0.25 * 0.45);
+        }
+        tmp.multiplyScalar(shade);
+        colors[i * 3] = tmp.r; colors[i * 3 + 1] = tmp.g; colors[i * 3 + 2] = tmp.b;
+      }
+      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      geo.computeVertexNormals();
+      return geo;
+    }
+
+    // 원거리 연속 능선 (콘 나열 대신 실사 지형 실루엣)
+    function buildMountainRidge(parent, z, width, depth, peakH, seed) {
+      const segX = 80, segZ = 16;
+      let geo = new THREE.PlaneGeometry(width, depth, segX, segZ);
+      geo.rotateX(-Math.PI / 2);
+      const pos = geo.attributes.position;
+      const colors = new Float32Array(pos.count * 3);
+      const cBase = new THREE.Color(0x3a6228);
+      const cRock = new THREE.Color(0x6e7872);
+      const cSnow = new THREE.Color(0xeef3f7);
+      const tmp = new THREE.Color();
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), zz = pos.getZ(i);
+        const nx = x / (width * 0.5);
+        const nz = zz / (depth * 0.5);
+        const ridge = Math.exp(-nx * nx * 0.55) * (0.55 + 0.45 * Math.cos(nx * 4.2 + seed));
+        const n1 = vertHash(x * 0.08, 0, zz * 0.12, seed);
+        const n2 = vertHash(x * 0.22, 1, zz * 0.3, seed + 5);
+        const h = peakH * ridge * (0.65 + 0.35 * n1) * (0.85 + 0.2 * n2) * (1 - Math.abs(nz) * 0.35);
+        pos.setY(i, Math.max(0.05, h));
+        const t = Math.min(1, h / peakH);
+        if (t < 0.45) tmp.copy(cBase).lerp(cRock, t / 0.45 * 0.4);
+        else if (t < 0.72) tmp.copy(cBase).lerp(cRock, 0.4 + (t - 0.45) / 0.27 * 0.5);
+        else tmp.copy(cRock).lerp(cSnow, (t - 0.72) / 0.28);
+        const shade = 0.9 + 0.12 * n2;
+        colors[i * 3] = tmp.r * shade;
+        colors[i * 3 + 1] = tmp.g * shade;
+        colors[i * 3 + 2] = tmp.b * shade;
+      }
+      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      geo.computeVertexNormals();
+      const mesh = new THREE.Mesh(geo, stylizedMat(0.68, 0.45));
+      mesh.position.set(0, Y0 - 0.2, z);
+      mesh.userData = { type: 'bg-mountain-ridge' };
+      parent.add(mesh);
+    }
+
+    // 스타일라이즈드 언릿 재질 (정점 컬러 + 하프램버트 + 안개) — 지형 셰이더 공용
+    function stylizedMat(amb, gain) {
+      return new THREE.ShaderMaterial({
+        vertexShader: TERRAIN_VERT,
+        fragmentShader: TERRAIN_FRAG,
+        uniforms: {
+          uAmb: { value: amb != null ? amb : 0.72 },
+          uGain: { value: gain != null ? gain : 0.4 },
+          uFogColor: { value: new THREE.Color(BG_HORIZON) },
+          uFogDensity: { value: BG_FOG_D }
+        },
+        vertexColors: true
+      });
+    }
+
+    // ── 보도블록(벽돌) 포장 재질 — 프로시저럴 캔버스 텍스처 ──
+    let paverCanvas = null;
+    function makePaverMaterial(w, d) {
+      if (!paverCanvas) {
+        // 2m × 2m 타일 (벽돌 0.5m × 0.25m, 러닝본드)
+        paverCanvas = document.createElement('canvas');
+        paverCanvas.width = 256;
+        paverCanvas.height = 256;
+        const ctx = paverCanvas.getContext('2d');
+        ctx.fillStyle = '#877e70'; // 줄눈
+        ctx.fillRect(0, 0, 256, 256);
+        const shades = ['#b6ad9e', '#aaa093', '#c2b8a9', '#a99f8e', '#b1a698', '#bcb2a2'];
+        const BW = 64, BH = 32;
+        for (let row = 0; row < 8; row++) {
+          const off = (row % 2) * (BW / 2);
+          for (let col = -1; col < 4; col++) {
+            const x = col * BW + off;
+            const y = row * BH;
+            const h = Math.abs(Math.sin(row * 12.9898 + col * 78.233) * 43758.5453) % 1;
+            ctx.fillStyle = h < 0.08 ? '#a5836f' : shades[Math.floor(h * shades.length) % shades.length];
+            ctx.fillRect(x + 1.5, y + 1.5, BW - 3, BH - 3);
+            // 윗변 하이라이트 (블록 입체감)
+            ctx.fillStyle = 'rgba(255,255,255,0.10)';
+            ctx.fillRect(x + 1.5, y + 1.5, BW - 3, 3);
+          }
+        }
+      }
+      const tex = new THREE.CanvasTexture(paverCanvas);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(w / 2, d / 2);
+      tex.anisotropy = 4;
+      return new THREE.MeshBasicMaterial({ map: tex });
+    }
+
+    // ── 수풀형 가로수 — 줄기 + 불규칙 블롭 수관 (정점 컬러 로우폴리) ──
+    let TREE_MAT = null;
+    function buildTree(parent, x, z, s) {
+      if (!TREE_MAT) TREE_MAT = stylizedMat();
+      const grpT = new THREE.Group();
+
+      // 줄기 — 위로 갈수록 가늘고 살짝 기움
+      const th = (1.0 + Math.random() * 0.4) * s;
+      const trunkGeo = new THREE.CylinderGeometry(0.06 * s, 0.12 * s, th, 6, 2).toNonIndexed();
+      const tp = trunkGeo.attributes.position;
+      const tCols = new Float32Array(tp.count * 3);
+      const cTrunk = new THREE.Color(0x6b4a2a);
+      for (let i = 0; i < tp.count; i++) {
+        const j = 0.82 + vertHash(tp.getX(i), tp.getY(i), tp.getZ(i), 3) * 0.3;
+        tCols[i * 3] = cTrunk.r * j;
+        tCols[i * 3 + 1] = cTrunk.g * j;
+        tCols[i * 3 + 2] = cTrunk.b * j;
+      }
+      trunkGeo.setAttribute('color', new THREE.BufferAttribute(tCols, 3));
+      trunkGeo.computeVertexNormals();
+      const trunk = new THREE.Mesh(trunkGeo, TREE_MAT);
+      trunk.position.set(0, th / 2, 0);
+      trunk.rotation.z = (Math.random() - 0.5) * 0.14;
+      grpT.add(trunk);
+
+      // 수관 — 울퉁불퉁한 이코사 블롭 4~6개 병합
+      const blobN = 4 + Math.floor(Math.random() * 3);
+      const parts = [];
+      for (let b = 0; b < blobN; b++) {
+        const r = (0.45 + Math.random() * 0.4) * s;
+        const bx = (Math.random() - 0.5) * 1.1 * s;
+        const by = th + (0.35 + Math.random() * 0.8) * s;
+        const bz = (Math.random() - 0.5) * 1.1 * s;
+        const g = new THREE.IcosahedronGeometry(r, 1); // 비인덱스 지오메트리
+        const gp = g.attributes.position;
+        for (let i = 0; i < gp.count; i++) {
+          const m = 0.8 + vertHash(gp.getX(i), gp.getY(i), gp.getZ(i), b) * 0.4;
+          gp.setXYZ(i, gp.getX(i) * m, gp.getY(i) * m * 0.88, gp.getZ(i) * m);
+        }
+        g.applyMatrix4(new THREE.Matrix4().makeTranslation(bx, by, bz));
+        parts.push(g);
+      }
+      let total = 0;
+      parts.forEach(g => { total += g.attributes.position.count; });
+      const posArr = new Float32Array(total * 3);
+      let off = 0;
+      parts.forEach(g => {
+        posArr.set(g.attributes.position.array, off);
+        off += g.attributes.position.array.length;
+      });
+      const canopyGeo = new THREE.BufferGeometry();
+      canopyGeo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+      // 정점 색 — 아래 짙은 초록, 위 밝은 초록 + 나무마다 색조 변주
+      const cp = canopyGeo.attributes.position;
+      let minY = 1e9, maxY = -1e9;
+      for (let i = 0; i < cp.count; i++) {
+        minY = Math.min(minY, cp.getY(i));
+        maxY = Math.max(maxY, cp.getY(i));
+      }
+      const warm = Math.random() * 0.1;
+      const cBot = new THREE.Color(0x2e5c1e);
+      const cTop = new THREE.Color(0x5fa835);
+      const cCols = new Float32Array(cp.count * 3);
+      const tmpC = new THREE.Color();
+      for (let i = 0; i < cp.count; i++) {
+        const t = (cp.getY(i) - minY) / Math.max(0.001, maxY - minY);
+        const j = 0.9 + vertHash(cp.getX(i), cp.getY(i), cp.getZ(i), 9) * 0.2;
+        tmpC.copy(cBot).lerp(cTop, Math.pow(t, 0.8));
+        cCols[i * 3] = (tmpC.r + warm * 0.6) * j;
+        cCols[i * 3 + 1] = tmpC.g * j;
+        cCols[i * 3 + 2] = tmpC.b * j;
+      }
+      canopyGeo.setAttribute('color', new THREE.BufferAttribute(cCols, 3));
+      canopyGeo.computeVertexNormals();
+      const canopy = new THREE.Mesh(canopyGeo, TREE_MAT);
+      canopy.rotation.y = Math.random() * Math.PI * 2;
+      grpT.add(canopy);
+
+      grpT.position.set(x, Y0, z);
+      grpT.userData = { type: 'tree' };
+      parent.add(grpT);
+    }
+
     function buildMountainRange(parent) {
+      // 원거리 능선 2층
+      buildMountainRidge(parent, -58, 160, 28, 22, 3);
+      buildMountainRidge(parent, -48, 140, 22, 16, 9);
+
+      const mat = stylizedMat(0.7, 0.42);
+      // 건물 뒤 겹침 방지: 중앙 봉우리는 z≤-50 (전면 도달 z≈-37, 캠퍼스 후면 -35 밖),
+      // 근경 봉우리는 건물이 없는 좌우 측면(|x|≥44)에만 배치
       const layers = [
-        { z: -40, color: 0x5c7850, peaks: [[-32, 10], [-18, 14], [-4, 16], [10, 13], [24, 11], [36, 9]] },
-        { z: -44, color: 0x486040, peaks: [[-28, 12], [-12, 17], [4, 19], [18, 14], [32, 10]] },
-        { z: -48, color: 0x384c30, peaks: [[-22, 9], [0, 15], [22, 11]] }
+        { z: -50, peaks: [[-48, 12], [-28, 15], [-10, 18], [8, 16], [26, 14], [44, 12]] },
+        { z: -40, peaks: [[-58, 12], [-44, 13], [46, 12], [60, 11]] }
       ];
-      layers.forEach((layer) => {
-        layer.peaks.forEach(([x, h]) => {
-          const mesh = new THREE.Mesh(
-            new THREE.ConeGeometry(h * 0.58, h, 6),
-            M.paint(layer.color)
-          );
-          mesh.position.set(x, Y0 + h / 2, layer.z);
+      layers.forEach((layer, li) => {
+        layer.peaks.forEach(([x, h], pi) => {
+          const snowy = h >= 13;
+          const geo = createMountainGeometry(h * 0.72, h, li * 31 + pi * 7 + 3, snowy);
+          const mesh = new THREE.Mesh(geo, mat);
+          mesh.position.set(x, Y0 + h / 2 - 0.5, layer.z);
+          mesh.rotation.y = vertHash(x, h, layer.z, 5) * Math.PI * 0.4;
           mesh.userData = { type: 'bg-mountain' };
           parent.add(mesh);
         });
@@ -53,16 +281,19 @@
       createBox(3.6, 0.3, 3.6, white, 0, Y0 + towerH + 1.9, 0, grp);
       createCylinder(0.04, 0.04, 1.2, M.ss(0x888888), 0, Y0 + towerH + 2.6, 0, grp);
 
-      // t_front.png — 타워 원통 중앙 둘레 감김 (승강기안전기술원)
-      new THREE.TextureLoader().load('assets/bg/t_front.png', (tex) => {
+      // t_length.png — 세로형 배너, 타워 높이의 약 2/3 감김 (승강기안전기술원)
+      new THREE.TextureLoader().load('assets/bg/t_length.png', (tex) => {
         tex.encoding = THREE.sRGBEncoding;
-        const bandH = 0.74;
-        const bandW = bandH * (tex.image.width / tex.image.height);
-        const thetaSpan = Math.min(Math.PI * 0.92, bandW / towerR);
-        const thetaStart = -(thetaSpan / 2); // 0 = +Z 정면 기준 중앙 정렬
-        const labelY = Y0 + towerH * 0.72;
+        tex.anisotropy = 8;
+        const bandH = towerH * (2 / 3); // ≈ 14.7m
+        const aspect = tex.image.width / tex.image.height; // ≈ 0.179
+        const bandW = bandH * aspect;
+        // 가로 비율 유지 — 원통 정면(+Z)에 세로 배너로 감김
+        const thetaSpan = Math.min(Math.PI * 0.95, bandW / towerR);
+        const thetaStart = -(thetaSpan / 2);
+        const labelY = Y0 + towerH / 2;
         const label = new THREE.Mesh(
-          new THREE.CylinderGeometry(towerR + 0.012, towerR + 0.012, bandH, 64, 1, true, thetaStart, thetaSpan),
+          new THREE.CylinderGeometry(towerR + 0.012, towerR + 0.012, bandH, 72, 1, true, thetaStart, thetaSpan),
           new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide })
         );
         label.position.set(0, labelY, 0);
@@ -70,16 +301,103 @@
         grp.add(label);
       });
 
-      createBox(6, 2.5, 4, grey, -5, Y0 + 1.25, -2, grp);
-      createBox(6, 0.15, 4.2, blueRoof, -5, Y0 + 2.55, -2, grp);
-      createBox(4, 2, 3, grey, -5, Y0 + 1, 3, grp);
-      createBox(4, 0.12, 3.2, blueRoof, -5, Y0 + 2.06, 3, grp);
-      createBox(5, 2.8, 4, white, 4, Y0 + 1.4, 1, grp);
-      createBox(4.5, 1.8, 0.08, M.glass(), 4, Y0 + 1.6, 3.05, grp);
+      // ── 부속 건물 3동 — 사무동 스타일 (기단·리본창·멀리언·파라펫) ──
+      const wallMat = M.ss(0x8f959b);
+      const bandMat = M.ss(0x6d7278);
+      const frameMat = M.ss(0x565b60);
+      const officeGlass = new THREE.MeshPhysicalMaterial({
+        color: 0x3a6ea8, transmission: 0.55, opacity: 1, transparent: true,
+        roughness: 0.12, ior: 1.5, metalness: 0.1, side: THREE.DoubleSide
+      });
+
+      // 리본 창 헬퍼 — axis 'z': 전후면(폭=X방향), 'x': 측면(폭=Z방향)
+      function ribbonWindow(cx, cy, cz, w, h, axis) {
+        const n = Math.max(2, Math.round(w / 0.75));
+        if (axis === 'z') {
+          createBox(w, h, 0.05, officeGlass, cx, cy, cz, grp);
+          for (let i = 0; i <= n; i++) {
+            createBox(0.045, h + 0.06, 0.07, frameMat, cx - w / 2 + (w / n) * i, cy, cz, grp);
+          }
+          createBox(w + 0.08, 0.06, 0.07, frameMat, cx, cy + h / 2, cz, grp);
+          createBox(w + 0.08, 0.06, 0.07, frameMat, cx, cy - h / 2, cz, grp);
+        } else {
+          createBox(0.05, h, w, officeGlass, cx, cy, cz, grp);
+          for (let i = 0; i <= n; i++) {
+            createBox(0.07, h + 0.06, 0.045, frameMat, cx, cy, cz - w / 2 + (w / n) * i, grp);
+          }
+          createBox(0.07, 0.06, w + 0.08, frameMat, cx, cy + h / 2, cz, grp);
+          createBox(0.07, 0.06, w + 0.08, frameMat, cx, cy - h / 2, cz, grp);
+        }
+      }
+
+      // [A동] 연구사무동 2층 — 리본창 + 층간 밴드 + 옥상 설비
+      const aX = -5, aZ = -2, aW = 6, aD = 4, AF = 2.1;
+      const aH = 0.3 + AF * 2 + 0.4;
+      createBox(aW, aH, aD, wallMat, aX, Y0 + aH / 2, aZ, grp);
+      createBox(aW + 0.15, 0.3, aD + 0.15, bandMat, aX, Y0 + 0.15, aZ, grp); // 기단
+      for (let f = 0; f < 2; f++) {
+        const wy = Y0 + 0.3 + AF * f + AF * 0.58;
+        ribbonWindow(aX, wy, aZ + aD / 2 + 0.04, aW - 0.9, 1.05, 'z'); // 전면
+        ribbonWindow(aX, wy, aZ - aD / 2 - 0.04, aW - 0.9, 1.05, 'z'); // 후면
+        ribbonWindow(aX - aW / 2 - 0.04, wy, aZ, aD - 0.9, 1.05, 'x'); // 좌측면
+      }
+      createBox(aW + 0.1, 0.26, aD + 0.1, bandMat, aX, Y0 + 0.3 + AF, aZ, grp);   // 층간 밴드
+      createBox(aW + 0.2, 0.16, aD + 0.2, bandMat, aX, Y0 + aH + 0.08, aZ, grp);  // 파라펫 캡
+      createBox(aW + 0.22, 0.24, 0.1, blueRoof, aX, Y0 + aH - 0.18, aZ + aD / 2 + 0.1, grp); // 블루 어센트
+      createBox(1.6, 0.55, 1.1, M.ss(0xc0c6cc), aX - 1.2, Y0 + aH + 0.36, aZ - 0.6, grp);    // 옥상 실외기
+
+      // [B동] 안내동 1층 — 스토어프론트 유리 + 출입문 + 오버행 지붕
+      const bX = -5, bZ = 3, bW = 4, bD = 3, bH = 3.0;
+      createBox(bW, bH, bD, wallMat, bX, Y0 + bH / 2, bZ, grp);
+      createBox(bW + 0.12, 0.25, bD + 0.12, bandMat, bX, Y0 + 0.125, bZ, grp);
+      // 전면 스토어프론트 (문 우측 + 유리 좌측)
+      createBox(bW - 1.9, 1.55, 0.05, officeGlass, bX - 0.75, Y0 + 1.1, bZ + bD / 2 + 0.04, grp);
+      createBox(0.05, 1.55 + 0.06, 0.07, frameMat, bX - 1.55, Y0 + 1.1, bZ + bD / 2 + 0.04, grp);
+      createBox(0.05, 1.55 + 0.06, 0.07, frameMat, bX + 0.05, Y0 + 1.1, bZ + bD / 2 + 0.04, grp);
+      createBox(bW - 1.8, 0.06, 0.07, frameMat, bX - 0.75, Y0 + 1.88, bZ + bD / 2 + 0.04, grp);
+      // 양개 유리문
+      createBox(0.72, 1.8, 0.05, officeGlass, bX + 0.85, Y0 + 0.95, bZ + bD / 2 + 0.05, grp);
+      createBox(0.8, 0.08, 0.09, frameMat, bX + 0.85, Y0 + 1.88, bZ + bD / 2 + 0.05, grp);
+      createBox(0.05, 1.8, 0.08, frameMat, bX + 0.85, Y0 + 0.95, bZ + bD / 2 + 0.05, grp);
+      // 측면 창 + 오버행 지붕 + 블루 파샤
+      ribbonWindow(bX - bW / 2 - 0.04, Y0 + 1.55, bZ, bD - 0.8, 0.9, 'x');
+      createBox(bW + 0.5, 0.14, bD + 0.5, white, bX, Y0 + bH + 0.07, bZ, grp);
+      createBox(bW + 0.54, 0.28, 0.1, blueRoof, bX, Y0 + bH - 0.1, bZ + bD / 2 + 0.28, grp);
+
+      // [C동] 인증시험동 2층 — 전면 커튼월 + 출입 캐노피
+      const cX = 4, cZ = 1, cW = 5, cD = 4, cH = 5.2;
+      createBox(cW, cH, cD, wallMat, cX, Y0 + cH / 2, cZ, grp);
+      createBox(cW + 0.15, 0.3, cD + 0.15, bandMat, cX, Y0 + 0.15, cZ, grp);
+      // 전면 커튼월 그리드
+      const cgW = cW - 0.8, cgH = cH - 1.5;
+      createBox(cgW, cgH, 0.06, officeGlass, cX, Y0 + cgH / 2 + 0.35, cZ + cD / 2 + 0.05, grp);
+      for (let i = 0; i <= 6; i++) {
+        createBox(0.05, cgH + 0.08, 0.08, frameMat, cX - cgW / 2 + (cgW / 6) * i, Y0 + cgH / 2 + 0.35, cZ + cD / 2 + 0.06, grp);
+      }
+      for (let r = 0; r <= 3; r++) {
+        createBox(cgW + 0.08, 0.06, 0.08, frameMat, cX, Y0 + 0.35 + (cgH / 3) * r, cZ + cD / 2 + 0.06, grp);
+      }
+      // 출입 캐노피 + 슬림 기둥
+      createBox(2.2, 0.12, 1.2, white, cX - 0.9, Y0 + 2.25, cZ + cD / 2 + 0.62, grp);
+      createCylinder(0.05, 0.05, 2.2, M.ss(0xcdd2d8), cX - 1.75, Y0 + 1.1, cZ + cD / 2 + 1.05, grp);
+      createCylinder(0.05, 0.05, 2.2, M.ss(0xcdd2d8), cX - 0.05, Y0 + 1.1, cZ + cD / 2 + 1.05, grp);
+      // 측면·후면 리본창 (2층)
+      for (let f = 0; f < 2; f++) {
+        const wy = Y0 + 0.3 + 2.25 * f + 1.35;
+        ribbonWindow(cX + cW / 2 + 0.04, wy, cZ, cD - 0.9, 1.0, 'x');
+        ribbonWindow(cX, wy, cZ - cD / 2 - 0.04, cW - 0.9, 1.0, 'z');
+      }
+      createBox(cW + 0.2, 0.16, cD + 0.2, bandMat, cX, Y0 + cH + 0.08, cZ, grp);   // 파라펫 캡
+      createBox(cW + 0.22, 0.24, 0.1, blueRoof, cX, Y0 + cH - 0.18, cZ + cD / 2 + 0.1, grp);
+      createBox(1.4, 0.5, 1.0, M.ss(0xc0c6cc), cX + 1.3, Y0 + cH + 0.33, cZ - 1.0, grp); // 옥상 실외기
+
+      // 캠퍼스 조경수
+      buildTree(grp, 7.2, 4.2, 0.9);
+      buildTree(grp, -8.4, 4.9, 0.95);
 
       // Z-fighting 방지: 글로벌 ground top(Y0+0.05)보다 명확히 위로 띄움
-      createBox(14, 0.06, 10, M.paint(0x555a60), 0, Y0 + 0.10, 0, grp);
-      createBox(10, 0.05, 6, M.paint(0x507a42), -1, Y0 + 0.12, -4, grp);
+      createBox(14, 0.06, 10, makePaverMaterial(14, 10), 0, Y0 + 0.10, 0, grp);
+      createBox(10, 0.05, 6, new THREE.MeshBasicMaterial({ color: 0x4a7a30 }), -1, Y0 + 0.12, -4, grp);
 
       grp.userData = { type: 'bg-koelsa2' };
       parent.add(grp);
@@ -96,10 +414,8 @@
       const panelBnd = M.ss(0x706e68);     // 스팬드럴 밴드 (층간 솔리드)
       const mulliMat = M.ss(0x606468);     // 알루미늄 뮬리언 (유리 격자)
       const colMat   = M.paint(0x9e6420);  // 브론즈/목재 원형 기둥
-      const paveConc = M.conc(0x96928c);   // 콘크리트 포장
-      const parkMat  = M.conc(0x50545a);   // 주차장 아스팔트
-      const grassMat = M.conc(0x4a7338);   // 잔디
-      const leafMat  = M.conc(0x528838);   // 나뭇잎
+      const grassMat = new THREE.MeshBasicMaterial({ color: 0x4a8a2e }); // 잔디 (언릿)
+      const leafMat  = new THREE.MeshBasicMaterial({ color: 0x4d8c30 }); // 나뭇잎 (언릿 플랫)
       const trunkMat = M.conc(0x6b4420);   // 나무 줄기
 
       // 파란 커튼월 유리 (공용 인스턴스)
@@ -239,25 +555,21 @@
       //  4. 부지 (Site)
       // ════════════════════════════════════════════════
       // Z-fighting 방지: 글로벌 ground top(Y0+0.05)보다 명확히 위로 띄움
-      // 전면 콘크리트 포장
-      createBox(LW + 14, 0.06, 12, paveConc, 0, Y0 + 0.08, LFZ + 4.5, grp);
-      // 주차장 아스팔트
-      createBox(LW + 14, 0.05, 9,  parkMat,  0, Y0 + 0.075, LFZ + 11.5, grp);
+      // 전면 보도블록 포장
+      createBox(LW + 14, 0.06, 12, makePaverMaterial(LW + 14, 12), 0, Y0 + 0.08, LFZ + 4.5, grp);
       // 측면 잔디
       createBox(7, 0.05, LD + 4, grassMat, -LW / 2 - 3.5, Y0 + 0.075, FZ + LD / 2, grp);
       createBox(7, 0.05, LD + 4, grassMat,  LW / 2 + 3.5, Y0 + 0.075, FZ + LD / 2, grp);
 
-      // ── 가로수 ──
+      // ── 가로수 (수풀형 블롭 수관) ──
       // 로비 정면 가로수
       [-11, -8, -5, 5, 8, 11].forEach(tx => {
-        createCylinder(0.10, 0.12, 2.3, trunkMat, tx, Y0 + 1.15, LFZ + 2.5, grp);
-        createCylinder(1.25, 0.85, 2.6, leafMat,  tx, Y0 + 3.15, LFZ + 2.5, grp);
+        buildTree(grp, tx, LFZ + 2.5, 1.15);
       });
       // 측면 가로수
       [-LW / 2 - 1, LW / 2 + 1].forEach(tx => {
         [2, 6, 10].forEach(tz => {
-          createCylinder(0.09, 0.11, 2.0, trunkMat, tx, Y0 + 1.0, FZ + tz, grp);
-          createCylinder(1.10, 0.70, 2.2, leafMat,  tx, Y0 + 2.9, FZ + tz, grp);
+          buildTree(grp, tx, FZ + tz, 1.0);
         });
       });
 
@@ -265,8 +577,10 @@
       parent.add(grp);
     }
 
-    const BG_SKY = 0x5a8cd9;
+    const BG_SKY = 0x7ec8f0;       // 상단 시안
+    const BG_HORIZON = 0xe8f4fc;   // 수평선 거의 흰색
     const BG_GROUND = 'rgba(74,69,63,1)';
+    const BG_FOG_D = 0.0050;       // 지형 가장자리가 horizon 색에 녹아드는 안개 밀도
 
     function createBgGradientTexture(w, h, drawFn) {
       const cvs = document.createElement('canvas');
@@ -275,6 +589,110 @@
       const ctx = cvs.getContext('2d');
       drawFn(ctx, w, h);
       return new THREE.CanvasTexture(cvs);
+    }
+
+    function applyStylizedSky() {
+      // 화면 고정 background 대신 하늘 돔 — 저각도에서도 지평선 아래가 horizon 색으로 이어짐
+      const skyTex = createBgGradientTexture(4, 256, (ctx, w, h) => {
+        const g = ctx.createLinearGradient(0, 0, 0, h);
+        g.addColorStop(0.00, '#3f9fe8');
+        g.addColorStop(0.45, '#7fc4f2');
+        g.addColorStop(0.62, '#c8e8fa');
+        g.addColorStop(0.72, '#eef7fc');
+        g.addColorStop(1.00, '#eef7fc'); // 하부 반구 = horizon (안개색과 연속)
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, w, h);
+      });
+      skyTex.magFilter = THREE.LinearFilter;
+      skyTex.minFilter = THREE.LinearFilter;
+
+      const skyDome = new THREE.Mesh(
+        new THREE.SphereGeometry(95, 32, 24),
+        new THREE.MeshBasicMaterial({
+          map: skyTex,
+          side: THREE.BackSide,
+          fog: false,
+          depthWrite: false
+        })
+      );
+      skyDome.name = 'skyDome';
+      skyDome.renderOrder = -1;
+      scene.add(skyDome);
+
+      scene.background = new THREE.Color(BG_HORIZON); // far 밖 fallback
+      scene.fog = new THREE.FogExp2(BG_HORIZON, BG_FOG_D);
+    }
+
+    // 로우폴리 뭉게구름 — 구 블롭 병합 + 평평한 밑면 + 아랫면 음영 정점 컬러
+    function createCloudGeometry(seed) {
+      const blobN = 5 + Math.floor(vertHash(seed, 1, 2, 0) * 3);
+      const parts = [];
+      for (let b = 0; b < blobN; b++) {
+        const r = 0.55 + vertHash(seed, b, 3, 1) * 0.6;
+        const bx = (vertHash(seed, b, 5, 2) - 0.5) * 3.2;
+        const by = vertHash(seed, b, 7, 3) * 0.55;
+        const bz = (vertHash(seed, b, 11, 4) - 0.5) * 1.3;
+        const g = new THREE.SphereGeometry(r, 7, 5).toNonIndexed();
+        g.applyMatrix4(new THREE.Matrix4().makeScale(1.15, 0.72, 1));
+        g.applyMatrix4(new THREE.Matrix4().makeTranslation(bx, by, bz));
+        parts.push(g);
+      }
+      let total = 0;
+      parts.forEach(g => { total += g.attributes.position.count; });
+      const posArr = new Float32Array(total * 3);
+      let off = 0;
+      parts.forEach(g => {
+        posArr.set(g.attributes.position.array, off);
+        off += g.attributes.position.array.length;
+      });
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+      // 평평한 밑면
+      const p = geo.attributes.position;
+      let minY = 1e9, maxY = -1e9;
+      for (let i = 0; i < p.count; i++) {
+        if (p.getY(i) < -0.12) p.setY(i, -0.12 - (p.getY(i) + 0.12) * 0.18);
+        minY = Math.min(minY, p.getY(i));
+        maxY = Math.max(maxY, p.getY(i));
+      }
+      // 아래는 청회색, 위는 흰색
+      const cBot = new THREE.Color(0xc9d8e6);
+      const cTop = new THREE.Color(0xffffff);
+      const colors = new Float32Array(p.count * 3);
+      const tmp = new THREE.Color();
+      for (let i = 0; i < p.count; i++) {
+        const t = (p.getY(i) - minY) / (maxY - minY);
+        tmp.copy(cBot).lerp(cTop, Math.pow(t, 0.7));
+        colors[i * 3] = tmp.r; colors[i * 3 + 1] = tmp.g; colors[i * 3 + 2] = tmp.b;
+      }
+      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      geo.computeVertexNormals();
+      return geo;
+    }
+
+    function buildSoftClouds(parent) {
+      const cloudGrp = new THREE.Group();
+      cloudGrp.name = 'softClouds';
+      cloudGrp.userData = { type: 'bg-clouds' };
+
+      const mat = stylizedMat(0.9, 0.22); // 구름은 밝고 음영 약하게
+      // [각도(도), 반경, 높이, 스케일] — 어느 방향에서 봐도 구름이 보이도록 링 배치
+      const placements = [
+        [15, 70, 30, 7], [55, 85, 36, 9], [100, 75, 28, 6.5],
+        [150, 90, 38, 10], [195, 80, 32, 8], [240, 72, 27, 6],
+        [285, 88, 40, 9.5], [330, 78, 33, 7.5]
+      ];
+      placements.forEach(([deg, rad, y, s], i) => {
+        const a = deg * Math.PI / 180;
+        const geo = createCloudGeometry(i * 17 + 4);
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(Math.cos(a) * rad, Y0 + y, Math.sin(a) * rad);
+        mesh.rotation.y = vertHash(i, deg, rad, 9) * Math.PI * 2;
+        mesh.scale.set(s, s * 0.85, s);
+        mesh.userData = { type: 'bg-cloud' };
+        cloudGrp.add(mesh);
+      });
+      parent.add(cloudGrp);
     }
 
     function createSoftPhotoTexture(img) {
@@ -348,8 +766,7 @@
       const onFail = () => {
         failed = true;
         if (bg3dGrp) bg3dGrp.visible = true;
-        scene.background = new THREE.Color(0x5a8cd9);
-        scene.fog = new THREE.FogExp2(0x5a8cd9, 0.015);
+        applyStylizedSky();
       };
 
       const bgZ = -36;
@@ -357,31 +774,607 @@
       addPhotoSidePanel(parent, 'assets/bg/koelsa.png', 'right', bgZ, tryHide3d, onFail);
     }
 
-    function buildGrassPatch(parent, cx, cz, w, d) {
-      const patch = new THREE.Group();
-      patch.userData = { type: 'grass-patch' };
-      const grassA = M.paint(0x426838);
-      const grassB = M.paint(0x385430);
+    /* ── 자연 지형 + 풀밭 시스템 (스타일라이즈드) ──────────────────────
+       terrainHeight(x,z) : 완만한 구릉 높이. 시설물 부지는 flattenMask로 0 수렴.
+       buildTerrain()     : 정점 컬러 구릉 지형 메시.
+       buildGrassField()  : InstancedMesh + 커스텀 셰이더 풀잎 (바람 애니메이션).
+       buildFlowerField() : 들꽃 + 씨앗 줄기 포인트.
+    ------------------------------------------------------------------ */
+    const FLAT_ZONES = [ // 지형 평탄화 부지 {cx, cz, hw, hd, blend}
+      { cx: 0,   cz: 1.2,   hw: 4.2,  hd: 5.2,  blend: 7 },   // 승강로 + 전면 포장
+      { cx: -17, cz: -28,   hw: 8.6,  hd: 6.4,  blend: 9 },   // koelsa2 캠퍼스 부지
+      { cx: 17,  cz: -24.5, hw: 14.0, hd: 10.5, blend: 10 },  // 본관 타워 + 로비
+      { cx: 17,  cz: -11,   hw: 20.0, hd: 6.2,  blend: 9 }    // 본관 전면 보도블록 광장
+    ];
+    const NO_GRASS_RECTS = [ // 풀잎 산포 제외 footprint {cx, cz, hw, hd}
+      { cx: 0,   cz: -0.2,  hw: 3.6,  hd: 3.4 },   // 승강로 벽체
+      { cx: 0,   cz: 3.4,   hw: 3.6,  hd: 2.2 },   // 승강로 전면 포장
+      { cx: -17, cz: -28,   hw: 7.6,  hd: 5.6 },   // 캠퍼스 패드
+      { cx: 17,  cz: -24.5, hw: 13.0, hd: 10.2 },  // 본관 건물
+      { cx: 17,  cz: -11,   hw: 19.7, hd: 6.1 }    // 본관 전면 보도블록 광장
+    ];
+    const STREAM_PATH = [
+      [38, -20], [40, -8], [42, 4], [44, 16], [43, 28], [40, 40]
+    ];
 
-      createBox(w, 0.03, d, M.paint(0x3a5c30), cx, Y0 + 0.045, cz, patch);
-
-      const count = Math.min(2200, Math.floor(w * d * 0.14));
-      for (let i = 0; i < count; i++) {
-        const lx = (Math.random() - 0.5) * w * 0.94;
-        const lz = (Math.random() - 0.5) * d * 0.94;
-        const h = 0.14 + Math.random() * 0.32;
-        const blade = new THREE.Mesh(
-          new THREE.BoxGeometry(0.055, h, 0.035),
-          Math.random() > 0.45 ? grassA : grassB
-        );
-        blade.position.set(cx + lx, Y0 + 0.06 + h / 2, cz + lz);
-        blade.rotation.y = Math.random() * Math.PI;
-        blade.rotation.x = (Math.random() - 0.5) * 0.25;
-        blade.rotation.z = (Math.random() - 0.5) * 0.15;
-        blade.userData = { type: 'grass-blade' };
-        patch.add(blade);
+    function distToStream(x, z) {
+      let best = 1e9;
+      for (let i = 0; i < STREAM_PATH.length - 1; i++) {
+        const [x1, z1] = STREAM_PATH[i];
+        const [x2, z2] = STREAM_PATH[i + 1];
+        const dx = x2 - x1, dz = z2 - z1;
+        const len2 = dx * dx + dz * dz;
+        let t = ((x - x1) * dx + (z - z1) * dz) / len2;
+        t = Math.max(0, Math.min(1, t));
+        const px = x1 + dx * t - x, pz = z1 + dz * t - z;
+        const d = Math.sqrt(px * px + pz * pz);
+        if (d < best) best = d;
       }
-      parent.add(patch);
+      return best;
+    }
+
+    function smooth01(t) {
+      const c = Math.max(0, Math.min(1, t));
+      return c * c * (3 - 2 * c);
+    }
+
+    function flattenMask(x, z) {
+      let m = 1;
+      for (let i = 0; i < FLAT_ZONES.length; i++) {
+        const zn = FLAT_ZONES[i];
+        const dx = Math.max(Math.abs(x - zn.cx) - zn.hw, 0);
+        const dz = Math.max(Math.abs(z - zn.cz) - zn.hd, 0);
+        m *= smooth01(Math.sqrt(dx * dx + dz * dz) / zn.blend);
+      }
+      m *= smooth01((distToStream(x, z) - 2.2) / 6);
+      return m;
+    }
+
+    function terrainHeight(x, z) {
+      // 옥타브 사인 노이즈 (0..1) — 완만한 구릉
+      const n1 = 0.5 + 0.5 * Math.sin(x * 0.021 - 0.8) * Math.cos(z * 0.018 + 1.1);
+      const n2 = 0.5 + 0.5 * Math.sin(x * 0.045 + 1.7) * Math.cos(z * 0.052 + 0.4);
+      const n3 = 0.5 + 0.5 * Math.sin(x * 0.11 + 4.1) * Math.cos(z * 0.09 + 2.3);
+      let h = (n1 * 0.55 + n2 * 0.33 + n3 * 0.12) * 3.6;
+      // 원거리 스웰 — 지평선 방향으로 풀 언덕이 솟도록
+      const r = Math.sqrt(x * x + z * z);
+      h += smooth01((r - 32) / 95) * 3.2;
+      return h * flattenMask(x, z);
+    }
+
+    function isInNoGrassZone(x, z) {
+      for (let i = 0; i < NO_GRASS_RECTS.length; i++) {
+        const rc = NO_GRASS_RECTS[i];
+        if (Math.abs(x - rc.cx) < rc.hw && Math.abs(z - rc.cz) < rc.hd) return true;
+      }
+      return distToStream(x, z) < 1.7;
+    }
+
+    const TERRAIN_VERT = `
+      uniform float uAmb;
+      uniform float uGain;
+      varying vec3 vColor;
+      varying float vFog;
+      varying float vLight;
+      void main() {
+        vColor = color;
+        // 언릿 스타일라이즈드 — 완만한 하프램버트 음영만 적용
+        float nd = max(dot(normalize(vec3(0.35, 0.8, 0.45)), normalize(normal)), 0.0);
+        vLight = uAmb + uGain * nd;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vFog = -mv.z;
+        gl_Position = projectionMatrix * mv;
+      }
+    `;
+
+    const TERRAIN_FRAG = `
+      uniform vec3 uFogColor;
+      uniform float uFogDensity;
+      varying vec3 vColor;
+      varying float vFog;
+      varying float vLight;
+      void main() {
+        gl_FragColor = vec4(vColor * vLight, 1.0);
+        #include <tonemapping_fragment>
+        float f = 1.0 - exp(-uFogDensity * uFogDensity * vFog * vFog);
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, uFogColor, clamp(f, 0.0, 1.0));
+      }
+    `;
+
+    function buildTerrain(parent) {
+      const span = 280;
+      const seg = 140;
+      const geo = new THREE.PlaneGeometry(span, span, seg, seg);
+      geo.rotateX(-Math.PI / 2);
+      const pos = geo.attributes.position;
+      const colors = new Float32Array(pos.count * 3);
+      const cLow = new THREE.Color(0x2b5c1a);
+      const cHigh = new THREE.Color(0x4a8c2c);
+      const tmp = new THREE.Color();
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i);
+        const z = pos.getZ(i);
+        const h = terrainHeight(x, z);
+        pos.setY(i, h);
+        // 높이 + 노이즈 혼합 틴트 (평탄 부지 경계가 색 경계로 드러나지 않도록)
+        const n = 0.5 + 0.5 * Math.sin(x * 0.13 + 2.0) * Math.cos(z * 0.11 - 0.7);
+        const t = Math.min(1, h / 7) * 0.55 + n * 0.45;
+        const jitter = 0.92 + 0.1 * (0.5 + 0.5 * Math.sin(x * 0.9 + z * 1.3));
+        tmp.copy(cLow).lerp(cHigh, t).multiplyScalar(jitter);
+        colors[i * 3] = tmp.r;
+        colors[i * 3 + 1] = tmp.g;
+        colors[i * 3 + 2] = tmp.b;
+      }
+      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      geo.computeVertexNormals();
+      const mesh = new THREE.Mesh(geo, new THREE.ShaderMaterial({
+        vertexShader: TERRAIN_VERT,
+        fragmentShader: TERRAIN_FRAG,
+        uniforms: {
+          uAmb: { value: 0.72 },
+          uGain: { value: 0.4 },
+          uFogColor: { value: new THREE.Color(BG_HORIZON) },
+          uFogDensity: { value: BG_FOG_D }
+        },
+        vertexColors: true
+      }));
+      mesh.position.set(0, Y0 + 0.01, 0);
+      mesh.userData = { type: 'terrain' };
+      parent.add(mesh);
+    }
+
+    const windTime = { value: 0 }; // 풀·꽃 셰이더 공유 시간 uniform
+
+    const GRASS_VERT = `
+      uniform float uTime;
+      varying float vT;
+      varying float vFog;
+      varying vec3 vTint;
+      void main() {
+        vT = position.y;
+        #ifdef USE_INSTANCING
+          vec4 wp = modelMatrix * instanceMatrix * vec4(position, 1.0);
+        #else
+          vec4 wp = modelMatrix * vec4(position, 1.0);
+        #endif
+        float ph = wp.x * 0.32 + wp.z * 0.27;
+        float sway = sin(uTime * 1.7 + ph) * 0.65 + sin(uTime * 3.1 + ph * 2.7) * 0.35;
+        float amp = vT * vT * 0.16;
+        wp.x += sway * amp;
+        wp.z += cos(uTime * 1.3 + ph * 1.4) * amp * 0.6;
+        vTint = vec3(1.0);
+        #ifdef USE_INSTANCING_COLOR
+          vTint = instanceColor;
+        #endif
+        vec4 mvPosition = viewMatrix * wp;
+        vFog = -mvPosition.z;
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `;
+
+    const GRASS_FRAG = `
+      uniform vec3 uBase;
+      uniform vec3 uTip;
+      uniform vec3 uFogColor;
+      uniform float uFogDensity;
+      varying float vT;
+      varying float vFog;
+      varying vec3 vTint;
+      void main() {
+        float k = pow(clamp(vT, 0.0, 1.0), 1.35);
+        vec3 col = mix(uBase, uTip, k) * vTint;
+        gl_FragColor = vec4(col, 1.0);
+        #include <tonemapping_fragment>
+        float f = 1.0 - exp(-uFogDensity * uFogDensity * vFog * vFog);
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, uFogColor, clamp(f, 0.0, 1.0));
+      }
+    `;
+
+    function createBladeGeometry() {
+      // 끝이 뾰족하고 앞으로 휘어진 풀잎 (폭 0.075, 높이 1)
+      const geo = new THREE.PlaneGeometry(0.075, 1, 1, 4);
+      geo.translate(0, 0.5, 0);
+      const p = geo.attributes.position;
+      for (let i = 0; i < p.count; i++) {
+        const t = p.getY(i);
+        p.setX(i, p.getX(i) * Math.pow(1 - t, 0.85));
+        p.setZ(i, t * t * 0.25);
+      }
+      return geo;
+    }
+
+    function scatterOnGrass(n, rMin, rMax) {
+      // 시설물·개울을 피해 지형 위 산포 좌표 생성
+      const pts = [];
+      let guard = n * 6;
+      while (pts.length < n && guard-- > 0) {
+        const a = Math.random() * Math.PI * 2;
+        const r = Math.sqrt(rMin * rMin + (rMax * rMax - rMin * rMin) * Math.random());
+        const x = Math.cos(a) * r;
+        const z = Math.sin(a) * r;
+        if (isInNoGrassZone(x, z)) continue;
+        pts.push([x, z]);
+      }
+      return pts;
+    }
+
+    function buildGrassField(parent) {
+      const grassMat = new THREE.ShaderMaterial({
+        vertexShader: GRASS_VERT,
+        fragmentShader: GRASS_FRAG,
+        uniforms: {
+          uTime: windTime,
+          uBase: { value: new THREE.Color(0x1f5416) },
+          uTip: { value: new THREE.Color(0x6fb23a) },
+          uFogColor: { value: new THREE.Color(BG_HORIZON) },
+          uFogDensity: { value: BG_FOG_D }
+        },
+        side: THREE.DoubleSide
+      });
+
+      const bladeGeo = createBladeGeometry();
+      const dummy = new THREE.Object3D();
+      const tint = new THREE.Color();
+
+      // [개수, 반경 min/max, 스케일 배율] — 근경 밀집 / 원경 큰 잎으로 커버
+      const tiers = [
+        [78000, 0, 45, 1.0],
+        [40000, 45, 115, 1.8]
+      ];
+      tiers.forEach(([count, rMin, rMax, sMul], ti) => {
+        const pts = scatterOnGrass(count, rMin, rMax);
+        const inst = new THREE.InstancedMesh(bladeGeo, grassMat, pts.length);
+        inst.userData = { type: 'grass-blade-inst' };
+        inst.frustumCulled = false;
+        for (let i = 0; i < pts.length; i++) {
+          const [x, z] = pts[i];
+          const y = Y0 + terrainHeight(x, z);
+          dummy.position.set(x, y - 0.02, z);
+          dummy.rotation.set(0, Math.random() * Math.PI * 2, (Math.random() - 0.5) * 0.4);
+          const h = (0.34 + Math.random() * 0.48) * sMul;
+          dummy.scale.set((0.75 + Math.random() * 0.6) * sMul, h, 1);
+          dummy.updateMatrix();
+          inst.setMatrixAt(i, dummy.matrix);
+          // 잎마다 미세 색 변주 (가끔 노란기 도는 잎)
+          const warm = Math.random() < 0.1 ? 0.14 : 0;
+          tint.setRGB(
+            0.72 + Math.random() * 0.26 + warm,
+            0.76 + Math.random() * 0.26,
+            0.7 + Math.random() * 0.22
+          );
+          inst.setColorAt(i, tint);
+        }
+        inst.instanceMatrix.needsUpdate = true;
+        if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+        if (ti === 0) {
+          inst.onBeforeRender = () => { windTime.value = performance.now() * 0.001; };
+        }
+        parent.add(inst);
+      });
+    }
+
+    function createFlowerGeometry(headSize) {
+      // 줄기 판 1장 + 교차 꽃잎 판 2장 병합 (non-indexed 수동 병합)
+      const parts = [];
+      const stem = new THREE.PlaneGeometry(0.042, 1, 1, 2);
+      stem.translate(0, 0.5, 0);
+      parts.push(stem.toNonIndexed());
+      const h1 = new THREE.PlaneGeometry(headSize, headSize);
+      h1.translate(0, 1.02 + headSize * 0.3, 0);
+      parts.push(h1.toNonIndexed());
+      const h2 = h1.clone();
+      h2.rotateY(Math.PI / 2);
+      parts.push(h2);
+      let total = 0;
+      parts.forEach(g => { total += g.attributes.position.count; });
+      const posArr = new Float32Array(total * 3);
+      let off = 0;
+      parts.forEach(g => {
+        posArr.set(g.attributes.position.array, off);
+        off += g.attributes.position.array.length;
+      });
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+      return geo;
+    }
+
+    const FLOWER_FRAG = `
+      uniform vec3 uStem;
+      uniform vec3 uFogColor;
+      uniform float uFogDensity;
+      varying float vT;
+      varying float vFog;
+      varying vec3 vTint;
+      void main() {
+        // 줄기(vT<1)는 진녹색, 꽃 머리(vT>=1)는 인스턴스 색
+        vec3 col = mix(uStem, vTint, step(0.98, vT));
+        gl_FragColor = vec4(col, 1.0);
+        #include <tonemapping_fragment>
+        float f = 1.0 - exp(-uFogDensity * uFogDensity * vFog * vFog);
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, uFogColor, clamp(f, 0.0, 1.0));
+      }
+    `;
+
+    function buildFlowerField(parent) {
+      const palettes = [
+        [0xffffff, 0xf2b8c6, 0xe8795a, 0x8fb8e8, 0xf5d76e], // 들꽃
+        [0xfdf6e8, 0xf0e6d2] // 씨앗 줄기 (밝은 이삭)
+      ];
+      const specs = [
+        { clusters: 80, per: 9, spread: 1.3, head: 0.2, hMin: 0.62, hMax: 1.0, pal: 0 },  // 들꽃 군락
+        { clusters: 55, per: 5, spread: 1.6, head: 0.09, hMin: 1.0, hMax: 1.55, pal: 1 }  // 이삭 줄기 군락
+      ];
+      const tint = new THREE.Color();
+      const dummy = new THREE.Object3D();
+      specs.forEach(spec => {
+        const mat = new THREE.ShaderMaterial({
+          vertexShader: GRASS_VERT,
+          fragmentShader: FLOWER_FRAG,
+          uniforms: {
+            uTime: windTime,
+            uStem: { value: new THREE.Color(0x275219) },
+            uFogColor: { value: new THREE.Color(BG_HORIZON) },
+            uFogDensity: { value: BG_FOG_D }
+          },
+          side: THREE.DoubleSide
+        });
+        const geo = createFlowerGeometry(spec.head);
+        // 군락 중심 산포 → 중심마다 같은 색 꽃 여러 송이 (색종이처럼 흩어져 보이지 않도록)
+        const centers = scatterOnGrass(spec.clusters, 0, 55);
+        const pal = palettes[spec.pal];
+        const pts = [];
+        centers.forEach(([cx, cz]) => {
+          const col = pal[Math.floor(Math.random() * pal.length)];
+          const n = Math.max(3, Math.round(spec.per * (0.6 + Math.random() * 0.8)));
+          for (let i = 0; i < n; i++) {
+            const a = Math.random() * Math.PI * 2;
+            const r = Math.random() * spec.spread;
+            const x = cx + Math.cos(a) * r;
+            const z = cz + Math.sin(a) * r;
+            if (isInNoGrassZone(x, z)) continue;
+            pts.push([x, z, col]);
+          }
+        });
+        const inst = new THREE.InstancedMesh(geo, mat, pts.length);
+        inst.userData = { type: 'flower-inst' };
+        inst.frustumCulled = false;
+        for (let i = 0; i < pts.length; i++) {
+          const [x, z, col] = pts[i];
+          dummy.position.set(x, Y0 + terrainHeight(x, z) - 0.02, z);
+          dummy.rotation.set(0, Math.random() * Math.PI * 2, (Math.random() - 0.5) * 0.16);
+          const h = spec.hMin + Math.random() * (spec.hMax - spec.hMin);
+          dummy.scale.set(1, h, 1);
+          dummy.updateMatrix();
+          inst.setMatrixAt(i, dummy.matrix);
+          tint.set(col);
+          inst.setColorAt(i, tint);
+        }
+        inst.instanceMatrix.needsUpdate = true;
+        if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+        parent.add(inst);
+      });
+    }
+
+    function buildStreamAndRocks(parent) {
+      const streamGrp = new THREE.Group();
+      streamGrp.name = 'natureStream';
+      streamGrp.userData = { type: 'nature-stream' };
+
+      // ── 곡선 리본 개울 (세그먼트 이음새 없이 연속) ──
+      const curve = new THREE.CatmullRomCurve3(
+        STREAM_PATH.map(([x, z]) => new THREE.Vector3(x, 0, z))
+      );
+      const SEG = 64;
+      const centers = curve.getSpacedPoints(SEG);
+      const normals = [];
+      for (let i = 0; i <= SEG; i++) {
+        const tan = curve.getTangentAt(i / SEG);
+        normals.push(new THREE.Vector3(-tan.z, 0, tan.x).normalize());
+      }
+
+      // width(t) 가변 폭 리본 + UV (V=흐름방향, U=폭)
+      function buildRibbon(halfW, y, wobbleSeed) {
+        const posArr = new Float32Array((SEG + 1) * 2 * 3);
+        const uvArr = new Float32Array((SEG + 1) * 2 * 2);
+        let dist = 0;
+        const dists = [0];
+        for (let i = 1; i <= SEG; i++) {
+          dist += centers[i].distanceTo(centers[i - 1]);
+          dists.push(dist);
+        }
+        const total = Math.max(0.001, dist);
+        for (let i = 0; i <= SEG; i++) {
+          const c = centers[i], n = normals[i];
+          const w = halfW * (0.85 + 0.3 * vertHash(i, wobbleSeed, 3, 0));
+          posArr.set([c.x - n.x * w, y, c.z - n.z * w], i * 6);
+          posArr.set([c.x + n.x * w, y, c.z + n.z * w], i * 6 + 3);
+          const v = dists[i] / total * 6.0; // 흐름 방향 타일
+          uvArr.set([0, v], i * 4);
+          uvArr.set([1, v], i * 4 + 2);
+        }
+        const idx = [];
+        for (let i = 0; i < SEG; i++) {
+          const a = i * 2, b = a + 1, c2 = a + 2, d = a + 3;
+          idx.push(a, b, c2, b, d, c2);
+        }
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+        geo.setAttribute('uv', new THREE.BufferAttribute(uvArr, 2));
+        geo.setIndex(idx);
+        geo.computeVertexNormals();
+        return geo;
+      }
+
+      const waterTime = { value: 0 };
+      const WATER_VERT = `
+        varying vec2 vUv;
+        varying float vFog;
+        void main() {
+          vUv = uv;
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          vFog = -mv.z;
+          gl_Position = projectionMatrix * mv;
+        }
+      `;
+      // 주기 패턴 없이 fBm 노이즈를 흐름 방향으로 이류(advection)시켜
+      // 실제 개울처럼 불규칙한 물살·포말·반짝임을 만든다.
+      const WATER_FRAG = `
+        uniform float uTime;
+        uniform vec3 uDeep;
+        uniform vec3 uShallow;
+        uniform vec3 uFoam;
+        uniform vec3 uFogColor;
+        uniform float uFogDensity;
+        uniform vec2 uRocks[9]; // 징검돌 (u, v) — 주위 포말 링
+        varying vec2 vUv;
+        varying float vFog;
+
+        float hash21(vec2 p) {
+          p = fract(p * vec2(123.34, 456.21));
+          p += dot(p, p + 45.32);
+          return fract(p.x * p.y);
+        }
+        float vnoise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          float a = hash21(i);
+          float b = hash21(i + vec2(1.0, 0.0));
+          float c = hash21(i + vec2(0.0, 1.0));
+          float d = hash21(i + vec2(1.0, 1.0));
+          return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+        }
+        float fbm(vec2 p) {
+          return vnoise(p) * 0.55 + vnoise(p * 2.17 + 11.3) * 0.28 + vnoise(p * 4.31 + 27.7) * 0.17;
+        }
+
+        void main() {
+          float u = vUv.x;            // 0(좌안)..1(우안)
+          float v = vUv.y * 9.0;      // 흐름 방향
+          float t = uTime;
+
+          // 물줄기 좌우 살랑임 — 흐름 무늬가 직선으로 미끄러지지 않게 왜곡
+          float sway = (fbm(vec2(u * 1.5, v * 0.22 - t * 0.28)) - 0.5) * 1.2;
+
+          // 속도가 다른 노이즈 3겹 (느린 큰 물결 / 중간 잔물결 / 빠른 미세 무늬)
+          float n1 = fbm(vec2(u * 2.6 + sway, v * 0.55 - t * 0.9));
+          float n2 = fbm(vec2(u * 4.2 - sway * 0.7, v * 1.1 - t * 1.6) + 31.7);
+          float n3 = vnoise(vec2(u * 9.0 + sway * 0.4, v * 2.6 - t * 2.6) + 7.3);
+
+          // 깊이 색 — 가장자리 얕고 중심 깊게, 노이즈로 일렁임
+          float edge = abs(u - 0.5) * 2.0;
+          float shallow = edge * edge * 0.7 + n1 * 0.5;
+          vec3 col = mix(uDeep, uShallow, clamp(shallow, 0.0, 1.0));
+          col *= 0.9 + n2 * 0.2;
+
+          // 징검돌 주위 포말 링 (물이 바위를 감싸며 흐르는 느낌)
+          float rockFoam = 0.0;
+          for (int i = 0; i < 9; i++) {
+            vec2 d = vec2((u - uRocks[i].x) * 2.3, (v - uRocks[i].y) * 1.1);
+            float dist = length(d) + (n3 - 0.5) * 0.25;
+            rockFoam += smoothstep(0.5, 0.18, dist) * 0.8;
+          }
+
+          // 가장자리 포말 — 노이즈로 불규칙하게 들쭉날쭉
+          float foamEdge = smoothstep(0.78, 1.0, edge + (n3 - 0.5) * 0.4);
+          // 물살 위 드문드문 흰 거품 조각
+          float foamStreak = smoothstep(0.83, 0.95, n2) * smoothstep(0.45, 0.8, n3) * 0.6;
+          float foam = clamp(foamEdge + foamStreak + rockFoam, 0.0, 1.0);
+          col = mix(col, uFoam, foam * 0.8);
+
+          // 햇빛 반짝임
+          float sparkle = smoothstep(0.93, 1.0, vnoise(vec2(u * 22.0, v * 5.0 - t * 3.4)));
+          col += sparkle * 0.35;
+
+          gl_FragColor = vec4(col, 0.88);
+          #include <tonemapping_fragment>
+          float f = 1.0 - exp(-uFogDensity * uFogDensity * vFog * vFog);
+          gl_FragColor.rgb = mix(gl_FragColor.rgb, uFogColor, clamp(f, 0.0, 1.0));
+        }
+      `;
+
+      // 모래 바닥
+      const sandMesh = new THREE.Mesh(buildRibbon(1.55, Y0 + 0.035, 5),
+        new THREE.MeshBasicMaterial({ color: 0x9d8f74 }));
+      sandMesh.userData = { type: 'stream-bed' };
+      streamGrp.add(sandMesh);
+
+      // 징검돌 (u,v) — 배치 시 채워짐. 셰이더 v스케일(vUv.y*9, vUv.y=t*6)에 맞춤
+      const rockUVs = [];
+      for (let i = 0; i < 9; i++) rockUVs.push(new THREE.Vector2(-10, -10));
+
+      const waterMat = new THREE.ShaderMaterial({
+        vertexShader: WATER_VERT,
+        fragmentShader: WATER_FRAG,
+        uniforms: {
+          uTime: waterTime,
+          uDeep: { value: new THREE.Color(0x1e5a82) },
+          uShallow: { value: new THREE.Color(0x6eb8e0) },
+          uFoam: { value: new THREE.Color(0xe8f4fa) },
+          uRocks: { value: rockUVs },
+          uFogColor: { value: new THREE.Color(BG_HORIZON) },
+          uFogDensity: { value: BG_FOG_D }
+        },
+        transparent: true,
+        depthWrite: false
+      });
+      const waterMesh = new THREE.Mesh(buildRibbon(1.15, Y0 + 0.062, 11), waterMat);
+      waterMesh.userData = { type: 'stream-water' };
+      waterMesh.onBeforeRender = () => { waterTime.value = performance.now() * 0.001; };
+      streamGrp.add(waterMesh);
+
+      // ── 로우폴리 바위 — 물가 양옆 + 물속 징검돌 ──
+      const rockMat = stylizedMat();
+      const rockGeos = [0x9aa4ab, 0x7e8890, 0xb4bcc2].map((col, gi) => {
+        const g = new THREE.DodecahedronGeometry(1, 0).toNonIndexed();
+        const p = g.attributes.position;
+        const cols = new Float32Array(p.count * 3);
+        const base = new THREE.Color(col);
+        for (let i = 0; i < p.count; i++) {
+          const j = 0.92 + vertHash(p.getX(i), p.getY(i), p.getZ(i), gi) * 0.16;
+          cols[i * 3] = base.r * j; cols[i * 3 + 1] = base.g * j; cols[i * 3 + 2] = base.b * j;
+        }
+        g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+        g.computeVertexNormals();
+        return g;
+      });
+
+      function placeRock(x, z, s, gi, sink) {
+        const rock = new THREE.Mesh(rockGeos[gi], rockMat);
+        rock.position.set(x, Y0 + s * (0.55 - sink), z);
+        rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+        rock.scale.set(s, s * (0.6 + Math.random() * 0.3), s * (0.8 + Math.random() * 0.35));
+        rock.userData = { type: 'stream-rock' };
+        streamGrp.add(rock);
+      }
+
+      // 물가 양옆 바위 (군데군데 2~3개씩 뭉침)
+      for (let i = 0; i < 26; i++) {
+        const t = (i + 0.5) / 26;
+        const c = curve.getPointAt(t);
+        const n = normals[Math.round(t * SEG)];
+        const side = i % 2 === 0 ? 1 : -1;
+        const cnt = Math.random() < 0.4 ? 2 : 1;
+        for (let k = 0; k < cnt; k++) {
+          const off = 1.25 + Math.random() * 0.7 + k * 0.45;
+          placeRock(
+            c.x + n.x * off * side + (Math.random() - 0.5) * 0.3,
+            c.z + n.z * off * side + (Math.random() - 0.5) * 0.3,
+            0.16 + Math.random() * 0.3, i % 2, 0.25
+          );
+        }
+      }
+      // 물속 징검돌 (밝은 색, 반쯤 잠김) — 위치를 물 셰이더에 전달해 주위 포말 생성
+      for (let i = 0; i < 9; i++) {
+        const t = (i + Math.random() * 0.6) / 9;
+        const c = curve.getPointAt(t);
+        const n = normals[Math.round(t * SEG)];
+        const off = (Math.random() - 0.5) * 0.9;
+        placeRock(c.x + n.x * off, c.z + n.z * off, 0.14 + Math.random() * 0.18, 2, 0.45);
+        rockUVs[i].set(0.5 + off / 2.3, t * 54.0);
+      }
+
+      parent.add(streamGrp);
     }
 
     function buildOutdoorGround(parent) {
@@ -391,18 +1384,23 @@
 
       const span = 280;
       createBox(span, 0.25, span, M.conc(0x3d3a36), 0, Y0 - 0.125, 0, g);
-      createBox(span, 0.05, span, M.paint(0x3c4147), 0, Y0 + 0.025, 0, g);
 
-      buildGrassPatch(g, -58, 0, 95, span * 0.88);
-      buildGrassPatch(g, 58, 0, 95, span * 0.88);
-      buildGrassPatch(g, 0, -55, span * 0.55, 45);
+      // 구릉 지형 + 풀밭 + 들꽃 (스타일라이즈드 자연 배경)
+      buildTerrain(g);
+      buildGrassField(g);
+      buildFlowerField(g);
 
-      createBox(S.SHAFT_W + S.WALL_T * 2 + 2.4, 0.03, 3.2, M.ss(0x787c82), 0, Y0 + 0.04, S.SHAFT_D / 2 + 2.2, g);
+      buildStreamAndRocks(g);
+
+      // 승강로 전면 포장 — 보도블록
+      createBox(S.SHAFT_W + S.WALL_T * 2 + 2.4, 0.03, 3.2, makePaverMaterial(5.2, 3.2), 0, Y0 + 0.04, S.SHAFT_D / 2 + 2.2, g);
 
       parent.add(g);
     }
 
     function buildBackground() {
+      applyStylizedSky();
+
       if (typeof USE_PHOTO_BG_PREVIEW !== 'undefined' && USE_PHOTO_BG_PREVIEW) {
         scene.background = new THREE.Color(BG_SKY);
         scene.fog = new THREE.FogExp2(BG_SKY, 0.005);
@@ -417,6 +1415,7 @@
       bg3dGrp.name = 'bg3d';
       if (!(typeof USE_PHOTO_BG_PREVIEW !== 'undefined' && USE_PHOTO_BG_PREVIEW)) {
         buildMountainRange(bg3dGrp);
+        buildSoftClouds(bg3dGrp);
       }
       buildKoelsaTowerCampus(bg3dGrp);
       buildKoelsaHQ(bg3dGrp);
@@ -432,11 +1431,15 @@
     function buildFrontWallAndLobby() {
       if (wallGrp) scene.remove(wallGrp);
       wallGrp = new THREE.Group();
-      const wallMat = M.conc(0x787d82);
+      // 이탈리아 팔라초 팔레트: 트라버틴 석재 + 테라코타 밴드 + 딥 올리브 문틀 (형태는 기존 유지, 색만)
+      const wallMat = M.conc(0xb8956a);
+      const terracottaMat = M.paint(0xa95032);
+      const oliveMat = M.paint(0x3f4a36);
       const wallZ = FRONT_INNER_Z + S.WALL_T / 2;
       const doorHoleW = S.DOOR_W + 0.1;
       const totalWallW = S.SHAFT_W + S.WALL_T * 2;
       const sideW = (totalWallW - doorHoleW) / 2;
+      const facadeZ = wallZ + S.WALL_T / 2 + 0.012;
 
       for (let i = 0; i < FLOORS; i++) {
         const fy = FLOOR_Y[i];
@@ -451,16 +1454,26 @@
         const topH = fh - transomTopY;
         createBox(doorHoleW, topH, S.WALL_T, wallMat, 0, fy + transomTopY + topH / 2, wallZ, wallGrp);
 
+        // 팔라초식 출입구 프레임 — 딥 올리브 세로선과 테라코타 상인방
+        const portalX = doorHoleW / 2 + 0.045;
+        createBox(0.09, 2.56, 0.025, oliveMat, -portalX, fy + 1.28, facadeZ, wallGrp);
+        createBox(0.09, 2.56, 0.025, oliveMat,  portalX, fy + 1.28, facadeZ, wallGrp);
+        createBox(doorHoleW + 0.18, 0.10, 0.028, terracottaMat, 0, fy + 2.56, facadeZ + 0.002, wallGrp);
+
+        // 층별 수평 코니스 — 단조로운 흰 수직면을 분절하는 따뜻한 테라코타 띠
+        createBox(totalWallW + 0.08, 0.11, 0.035, terracottaMat,
+          0, fy + fh - 0.055, facadeZ + 0.004, wallGrp);
+
         // 로비 대리석 바닥 (전면벽 이동에 맞춰 깊이 보정, 외부 끝 위치 유지)
         const lobbyDepth = 1.5 + (S.SHAFT_D / 2 - FRONT_INNER_Z);
-        createBox(totalWallW, 0.12, lobbyDepth, M.ss(0x686e74), 0, fy - 0.06, wallZ + S.WALL_T / 2 + lobbyDepth / 2, wallGrp);
+        createBox(totalWallW, 0.12, lobbyDepth, M.ss(0x8b7962), 0, fy - 0.06, wallZ + S.WALL_T / 2 + lobbyDepth / 2, wallGrp);
 
         // 천장 Y 좌표 (해당 층 바닥 + 층고)
         const ceilingY = fy + fh;
 
         // 4층(최상층) 천장 캐노피 슬래브 추가
         if (i === FLOORS - 1) {
-          createBox(totalWallW, 0.12, lobbyDepth, M.conc(0xaeb3b9), 0, ceilingY + 0.06, wallZ + S.WALL_T / 2 + lobbyDepth / 2, wallGrp);
+          createBox(totalWallW, 0.12, lobbyDepth, M.conc(0xb9a783), 0, ceilingY + 0.06, wallZ + S.WALL_T / 2 + lobbyDepth / 2, wallGrp);
         }
 
         // 전 층 승강장 앞 LED 다운라이트 (천장에 부착)
@@ -503,9 +1516,11 @@
       );
       logoTex.encoding = THREE.sRGBEncoding;
       const logoMat = new THREE.MeshBasicMaterial({ map: logoTex, transparent: true, side: THREE.DoubleSide });
-      const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.76, 8.8), logoMat);
+      // 폭 1.5배 확장 후 좌측벽 중심에 맞춤, 크기 20% 상향 (원본 1.76×8.8)
+      const signW = 1.76 * 1.2, signH = 8.8 * 1.2;
+      const sign = new THREE.Mesh(new THREE.PlaneGeometry(signW, signH), logoMat);
       sign.rotation.y = -Math.PI / 2;
-      sign.position.set(sideWallX - 0.15, Y0 + 7.8, S.WALL_T / 2);
+      sign.position.set(sideWallX - 0.15, Y0 + 7.8 * 1.3, sideWallCZ);
       sign.userData = { type: 'branch-logo' };
       scene.add(sign);
 
@@ -773,28 +1788,33 @@
       // 좌측 벽면(-(S.SHAFT_W/2))에 붙임. 전면부 방향으로 이동(0.8m)
       const panelX = -(S.SHAFT_W / 2) + 0.15; 
       const panelZ = 0.8; // 전면부(앞벽 쪽)
+      const panelGrp = new THREE.Group();
+      panelGrp.position.set(panelX, my, panelZ);
       
       // 하부 받침대 (Plinth)
-      createBox(0.3, 0.1, 0.6, baseMat, panelX, my + 0.06, panelZ, mrGrp);
+      createBox(0.3, 0.1, 0.6, baseMat, 0, 0.06, 0, panelGrp);
       // 메인 캐비닛 본체
-      createBox(0.3, 1.3, 0.6, cpMat, panelX, my + 0.76, panelZ, mrGrp);
+      createBox(0.3, 1.3, 0.6, cpMat, 0, 0.76, 0, panelGrp);
       // 상단 환기 박스
-      createBox(0.25, 0.2, 0.55, topMat, panelX, my + 1.51, panelZ, mrGrp);
+      createBox(0.25, 0.2, 0.55, topMat, 0, 1.51, 0, panelGrp);
       // 상단 환기구 슬릿(Slit) 디테일
       for (let i = 0; i < 4; i++) {
-        createBox(0.01, 0.02, 0.4, M.paint(0x111111), panelX + 0.125, my + 1.45 + i * 0.04, panelZ, mrGrp);
+        createBox(0.01, 0.02, 0.4, M.paint(0x111111), 0.125, 1.45 + i * 0.04, 0, panelGrp);
       }
 
       // 양개형 문 (+X 즉 중앙을 바라보게)
-      createBox(0.02, 1.25, 0.28, doorMat, panelX + 0.16, my + 0.76, panelZ - 0.145, mrGrp); // 좌측 문
-      createBox(0.02, 1.25, 0.28, doorMat, panelX + 0.16, my + 0.76, panelZ + 0.145, mrGrp); // 우측 문
+      createBox(0.02, 1.25, 0.28, doorMat, 0.16, 0.76, -0.145, panelGrp); // 좌측 문
+      createBox(0.02, 1.25, 0.28, doorMat, 0.16, 0.76,  0.145, panelGrp); // 우측 문
       // 손잡이
-      createBox(0.02, 0.1, 0.01, M.paint(0x111111), panelX + 0.17, my + 0.76, panelZ - 0.02, mrGrp);
-      createBox(0.02, 0.1, 0.01, M.paint(0x111111), panelX + 0.17, my + 0.76, panelZ + 0.02, mrGrp);
+      createBox(0.02, 0.1, 0.01, M.paint(0x111111), 0.17, 0.76, -0.02, panelGrp);
+      createBox(0.02, 0.1, 0.01, M.paint(0x111111), 0.17, 0.76,  0.02, panelGrp);
+
+      panelGrp.scale.setScalar(1.5);
+      mrGrp.add(panelGrp);
 
       // 제어반 덕트 (하부 빔 쪽으로 다시 연결)
       const ductMat = M.paint(0x9ca3af);
-      const ductL = Math.abs(-0.4 - (panelX + 0.15)); // 하부빔 시작점(-0.4)까지
+      const ductL = Math.abs(-0.6 - (panelX + 0.15)); // 하부빔 시작점(-0.6)까지
       createBox(ductL, 0.1, 0.3, ductMat, panelX + 0.15 + ductL / 2, my + 0.06, 0.45, mrGrp);
 
       /* ══════════════════════════════════════════════════════════════
@@ -805,18 +1825,18 @@
       const beamWH = 0.18, beamFW = 0.15, beamTk = 0.014;
       const lowerY  = my + 0.09;
       const lowerZc = -0.10;
-      const lowerL  = 2.05;
+      const lowerL  = S.SHAFT_W - 0.28;
 
-      // 주 I-빔 2개 (X=±0.4, Z축 방향)
-      [-0.4, 0.4].forEach(bx => {
+      // 주 I-빔 2개 (X=±0.6, Z축 방향)
+      [-0.6, 0.6].forEach(bx => {
         createBox(beamTk, beamWH - beamTk * 2, lowerL, beamMat, bx, lowerY, lowerZc, mrGrp);
         createBox(beamFW, beamTk, lowerL, beamMat, bx, lowerY + (beamWH - beamTk) / 2, lowerZc, mrGrp);
         createBox(beamFW, beamTk, lowerL, beamMat, bx, lowerY - (beamWH - beamTk) / 2, lowerZc, mrGrp);
       });
 
       // 써포트 빔 (Support Beam) 2개 - X축 방향 가로 I-빔
-      [0.84, -0.92].forEach(sz => {
-        const sLen = 0.96;
+      [1.26, -1.38].forEach(sz => {
+        const sLen = 1.44;
         createBox(sLen, beamWH - beamTk * 2, beamTk, beamMat, 0, lowerY, sz, mrGrp);
         createBox(sLen, beamTk, beamFW, beamMat, 0, lowerY + (beamWH - beamTk) / 2, sz, mrGrp);
         createBox(sLen, beamTk, beamFW, beamMat, 0, lowerY - (beamWH - beamTk) / 2, sz, mrGrp);
@@ -824,7 +1844,7 @@
 
       // 써포트 앵글 (Support Angle) - ㄱ형강 코너 보강 4개소
       const angleMat = M.paint(0x2c3e50);
-      [[-0.4, 0.84], [-0.4, -0.92], [0.4, 0.84], [0.4, -0.92]].forEach(([ax, az]) => {
+      [[-0.6, 1.26], [-0.6, -1.38], [0.6, 1.26], [0.6, -1.38]].forEach(([ax, az]) => {
         createBox(0.016, 0.14, 0.07, angleMat, ax, lowerY + 0.05, az, mrGrp);
         createBox(0.07, 0.016, 0.07, angleMat, ax, lowerY + 0.09, az, mrGrp);
       });
@@ -837,7 +1857,7 @@
       const padStkMat = M.ss(0xd0d0d0);
       const padBaseY  = lowerY + (beamWH - beamTk) / 2 + beamTk;
       const padH      = 0.065;
-      const pxs = [-0.4, 0.4], pzs = [-0.78, 0.38];
+      const pxs = [-0.6, 0.6], pzs = [-1.17, 0.57];
 
       pxs.forEach(x => {
         pzs.forEach(z => {
@@ -864,8 +1884,8 @@
       const bedMat = M.paint(0x4a5a6a);
       const bedY   = padTopY + 0.004;
       const bedFH  = 0.11, bedFW = 0.09, bedFT = 0.013;
-      const bedX1 = -0.44, bedX2 = 0.44;
-      const bedZ1 =  0.38, bedZ2 = -0.93;
+      const bedX1 = -0.66, bedX2 = 0.66;
+      const bedZ1 =  0.57, bedZ2 = -1.395;
       const bedXC = (bedX1 + bedX2) / 2;
       const bedZC = (bedZ1 + bedZ2) / 2;
       const bedXL = bedX2 - bedX1;
@@ -886,7 +1906,7 @@
       });
 
       // 중간 내부 보강재 2개
-      [-0.28, 0.08].forEach(bz => {
+      [-0.42, 0.12].forEach(bz => {
         createBox(bedXL - 0.10, 0.07, bedFT, bedMat, bedXC, bedY + 0.035, bz, mrGrp);
       });
 
@@ -911,7 +1931,7 @@
       defGrp.add(defDrum);
 
       for (let i = 0; i < 5; i++) {
-        const gx = -0.04 + i * 0.02;
+        const gx = -0.06 + i * 0.03;
         const defGrv = new THREE.Mesh(
           new THREE.TorusGeometry(defRadius + 0.002, 0.006, 10, 36), M.paint(0x111111));
         defGrv.position.set(0, 0, gx);
@@ -966,7 +1986,8 @@
       const tmAxisY    = bedTopY + 0.30;
       const tmShvX     = 0.24;
       const tmCenterZ  = -0.20;
-      tmGrp.position.set(-tmShvX, tmAxisY, tmCenterZ);
+      tmGrp.position.set(-tmShvX * 1.5, tmAxisY, tmCenterZ);
+      tmGrp.scale.setScalar(1.5);
       const tmBaseY    = bedTopY - tmAxisY;
       const tmPlateY   = tmBaseY + 0.045;
 
@@ -1424,11 +2445,12 @@
       // 소장님 지시: 카 가이드 레일과 완벽히 수직선상에 오도록 정렬 & 높이는 절반
       const govStandMat = M.paint(0x1c2833); // 하부 빔과 동일한 짙은 남색 철골
       const govX = GOV_TENS_X; // 피트 인장추·가이드 브라켓과 동일 축 (레일에서 외측 이격)
-      const govZ = 0.22; // 피트 인장추 tensBaseZ와 동일 — 조속기 로프 Z 정렬
+      const govZ = GOV_TENS_Z; // 피트 인장추 tensBaseZ와 동일 — 조속기 로프 Z 정렬 (카 후면측 배치)
       const govY = my; // 기계실 바닥면
       
       const govGrp = new THREE.Group();
       govGrp.position.set(govX, govY + 0.05, govZ);
+      govGrp.scale.setScalar(1.5);
       
       // 하판 (Bottom Plate) — 두꺼운 네이비 판
       createBox(0.16, 0.035, 0.50, govStandMat, 0, 0.018, 0, govGrp);
@@ -1460,73 +2482,105 @@
       
       mrGrp.add(govGrp);
 
-      /* 7. 조속기 본체 (Overspeed Governor) */
-      // 소장님 지시: 올려주신 이미지 그대로 반듯하게 얹기 (Z축 정렬)
-      const govYBase = pHeight + 0.04; // 조속기 받침대 상판(0.02) 위
-      // 핵심: 시뮬레이터 뷰포인트(우측 앞에서 바라봄) 기준으로
-      // 조속기 휠 면(바퀴 정면)이 보이려면 휠 축이 Z방향(앞뒤)이어야 함
+      /* 7. 조속기 본체 (Overspeed Governor) — KR100839584B1 + Part design 11~17p
+         커버 미장착(내부 기구 노출). 정적 대기 포즈. 트립 애니 없음.
+         부품 매핑:
+           100/110 베이스·U프레임 | 130 시브(림·홈·스포크) | 140 원심추×2
+           150/160 롤러·연동링크 | 170 라체트 | 180/182 작동암+스프링
+           190/192 과속스위치 (16~17p) | 커버=보류
+         유지: gR·GOV_TENS 축·governorWheelGrp·받침대 */
+      const govYBase = pHeight + 0.04;
       const govBodyGrp = new THREE.Group();
       govBodyGrp.position.set(0, govYBase, 0);
-      govBodyGrp.rotation.y = Math.PI / 2; // 소장님 지시: 180도 추가 회전
+      govBodyGrp.rotation.y = Math.PI / 2;
 
-      // 실물 사진 기준 재설계 — 청색 U프레임 + 노란 휠 + 회색 캐치레버 + 우측 압축스프링
       const govBaseMat = M.paint(0x6f7780);
       const govFrmMat  = M.paint(0x2f78bd);
       const govFrmDark = M.paint(0x1f5b96);
-      const govSwMat   = M.paint(0x22272d);
       const silverMat  = M.ss(0xb6bcc4);
       const leverMat   = M.ss(0x9fa7b0);
       const springMat  = M.ss(0xc6ccd3);
       const goldBolt   = M.paint(0xd8c818);
-      const darkMat2   = M.paint(0x111111);
+      const weightMat  = M.paint(0x8a9098);
+      const ratchetMat = M.paint(0x5a6068);
 
-      // 휠 기준 치수 (조속기 로프 정렬 유지: 홈 반경 ≈ 0.15)
+      // 휠 홈 반경 — 피트 로프 ±0.15 / 스탠드 홀과 정렬 유지
       const gR = 0.145;
       const gWX = -0.010;
       const gWY = 0.225;
       const frontZ = 0.065;
 
-      // ─── 7-1. 낮고 두꺼운 베이스 + 청색 전면 케이스 ───
-      createBox(0.46, 0.040, 0.19, govBaseMat, 0, 0.020, 0, govBodyGrp);
-      createBox(0.42, 0.026, 0.17, govBaseMat, 0, 0.055, 0, govBodyGrp);
-      createBox(0.42, 0.092, 0.020, govFrmMat, 0, 0.110, frontZ, govBodyGrp);
-      createBox(0.035, 0.155, 0.048, govFrmDark, -0.190, 0.150, frontZ + 0.009, govBodyGrp);
-      createBox(0.035, 0.135, 0.030, govFrmDark, 0.190, 0.140, frontZ, govBodyGrp);
-      createBox(0.34, 0.018, 0.020, govFrmDark, 0.000, 0.165, frontZ, govBodyGrp);
-      createBox(0.36, 0.018, 0.080, govFrmDark, 0, 0.078, 0.010, govBodyGrp);
-      [[-0.178, 0.105], [0.178, 0.106], [0.190, 0.220]].forEach(([bx, by]) => {
-        createCylinder(0.010, 0.010, 0.018, silverMat, bx, by, frontZ + 0.014, govBodyGrp).rotation.x = Math.PI / 2;
+      // ─── 100/110 베이스 + 청색 U프레임 ───
+      createBox(0.48, 0.038, 0.20, govBaseMat, 0, 0.019, 0, govBodyGrp);
+      createBox(0.44, 0.024, 0.18, govBaseMat, 0, 0.052, 0, govBodyGrp);
+      createBox(0.44, 0.088, 0.022, govFrmMat, 0, 0.108, frontZ, govBodyGrp);
+      createBox(0.038, 0.175, 0.052, govFrmDark, -0.195, 0.155, frontZ + 0.008, govBodyGrp);
+      createBox(0.038, 0.155, 0.034, govFrmDark,  0.195, 0.145, frontZ, govBodyGrp);
+      createBox(0.36, 0.016, 0.022, govFrmDark, 0, 0.168, frontZ, govBodyGrp);
+      createBox(0.38, 0.016, 0.085, govFrmDark, 0, 0.076, 0.012, govBodyGrp);
+      // 후면 지지판(220)
+      createBox(0.40, 0.20, 0.012, govFrmDark, 0, 0.160, -0.055, govBodyGrp);
+      [[-0.185, 0.100], [0.185, 0.102], [0.195, 0.225]].forEach(([bx, by]) => {
+        createCylinder(0.010, 0.010, 0.018, silverMat, bx, by, frontZ + 0.016, govBodyGrp).rotation.x = Math.PI / 2;
       });
 
-      // ─── 7-2. 노란 조속기 도르래 (두꺼운 림 + 5스포크) ───
+      // ─── 130 시브 + 140/150/160/170 (휠과 함께 회전) ───
       const govWheelSpinGrp = new THREE.Group();
       govWheelSpinGrp.position.set(gWX, gWY, 0);
       govBodyGrp.add(govWheelSpinGrp);
       governorWheelGrp = govWheelSpinGrp;
 
-      const rim = new THREE.Mesh(new THREE.TorusGeometry(gR, 0.026, 14, 52), M.gold());
-      govWheelSpinGrp.add(rim);
-      const innerRim = new THREE.Mesh(new THREE.TorusGeometry(gR - 0.030, 0.008, 10, 52), M.gold());
-      govWheelSpinGrp.add(innerRim);
-      const groove = new THREE.Mesh(new THREE.TorusGeometry(gR + 0.012, 0.004, 8, 52), M.paint(0x2c2c2c));
-      govWheelSpinGrp.add(groove);
+      govWheelSpinGrp.add(new THREE.Mesh(new THREE.TorusGeometry(gR, 0.028, 14, 52), M.gold()));
+      govWheelSpinGrp.add(new THREE.Mesh(new THREE.TorusGeometry(gR - 0.032, 0.009, 10, 52), M.gold()));
+      govWheelSpinGrp.add(new THREE.Mesh(new THREE.TorusGeometry(gR + 0.014, 0.005, 8, 52), M.paint(0x2c2c2c)));
       for (let i = 0; i < 5; i++) {
         const ang = i * Math.PI * 2 / 5 + 0.18;
-        const spoke = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, gR - 0.035, 8), M.gold());
-        spoke.position.set(Math.cos(ang) * (gR - 0.035) / 2, Math.sin(ang) * (gR - 0.035) / 2, 0);
+        const spoke = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, gR - 0.038, 8), M.gold());
+        spoke.position.set(Math.cos(ang) * (gR - 0.038) / 2, Math.sin(ang) * (gR - 0.038) / 2, 0);
         spoke.rotation.z = ang + Math.PI / 2;
         govWheelSpinGrp.add(spoke);
       }
-      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.038, 0.048, 18), M.gold());
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.040, 0.040, 0.050, 18), M.gold());
       hub.rotation.x = Math.PI / 2;
       govWheelSpinGrp.add(hub);
-      // 1.3배 과속 시 진자(140)가 벌어지며 그 끝의 볼트(141)가 스위치 레버(192)를 친다.
-      createBox(0.040, 0.010, 0.010, leverMat, -0.094, 0, frontZ + 0.034, govWheelSpinGrp);
-      const govTripBolt = createCylinder(0.007, 0.007, 0.024, goldBolt, -0.118, 0, frontZ + 0.038, govWheelSpinGrp);
-      govTripBolt.rotation.x = Math.PI / 2;
 
-      // 중심 보스 + 볼트 패턴
-      createCylinder(0.043, 0.043, 0.022, govFrmMat, gWX, gWY, frontZ + 0.010, govBodyGrp).rotation.x = Math.PI / 2;
+      // 170 라체트 — 중심 톱니 디스크
+      const ratchet = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.014, 16), ratchetMat);
+      ratchet.rotation.x = Math.PI / 2;
+      ratchet.position.set(0, 0, 0.028);
+      govWheelSpinGrp.add(ratchet);
+      for (let i = 0; i < 12; i++) {
+        const ta = i * Math.PI * 2 / 12;
+        const tooth = createBox(0.012, 0.018, 0.010, ratchetMat,
+          Math.cos(ta) * 0.058, Math.sin(ta) * 0.058, 0.028, govWheelSpinGrp);
+        tooth.rotation.z = ta;
+      }
+
+      // 140 원심추 ×2 — 대기 포즈. 1.3배 과속 시 볼트(141)→스위치(192) (애니 없음)
+      function addCentrifugalWeight(ang0, side) {
+        const wGrp = new THREE.Group();
+        wGrp.rotation.z = ang0;
+        createBox(0.055, 0.028, 0.022, weightMat, 0.070, 0.008 * side, 0.018, wGrp);
+        createBox(0.040, 0.022, 0.018, weightMat, 0.095, 0.022 * side, 0.018, wGrp);
+        createCylinder(0.006, 0.006, 0.028, silverMat, 0.042, 0, 0.018, wGrp).rotation.x = Math.PI / 2;
+        createCylinder(0.008, 0.008, 0.012, silverMat, 0.088, 0.030 * side, 0.030, wGrp).rotation.x = Math.PI / 2;
+        if (side < 0) {
+          createBox(0.035, 0.010, 0.010, leverMat, 0.108, -0.012, 0.036, wGrp);
+          const tripBolt = createCylinder(0.007, 0.007, 0.022, goldBolt, 0.128, -0.012, 0.040, wGrp);
+          tripBolt.rotation.x = Math.PI / 2;
+        }
+        govWheelSpinGrp.add(wGrp);
+      }
+      addCentrifugalWeight(Math.PI * 0.15, -1);
+      addCentrifugalWeight(Math.PI * 0.15 + Math.PI, 1);
+
+      // 160 연동 링크
+      createBox(0.090, 0.008, 0.008, leverMat, 0.020, 0.055, 0.022, govWheelSpinGrp);
+      createBox(0.090, 0.008, 0.008, leverMat, -0.020, -0.055, 0.022, govWheelSpinGrp);
+      createCylinder(0.005, 0.005, 0.014, silverMat, 0.055, 0.055, 0.022, govWheelSpinGrp).rotation.x = Math.PI / 2;
+      createCylinder(0.005, 0.005, 0.014, silverMat, -0.055, -0.055, 0.022, govWheelSpinGrp).rotation.x = Math.PI / 2;
+
+      createCylinder(0.045, 0.045, 0.022, govFrmMat, gWX, gWY, frontZ + 0.010, govBodyGrp).rotation.x = Math.PI / 2;
       createCylinder(0.022, 0.022, 0.032, M.gold(), gWX, gWY, frontZ + 0.026, govBodyGrp).rotation.x = Math.PI / 2;
       for (let i = 0; i < 5; i++) {
         const ba = i * Math.PI * 2 / 5 + 0.30;
@@ -1534,38 +2588,36 @@
           gWX + Math.cos(ba) * 0.032, gWY + Math.sin(ba) * 0.032, frontZ + 0.035, govBodyGrp).rotation.x = Math.PI / 2;
       }
 
-      // ─── 7-3. 좌측 과속 스위치 — SANJIN 실물(접힌 상태) ───
-      // 회색 납작 하우징 + 하단 실버 L브래킷 + 접힌 V형 납작 액추에이터(바늘/롤러 없음)
+      // ─── 190/192 과속 스위치 (Part design 16~17p) ───
       const swCaseMat = M.paint(0x565c63);
       const swGrp = new THREE.Group();
-      swGrp.position.set(-0.1725, gWY - 0.006, frontZ + 0.014);
+      swGrp.position.set(-0.175, gWY - 0.004, frontZ + 0.016);
+      swGrp.name = 'govOverspeedSwitch';
       govBodyGrp.add(swGrp);
-      // 회색 하우징 — 좌측(-X) 프레임 접합, +X 방향으로 확장해 스위치와 연결
-      createBox(0.048, 0.072, 0.050, swCaseMat, 0.024, 0.004, 0, swGrp);
-      createBox(0.048, 0.012, 0.012, swCaseMat, 0.024, 0.042, 0.020, swGrp);
-      createBox(0.004, 0.008, 0.008, M.paint(0xc8a020), 0.024, 0.030, -0.018, swGrp);
-      // 하단 실버 장착 브래킷(L형 채널)
-      createBox(0.004, 0.005, 0.044, silverMat, 0.026, -0.038, 0, swGrp);
-      createBox(0.004, 0.018, 0.005, silverMat, 0.026, -0.030, -0.022, swGrp);
-      createBox(0.004, 0.018, 0.005, silverMat, 0.026, -0.030, 0.022, swGrp);
-      // 접힌 V형 액추에이터 — 아래(피벗)쪽 넓은 납작 판 2장
-      const swFoldL = createBox(0.003, 0.026, 0.018, silverMat, 0.026, -0.034, 0.006, swGrp);
-      swFoldL.rotation.x = -0.62;
-      const swFoldR = createBox(0.003, 0.026, 0.018, silverMat, 0.026, -0.034, -0.006, swGrp);
-      swFoldR.rotation.x = 0.62;
-      // 볼트
-      createCylinder(0.004, 0.004, 0.006, silverMat, 0.026, -0.028, 0.014, swGrp).rotation.x = Math.PI / 2;
-      createCylinder(0.004, 0.004, 0.006, silverMat, 0.026, -0.028, -0.014, swGrp).rotation.x = Math.PI / 2;
+      createBox(0.052, 0.078, 0.054, swCaseMat, 0.026, 0.006, 0, swGrp);
+      createBox(0.052, 0.014, 0.014, swCaseMat, 0.026, 0.048, 0.022, swGrp);
+      [-0.014, 0, 0.014].forEach(pz => {
+        createCylinder(0.006, 0.006, 0.006, M.paint(0x22272d), 0.052, 0.010, pz, swGrp).rotation.z = Math.PI / 2;
+      });
+      createBox(0.005, 0.010, 0.010, M.paint(0xc8a020), 0.026, 0.034, -0.020, swGrp);
+      createBox(0.005, 0.006, 0.048, silverMat, 0.028, -0.040, 0, swGrp);
+      createBox(0.005, 0.020, 0.006, silverMat, 0.028, -0.032, -0.024, swGrp);
+      createBox(0.005, 0.020, 0.006, silverMat, 0.028, -0.032, 0.024, swGrp);
+      const swFoldL = createBox(0.003, 0.028, 0.020, silverMat, 0.028, -0.036, 0.007, swGrp);
+      swFoldL.rotation.x = -0.58;
+      const swFoldR = createBox(0.003, 0.028, 0.020, silverMat, 0.028, -0.036, -0.007, swGrp);
+      swFoldR.rotation.x = 0.58;
+      createCylinder(0.004, 0.004, 0.006, silverMat, 0.028, -0.028, 0.015, swGrp).rotation.x = Math.PI / 2;
+      createCylinder(0.004, 0.004, 0.006, silverMat, 0.028, -0.028, -0.015, swGrp).rotation.x = Math.PI / 2;
 
-      // ─── 7-4. 중앙 피벗 캐치 레버 + 우측 압축스프링 ───
-      const lowerLever = createBox(0.205, 0.025, 0.018, leverMat, -0.055, 0.150, frontZ + 0.026, govBodyGrp);
-      lowerLever.rotation.z = -0.30;
-      const upperLever = createBox(0.210, 0.032, 0.020, leverMat, 0.078, 0.230, frontZ + 0.030, govBodyGrp);
-      upperLever.rotation.z = 0.55;
-      createCylinder(0.012, 0.012, 0.022, silverMat, -0.040, 0.130, frontZ + 0.040, govBodyGrp).rotation.x = Math.PI / 2;
-      createCylinder(0.012, 0.012, 0.022, silverMat, -0.015, 0.185, frontZ + 0.042, govBodyGrp).rotation.x = Math.PI / 2;
-      createBox(0.055, 0.035, 0.030, leverMat, 0.190, 0.283, frontZ + 0.028, govBodyGrp);
-      // 1.4배 과속 시 라체트를 물어 로프를 정지시키는 제동자 첨예부(쐐기) — 뒷쪽 넓고 앞이 뭉툭한 사다리꼴.
+      // ─── 180/182 작동암 + 캐치 + 압축스프링 ───
+      const lowerLever = createBox(0.210, 0.026, 0.018, leverMat, -0.050, 0.148, frontZ + 0.028, govBodyGrp);
+      lowerLever.rotation.z = -0.28;
+      const upperLever = createBox(0.215, 0.032, 0.020, leverMat, 0.082, 0.232, frontZ + 0.032, govBodyGrp);
+      upperLever.rotation.z = 0.52;
+      createCylinder(0.012, 0.012, 0.022, silverMat, -0.038, 0.128, frontZ + 0.042, govBodyGrp).rotation.x = Math.PI / 2;
+      createCylinder(0.012, 0.012, 0.022, silverMat, -0.012, 0.186, frontZ + 0.044, govBodyGrp).rotation.x = Math.PI / 2;
+      createBox(0.058, 0.036, 0.030, leverMat, 0.195, 0.285, frontZ + 0.028, govBodyGrp);
       const wedgeShape = new THREE.Shape();
       wedgeShape.moveTo(-0.030, -0.022);
       wedgeShape.lineTo(0.028, -0.010);
@@ -1575,24 +2627,22 @@
       const catchWedge = new THREE.Mesh(
         new THREE.ExtrudeGeometry(wedgeShape, { depth: 0.020, bevelEnabled: false }),
         leverMat);
-      catchWedge.position.set(0.058, 0.150, frontZ + 0.022);
-      catchWedge.rotation.z = -0.30;
+      catchWedge.position.set(0.060, 0.148, frontZ + 0.022);
+      catchWedge.rotation.z = -0.28;
       govBodyGrp.add(catchWedge);
 
-      // 실제 사진처럼 우측으로 길게 누르는 압축 스프링.
-      const sprY = 0.285, sprZ = frontZ + 0.030;
-      createCylinder(0.006, 0.006, 0.215, springMat, 0.285, sprY, sprZ, govBodyGrp).rotation.z = Math.PI / 2;
+      const sprY = 0.288, sprZ = frontZ + 0.030;
+      createCylinder(0.006, 0.006, 0.220, springMat, 0.290, sprY, sprZ, govBodyGrp).rotation.z = Math.PI / 2;
       for (let i = 0; i < 9; i++) {
         const coil = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0045, 8, 18), springMat);
         coil.rotation.y = Math.PI / 2;
-        coil.position.set(0.205 + i * 0.017, sprY, sprZ);
+        coil.position.set(0.208 + i * 0.017, sprY, sprZ);
         govBodyGrp.add(coil);
       }
-      createCylinder(0.024, 0.024, 0.022, silverMat, 0.192, sprY, sprZ, govBodyGrp).rotation.z = Math.PI / 2;
-      createCylinder(0.024, 0.024, 0.020, silverMat, 0.372, sprY, sprZ, govBodyGrp).rotation.z = Math.PI / 2;
-      createCylinder(0.017, 0.017, 0.018, M.paint(0x5c636b), 0.405, sprY, sprZ, govBodyGrp).rotation.z = Math.PI / 2;
+      createCylinder(0.024, 0.024, 0.022, silverMat, 0.195, sprY, sprZ, govBodyGrp).rotation.z = Math.PI / 2;
+      createCylinder(0.024, 0.024, 0.020, silverMat, 0.378, sprY, sprZ, govBodyGrp).rotation.z = Math.PI / 2;
+      createCylinder(0.017, 0.017, 0.018, M.paint(0x5c636b), 0.410, sprY, sprZ, govBodyGrp).rotation.z = Math.PI / 2;
 
-      // ─── 7-5. 명판 + 스티커 + 하단 디테일 ───
       createBox(0.055, 0.045, 0.005, M.ss(0xd8dde2), 0.065, 0.145, frontZ + 0.020, govBodyGrp);
       createBox(0.052, 0.038, 0.004, M.paint(0xf0d64a), 0.155, 0.120, frontZ + 0.022, govBodyGrp);
       createBox(0.052, 0.032, 0.004, M.ss(0xe9e9e5), 0.080, 0.173, frontZ + 0.024, govBodyGrp);
@@ -1603,7 +2653,8 @@
 
       govGrp.add(govBodyGrp);
 
-      const govWheelWorldY = govGrp.position.y + govYBase + gWY;
+      const govScale = govGrp.scale.x;
+      const govWheelWorldY = govGrp.position.y + (govYBase + gWY) * govScale;
       mrGrp.userData = {
         defY: defY,
         defZ: CWT_CENTER_Z,
@@ -1620,10 +2671,11 @@
       createBox(S.SHAFT_W + S.WALL_T * 2, 0.2, S.SHAFT_D + S.WALL_T * 2, M.conc(), 0, Y0 - 0.1, 0, pitGrp);
       createBox(S.SHAFT_W - 0.1, 0.02, S.SHAFT_D - 0.1, M.paint(0x4b5563), 0, Y0 + 0.01, 0, pitGrp);
       
-      // [추가] 1. 피트 사다리 (승강로 좌측 벽면 안쪽)
-      const ladderH = FLOOR_Y[0] + 1.1; 
-      const ladderZ = S.SHAFT_D / 2 - 0.3; // 문 쪽에서 약간 안쪽
-      const ladderX = -(S.SHAFT_W / 2) + 0.15; // 좌측 벽면에 딱 15cm 이격 (발 디딜 공간)
+      // [추가] 1. 피트 사다리 (승강로 좌측 벽면 안쪽 — 전면벽 관통 방지)
+      const ladderH = FLOOR_Y[0] + 1.1;
+      // 폭 확장 후 SHAFT_D/2 기준이면 전면벽을 뚫음 → FRONT_INNER_Z 안쪽으로 배치
+      const ladderZ = FRONT_INNER_Z - 0.40;
+      const ladderX = -(S.SHAFT_W / 2) + 0.18; // 좌측 벽 내면에서 안쪽 이격
       const rungCount = Math.floor(ladderH / 0.3); // 30cm 간격
       const lMat = M.paint(0xf1c40f); // 안전 노란색
 
@@ -1648,7 +2700,7 @@
       // ─── 조속기 인장추 어셈블리 (Governor Tension Weight Assembly) ───
       // 조속기 휠 축 = Z축 방향(표현 기준) | X는 조속기와 GOV_TENS_X로 정렬
       const tensGovX = GOV_TENS_X;               // buildMachineRoom govX와 동일 축
-      const tensBaseZ = 0.22;                    // 가이드 레일 파묻힘 방지 — Z축으로 전방 이격
+      const tensBaseZ = GOV_TENS_Z;                   // 가이드 레일 파묻힘 방지 — Z축으로 카 후면측 이격
       const tensionerY = Y0 + 0.5;               // 피트 바닥 +500mm
 
       // ── 1. 가이드 레일 고정 브라켓 + 피벗 암 (PDF 6p ③: 상하 요동 가능한 플랫 암)
@@ -1719,21 +2771,45 @@
       createBox(0.11, 0.015, 0.31, M.ss(0x555555),
         tensGovX, tensionerY + 0.115, tensBaseZ, pitGrp);
 
-      // ── 4. 조속기 로프 루프(기계실 조속기 ↔ 피트 인장시브) ──
+      // ── 4. 조속기 로프 루프(기계실 조속기 ↔ 카 세이프티 링크 ↔ 피트 인장시브) ──
+      // 조속기 휠·인장시브 모두 회전축이 X방향이므로 로프 두 가닥은 Z = tensBaseZ ± 홈반경에 걸린다.
       const gRopeMat = M.rope();
       const govData = mrGrp.userData || {};
       const govWheelY = govData.govWheelY || (Y0 + TOTAL_H + 0.42);
       const govWheelR = govData.govR || 0.14;
-      const ropeOffsetZ = Math.max(govWheelR, 0.15);
-      [-ropeOffsetZ, ropeOffsetZ].forEach(dz => {
-        const pts = [
-          new THREE.Vector3(tensGovX, tensionerY + 0.30, tensBaseZ + dz),
-          new THREE.Vector3(tensGovX, govWheelY, tensBaseZ + dz)
-        ];
-        pitGrp.add(new THREE.Line(
-          new THREE.BufferGeometry().setFromPoints(pts), gRopeMat
-        ));
-      });
+      const ropeR = Math.max(govWheelR, 0.15); // 풀리 홈 반경 = 가닥 Z 오프셋
+      const tensShvY = tensionerY + 0.30;
+
+      // 귀환측(자유측) 로프 — 전면(Z+) 탄젠트, 카와 무관하게 고정
+      const returnPts = [
+        new THREE.Vector3(tensGovX, tensShvY, tensBaseZ + ropeR),
+        new THREE.Vector3(tensGovX, govWheelY, tensBaseZ + ropeR)
+      ];
+      pitGrp.add(new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(returnPts), gRopeMat
+      ));
+
+      // 조속기 휠 상부 반원 + 인장시브 하부 반원 — 로프가 풀리 홈에 감기는 표현
+      const wrapArc = (cy, sign) => {
+        const pts = [];
+        for (let i = 0; i <= 16; i++) {
+          const th = Math.PI * i / 16;
+          pts.push(new THREE.Vector3(
+            tensGovX, cy + sign * ropeR * Math.sin(th), tensBaseZ - ropeR * Math.cos(th)));
+        }
+        return pts;
+      };
+      pitGrp.add(new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(wrapArc(govWheelY, 1)), gRopeMat));
+      pitGrp.add(new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(wrapArc(tensShvY, -1)), gRopeMat));
+
+      // 카 연동측(작동) 로프 — 후면(Z-) 탄젠트, 카상부 safetyClamp를 관통
+      // 카 이동 시 refreshGovernorRope()가 매 프레임 갱신
+      govRopeLine = new THREE.Line(new THREE.BufferGeometry(), gRopeMat);
+      pitGrp.add(govRopeLine);
+      govRopeData = { x: tensGovX, z: tensBaseZ - ropeR, topY: govWheelY, botY: tensShvY };
+      refreshGovernorRope();
 
       scene.add(pitGrp);
     }

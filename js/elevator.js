@@ -106,26 +106,29 @@
       const silvMat = M.ss(0xb0b5bb);    // 은색 (볼트·클레비스·난간)
 
       // Cross Head: 채널빔 2본
-      createBox(1.70, 0.12, 0.05, frmMat, 0, H / 2 + 0.06, -0.055, carFrameGrp);
-      createBox(1.70, 0.12, 0.05, frmMat, 0, H / 2 + 0.06,  0.055, carFrameGrp);
+      const chLen = S.CAR_BG - 0.05;
+      createBox(chLen, 0.12, 0.05, frmMat, 0, H / 2 + 0.06, -0.055, carFrameGrp);
+      createBox(chLen, 0.12, 0.05, frmMat, 0, H / 2 + 0.06,  0.055, carFrameGrp);
       // Cross Head 양단 엔드플레이트
-      createBox(0.03, 0.20, 0.16, frmMat, -0.85, H / 2 + 0.06, 0, carFrameGrp);
-      createBox(0.03, 0.20, 0.16, frmMat,  0.85, H / 2 + 0.06, 0, carFrameGrp);
-      // 히치플레이트 + 히치로드 5본 (refreshRopes rx=-0.04~+0.04와 동일 X축 정렬)
-      createBox(0.24, 0.02, 0.16, M.paint(0xb8680a), 0, H / 2 + 0.13, 0, carFrameGrp);
+      createBox(0.03, 0.20, 0.16, frmMat, -chLen / 2, H / 2 + 0.06, 0, carFrameGrp);
+      createBox(0.03, 0.20, 0.16, frmMat,  chLen / 2, H / 2 + 0.06, 0, carFrameGrp);
+      // 히치플레이트 + 히치로드 5본 (refreshRopes rx와 동일 X축 정렬)
+      createBox(0.36, 0.02, 0.16, M.paint(0xb8680a), 0, H / 2 + 0.13, 0, carFrameGrp);
       for (let i = 0; i < 5; i++) {
-        const rx = -0.04 + i * 0.02;
+        const rx = -0.06 + i * 0.03;
         createCylinder(0.007, 0.007, 0.15, silvMat, rx, H / 2 + 0.205, 0, carFrameGrp);
       }
 
       // Arm: 크로스헤드 양단 ↔ 업라이트 상부 경사 보강재 2본
-      const armL = createBox(0.07, 0.30, 0.05, frmMat, -0.83, H / 2 + 0.03, 0, carFrameGrp);
+      const armX = S.CAR_BG / 2 - 0.045;
+      const armL = createBox(0.07, 0.30, 0.05, frmMat, -armX, H / 2 + 0.03, 0, carFrameGrp);
       armL.rotation.z = -0.5;
-      const armR = createBox(0.07, 0.30, 0.05, frmMat,  0.83, H / 2 + 0.03, 0, carFrameGrp);
+      const armR = createBox(0.07, 0.30, 0.05, frmMat,  armX, H / 2 + 0.03, 0, carFrameGrp);
       armR.rotation.z =  0.5;
 
       // Upright: 좌우 ㄷ자 채널 (웹 + 플랜지 2장, 개구부 레일 반대측=내측)
-      [-0.815, 0.815].forEach(ux => {
+      const uprightX = S.CAR_BG / 2 - 0.06;
+      [-uprightX, uprightX].forEach(ux => {
         const xs = ux > 0 ? 1 : -1;
         const fxc = ux - xs * 0.031; // 플랜지 X 중심 (웹 내면 기준 0.025 인셋)
         createBox(0.012, H + 0.24, 0.10, frmMat, ux,  0, 0.04, carFrameGrp); // 웹
@@ -134,30 +137,43 @@
       });
 
       // Plank: 하부 채널빔 2본
-      createBox(1.70, 0.12, 0.05, frmMat, 0, -H / 2 - 0.06, -0.055, carFrameGrp);
-      createBox(1.70, 0.12, 0.05, frmMat, 0, -H / 2 - 0.06,  0.055, carFrameGrp);
+      createBox(chLen, 0.12, 0.05, frmMat, 0, -H / 2 - 0.06, -0.055, carFrameGrp);
+      createBox(chLen, 0.12, 0.05, frmMat, 0, -H / 2 - 0.06,  0.055, carFrameGrp);
 
-      // Brace Rod: 4본 경사 로드 (플랫폼 모서리 → 업라이트 중단)
+      // Brace Rod: 4본 경사 스테이 (PDF 11p ④)
+      // 업라이트 중부 외측 → 플랫폼 네 모서리. 카 바깥 옆면(동일 |X|)을 따라 전장 연결.
+      const brUX = S.CAR_BG / 2 + 0.005; // 업라이트·카 벽 바깥
+      const brUY = 0.05;           // 업라이트 중부 (PDF: midway)
+      const brUZ = 0.04;           // 업라이트 웹 Z
+      const brLX = W / 2 + 0.08;   // 플랫폼 모서리 바깥
+      const brLY = -H / 2 - 0.02;  // 플랭크/플랫폼 상단
+      const brLZ = D / 2 - 0.06;   // 전·후 모서리
       const braceEnds = [
-        [[ W/2-0.06, -H/2,  D/2-0.10], [ 0.815, -H/2+0.95, 0.04]],
-        [[-W/2+0.06, -H/2,  D/2-0.10], [-0.815, -H/2+0.95, 0.04]],
-        [[ W/2-0.06, -H/2, -D/2+0.10], [ 0.815, -H/2+0.95, 0.04]],
-        [[-W/2+0.06, -H/2, -D/2+0.10], [-0.815, -H/2+0.95, 0.04]],
+        [[ brLX, brLY,  brLZ], [ brUX, brUY, brUZ]], // 우전
+        [[-brLX, brLY,  brLZ], [-brUX, brUY, brUZ]], // 좌전
+        [[ brLX, brLY, -brLZ], [ brUX, brUY, brUZ]], // 우후
+        [[-brLX, brLY, -brLZ], [-brUX, brUY, brUZ]], // 좌후
       ];
       braceEnds.forEach(([[x1,y1,z1],[x2,y2,z2]]) => {
         const dx=x2-x1, dy=y2-y1, dz=z2-z1;
         const len = Math.sqrt(dx*dx+dy*dy+dz*dz);
-        const rod = createBox(0.04, len, 0.04, frmMat,
+        const rod = createBox(0.028, len, 0.028, frmMat,
           (x1+x2)/2, (y1+y2)/2, (z1+z2)/2, carFrameGrp);
         rod.quaternion.setFromUnitVectors(
           new THREE.Vector3(0,1,0), new THREE.Vector3(dx,dy,dz).normalize());
-        createBox(0.06, 0.06, 0.06, M.paint(0xb8860b), x1, y1, z1, carFrameGrp); // 하단 클레비스
-        createBox(0.06, 0.06, 0.06, M.paint(0xb8860b), x2, y2, z2, carFrameGrp); // 상단 클레비스
+        createBox(0.055, 0.055, 0.055, M.paint(0xb8860b), x1, y1, z1, carFrameGrp); // 하단 클레비스
+        createBox(0.055, 0.055, 0.055, M.paint(0xb8860b), x2, y2, z2, carFrameGrp); // 상단 클레비스
+        // 하부 인장 조절 슬리브 (PDF 11p ④ 검은 조절부)
+        const sleeve = createCylinder(0.014, 0.014, 0.28, M.paint(0x1a1a1a),
+          x1 + dx*0.22, y1 + dy*0.22, z1 + dz*0.22, carFrameGrp);
+        sleeve.quaternion.copy(rod.quaternion);
       });
 
-      // Car Back Angle: 후면 수평 앵글 2본
-      createBox(W, 0.05, 0.03, frmMat, 0, -H / 2 + 0.55, -D / 2 - 0.03, carFrameGrp);
-      createBox(W, 0.05, 0.03, frmMat, 0,  H / 2 - 0.55, -D / 2 - 0.03, carFrameGrp);
+      // Car Back Angle: 후면 좌·우 수직 L앵글 (PDF 11p ⑤)
+      [-W / 2 + 0.04, W / 2 - 0.04].forEach(bx => {
+        createBox(0.04, H - 0.20, 0.04, frmMat, bx, 0, -D / 2 - 0.04, carFrameGrp); // 수직
+        createBox(0.04, H - 0.20, 0.04, frmMat, bx, 0, -D / 2 - 0.08, carFrameGrp); // L 플랜지
+      });
 
       // Door Machine Base: 전면 상부 황록색 채널 레일 (PDF 11p ⑥ 일치)
       const dmbMat = M.paint(0xc8c830);
@@ -209,11 +225,11 @@
 
       // ① Floor: 회색 팬 상판 + 네이비 보강 채널 6본(Z방향 종통재) + 빨간 전면 채널·리브
       createBox(W+0.06, 0.012, D+0.02, M.ss(0x9aa2a9), 0, -H/2-0.006, 0, platformGrp);
-      [-0.625, -0.375, -0.125, 0.125, 0.375, 0.625].forEach(jx => {
+      [-0.9375, -0.5625, -0.1875, 0.1875, 0.5625, 0.9375].forEach(jx => {
         createBox(0.05, 0.06, D-0.08, navyMat, jx, -H/2-0.042, 0, platformGrp);
       });
       createBox(W+0.06, 0.10, 0.015, redMat, 0, -H/2-0.062, D/2+0.020, platformGrp);
-      [-0.60, -0.30, 0, 0.30, 0.60].forEach(rx => {
+      [-0.90, -0.45, 0, 0.45, 0.90].forEach(rx => {
         createBox(0.012, 0.085, 0.055, redMat, rx, -H/2-0.062, D/2-0.012, platformGrp);
       });
 
@@ -259,141 +275,155 @@
       const safetyGearGrp = new THREE.Group();
       const sgMat = M.paint(0xb8860b); // 세이프티 하우징 — 골드브라운
 
-      [-0.815, 0.815].forEach(sx => {
+      const sgUprightX = S.CAR_BG / 2 - 0.06;
+      [-sgUprightX, sgUprightX].forEach(sx => {
         const xs = sx > 0 ? 1 : -1;
-        // 하우징: 레일 웹(±0.875, Z=0.04)을 감싸는 위치
-        createBox(0.14, 0.22, 0.16, sgMat, sx, -H/2-0.14, 0.04, safetyGearGrp);
+        const rodX = sx + xs*0.015; // 쐐기·리프트 로드 공통 X — 업라이트 웹과 간섭 없는 라인
+        const sgY  = -H/2 - 0.16;   // 하우징 중심 Y
 
-        // Wedge 쌍 (레일 웹 양측 Z)
-        createBox(0.028, 0.10, 0.022, silvMat, sx, -H/2-0.09, 0.04-0.030, safetyGearGrp);
-        createBox(0.028, 0.10, 0.022, silvMat, sx, -H/2-0.09, 0.04+0.030, safetyGearGrp);
+        // ── 추락방지장치 하우징 (PDF 12p ①②: 슈 블록 사이 슬롯에 쐐기) ──
+        // 상·하 브라스 플랜지 플레이트
+        createBox(0.20, 0.022, 0.20, sgMat, sx, -H/2-0.055, 0.04, safetyGearGrp);
+        createBox(0.20, 0.022, 0.20, sgMat, sx, -H/2-0.265, 0.04, safetyGearGrp);
+        // 슈 블록 2개 (레일 블레이드 앞뒤 Z, 중앙 슬롯 개방)
+        createBox(0.16, 0.188, 0.062, sgMat, sx, sgY, 0.04-0.069, safetyGearGrp);
+        createBox(0.16, 0.188, 0.062, sgMat, sx, sgY, 0.04+0.069, safetyGearGrp);
 
-        // U-Spring: 하우징 외측면 U자
-        const uSpring = new THREE.Mesh(
-          new THREE.TorusGeometry(0.055, 0.010, 8, 12, Math.PI), M.paint(0xc46a1e));
-        uSpring.position.set(sx, -H/2-0.14, 0.04);
-        uSpring.rotation.y = xs > 0 ? -Math.PI/2 : Math.PI/2;
-        safetyGearGrp.add(uSpring);
-        createCylinder(0.008, 0.008, 0.11, M.paint(0xc46a1e), sx, -H/2-0.197, 0.04-0.055, safetyGearGrp);
-        createCylinder(0.008, 0.008, 0.11, M.paint(0xc46a1e), sx, -H/2-0.197, 0.04+0.055, safetyGearGrp);
+        // Wedge 쌍 — 슬롯 안 레일 웹 양측 (짙은 브론즈, 리프트 로드와 동일 X/Z)
+        const wedgeMat = M.paint(0x4a3520);
+        createBox(0.030, 0.16, 0.024, wedgeMat, rodX, sgY, 0.04-0.030, safetyGearGrp);
+        createBox(0.030, 0.16, 0.024, wedgeMat, rodX, sgY, 0.04+0.030, safetyGearGrp);
 
-        // Lift Rod: 업라이트 따라 수직, 중간 가이드 브래킷 2개
-        createCylinder(0.006, 0.006, H-0.04, silvMat, sx, -0.04, 0.10, safetyGearGrp);
-        [-H/4, H/4].forEach(by => {
-          createBox(0.06, 0.018, 0.018, M.paint(0x3a4a5a), sx - xs*0.04, by, 0.10, safetyGearGrp);
+        // U-Spring: 슈 블록 ±Z 외측면 구리 판스프링 (아치 + 다리 2개)
+        [0.04-0.093, 0.04+0.093].forEach(zf => {
+          const uSpring = new THREE.Mesh(
+            new THREE.TorusGeometry(0.070, 0.012, 8, 14, Math.PI), M.paint(0xc46a1e));
+          uSpring.position.set(sx, sgY + 0.06, zf);
+          safetyGearGrp.add(uSpring);
+          createCylinder(0.010, 0.010, 0.13, M.paint(0xc46a1e), sx - 0.070, sgY - 0.005, zf, safetyGearGrp);
+          createCylinder(0.010, 0.010, 0.13, M.paint(0xc46a1e), sx + 0.070, sgY - 0.005, zf, safetyGearGrp);
         });
+
+        // Lift Rod: 쐐기 상단에 직결 (쐐기와 동일 X/Z 라인) — 좌우 2본씩 합계 4본, PDF 12p ④
+        // 상단은 카상부 벨크랭크 암(Y=H/2+0.19)까지, 하단은 쐐기 상단에 삽입
+        [0.04-0.030, 0.04+0.030].forEach(rz => {
+          createCylinder(0.006, 0.006, H+0.29, silvMat, rodX, 0.045, rz, safetyGearGrp);
+          // 로드 상단 클레비스 (PDF 12p ④ 황동색 단부)
+          createBox(0.016, 0.05, 0.016, M.paint(0xc8b420), rodX, H/2+0.155, rz, safetyGearGrp);
+        });
+        // 중간 가이드 브래킷 2개 — 로드 2본을 함께 안내
+        [-H/4, H/4].forEach(by => {
+          createBox(0.08, 0.018, 0.10, M.paint(0x3a4a5a), sx + xs*0.01, by, 0.04, safetyGearGrp);
+        });
+
+        // 상부 가이드슈 옆 벨크랭크 어셈블리 (PDF 12p ⑤ 자주색 링크) — 좌우 각 1조
+        const crankMat = M.paint(0x4a3566);
+        // 피벗 스탠드 + 샤프트(축 X)
+        createBox(0.04, 0.10, 0.05, crankMat, sx, H/2+0.14, -0.15, safetyGearGrp);
+        createCylinder(0.012, 0.012, 0.07, silvMat, sx, H/2+0.19, -0.15, safetyGearGrp).rotation.z = Math.PI/2;
+        // 크랭크 암 — 피벗(Z-0.15)에서 리프트 로드 상단(Z0.01/0.07, X±0.855)까지
+        createBox(0.10, 0.018, 0.28, crankMat, sx + xs*0.02, H/2+0.19, -0.035, safetyGearGrp);
+        // 수직 레버 — 대각 커넥팅 로드 단부 접속 (좌: 상향 / 우: 하향)
+        createBox(0.02, 0.10, 0.02, crankMat, sx, H/2+(xs>0 ? 0.13 : 0.21), -0.15, safetyGearGrp);
       });
 
-      // Connecting Rod: 크로스헤드 하부 수평 로드 (좌우 Lift Rod 상단 연결)
-      createCylinder(0.008, 0.008, 1.63, silvMat, 0, H/2-0.04, 0.10, safetyGearGrp).rotation.z = Math.PI/2;
-      // 중앙 피벗 레버 + 핀
-      createBox(0.04, 0.14, 0.02, silvMat, 0, H/2-0.04, 0.10, safetyGearGrp);
-      createCylinder(0.008, 0.008, 0.03, silvMat, 0, H/2-0.04, 0.10, safetyGearGrp).rotation.x = Math.PI/2;
+      // Connecting Rod: 좌우 벨크랭크를 잇는 대각 연동 로드 + 중앙 턴버클 — PDF 12p ⑤
+      const cRodSpan = 2 * (S.CAR_BG / 2 - 0.06);
+      const cRodTilt = Math.PI/2 - Math.atan2(0.08, cRodSpan);
+      const cRod = createCylinder(0.007, 0.007, Math.sqrt(cRodSpan*cRodSpan + 0.08*0.08), silvMat,
+        0, H/2+0.19, -0.15, safetyGearGrp);
+      cRod.rotation.z = cRodTilt;
+      const cTurn = createCylinder(0.016, 0.016, 0.14, M.paint(0x222222), 0, H/2+0.19, -0.15, safetyGearGrp);
+      cTurn.rotation.z = cRodTilt;
 
-      // 조속기 로프 연동 암 + 로프 클램프 블록
-      // GOV_TENS_X = CAR_BG/2 + 0.115 = 0.875 + 0.115 = 0.99, tensBaseZ = 0.22
-      createBox(0.175, 0.018, 0.120, silvMat, 0.9025, H/2-0.04, 0.16, safetyGearGrp); // 연동 암
-      const safetyClamp = createBox(0.025, 0.09, 0.025, silvMat, 0.99, H/2-0.04, 0.22, safetyGearGrp);
+      // 조속기 로프 연동 암 + 로프 클램프 블록 (우측 벨크랭크 → 로프 후면 가닥 Z=-0.37)
+      // 로프 후면 가닥 Z = GOV_TENS_Z - 홈반경(0.15) = -0.37
+      createBox(0.175, 0.018, 0.26, silvMat, GOV_TENS_X - 0.0875, H/2+0.19, -0.25, safetyGearGrp); // 연동 암
+      // 로프 히치 플레이트 (PDF 12p 살몬색 판)
+      createBox(0.02, 0.24, 0.12, M.paint(0xc98a78), GOV_TENS_X - 0.025, H/2+0.10, -0.33, safetyGearGrp);
+      const safetyClamp = createBox(0.025, 0.09, 0.025, silvMat, GOV_TENS_X, H/2+0.19, -0.37, safetyGearGrp);
       safetyClamp.userData = { type: 'safety-link' };
 
       carGrp.add(safetyGearGrp);
 
       /* ──────────────────────────────────────────────────────────────
-         가이드 롤러 어셈블리 (High-Detail 3-Roller Guide Shoe) — PDF 13p
+         가이드 슈/롤러 + 급유기 (PDF 13p) — 2롤러 + 슈 타입, 상단 오일통
+         카 상부 좌·우 각 1세트
       ────────────────────────────────────────────────────────────── */
       const rollerGuideGrp = new THREE.Group();
 
-      const rMat = M.paint(0x1a1a1a); // 우레탄 롤러 (무광 블랙)
-      const bMat = M.paint(0x3a4a5a); // 짙은 스틸 블루 브라켓 (기계 느낌)
-      const axMat = M.ss(0xb0b5bb);   // 금속 축 및 로드 (은색)
-      const spMat = M.paint(0xf1c40f); // 텐션 스프링 (아연 도금 옐로우)
+      const rMat    = M.paint(0x1a1a1a); // 우레탄 롤러
+      const baseYel = M.paint(0xc4a574); // PDF 베이지 베이스
+      const brktBrn = M.paint(0x8a5a2b); // 갈색 브라켓
+      const shoeMat = M.paint(0x6b3a1f); // 슈 라이너 (적갈)
+      const axMat   = M.ss(0xb0b5bb);
+      const lubBody = M.paint(0x5a7a3a); // 녹색 오일통
+      const lubLid  = M.paint(0x2f4a22); // 뚜껑
 
-      const railX = S.CAR_BG / 2;     // 0.875 (레일 중심 X)
-      const railZ = 0.04;             // 레일 웹 중심 Z
+      const railX = S.CAR_BG / 2; // ±0.875
+      const railZ = 0.04;
 
-      // 개별 가이드 슈 생성 함수 (방향이 바뀐 레일에 완벽 도킹)
-      function createGuideShoe(xSign, isTop) {
+      // PDF 13p: ① 2롤러+슈 ② 상단 급유기 — 좌우 대칭
+      function createGuideShoe(xSign) {
         const shoe = new THREE.Group();
-        const rX = railX * xSign;     // 레일 중심 X 좌표 (±0.875)
+        const rX = railX * xSign;
+        // 레일 웹 끝단(카쪽) X — 웹 반폭 ≈ 0.041
+        const webTipX = rX - 0.041 * xSign;
 
-        // ① 베이스 플레이트
-        createBox(0.20, 0.02, 0.26, bMat, rX - (0.05 * xSign), 0, railZ, shoe);
+        // ① L형 베이스 플레이트 (카 상부에 볼트 고정)
+        createBox(0.22, 0.018, 0.28, baseYel, rX - 0.06 * xSign, 0.010, railZ, shoe);
+        createBox(0.018, 0.10, 0.28, baseYel, rX - 0.16 * xSign, 0.050, railZ, shoe);
+        [-0.08, 0, 0.08].forEach(dz => {
+          createCylinder(0.012, 0.012, 0.006, axMat,
+            rX - 0.06 * xSign, 0.020, railZ + dz, shoe);
+        });
 
-        // ② 메인 롤러 (레일 웹 끝단 X축 면에 수직으로 접촉)
-        // 레일 웹 끝단 X = 레일중심(±0.875) ∓ 절반(0.041)
-        const mR = 0.060, mT = 0.026;
-        const mX = rX - (0.041 + mR) * xSign; // 웹 끝단과 맞물림
-        const mY = 0.065;
+        // ② 슈 본체 — 레일 웹 끝단을 감싸는 U채널 (면 롤러 대신)
+        const shoeX = webTipX - 0.018 * xSign;
+        createBox(0.028, 0.12, 0.070, shoeMat, shoeX, 0.085, railZ, shoe);
+        createBox(0.022, 0.12, 0.012, shoeMat, shoeX, 0.085, railZ - 0.041, shoe);
+        createBox(0.022, 0.12, 0.012, shoeMat, shoeX, 0.085, railZ + 0.041, shoe);
+        createBox(0.06, 0.10, 0.016, brktBrn, shoeX - 0.035 * xSign, 0.080, railZ - 0.055, shoe);
+        createBox(0.06, 0.10, 0.016, brktBrn, shoeX - 0.035 * xSign, 0.080, railZ + 0.055, shoe);
+        createBox(0.014, 0.10, 0.12, brktBrn, shoeX - 0.055 * xSign, 0.080, railZ, shoe);
 
-        const mRoller = new THREE.Mesh(new THREE.CylinderGeometry(mR, mR, mT, 24), rMat);
-        // Z축을 중심축으로 위아래로 구름
-        mRoller.rotation.x = Math.PI / 2;
-        mRoller.position.set(mX, mY, railZ);
-        shoe.add(mRoller);
-
-        // 메인 롤러 지지 브라켓
-        createBox(0.05, 0.07, mT + 0.02, bMat, mX + (0.02 * xSign), 0.035, railZ, shoe);
-        createCylinder(0.008, 0.008, mT + 0.03, axMat, mX, mY, railZ, shoe).rotation.x = Math.PI / 2;
-
-        // ③ 사이드 롤러 2개 (레일 웹 좌우 Z면 측면에 접촉)
-        const sR = 0.050, sT = 0.020;
-        const sY = 0.055;
-        const sX = rX - (0.02 * xSign); // 레일 웹 중간 지점
-
-        // 레일 웹 폭(0.034)을 고려한 앞뒤 타격점 Z
+        // ③ 사이드 롤러 2개 — 레일 블레이드 앞·뒤(±Z) 접촉
+        const sR = 0.042, sT = 0.018;
+        const sY = 0.070;
+        const sX = rX - 0.015 * xSign;
         const frontZ = railZ - 0.017 - sR;
         const backZ  = railZ + 0.017 + sR;
-
         [frontZ, backZ].forEach(rz => {
-          const sRoller = new THREE.Mesh(new THREE.CylinderGeometry(sR, sR, sT, 24), rMat);
-          // X축을 중심축으로 수직면을 따라 구름
+          const sRoller = new THREE.Mesh(new THREE.CylinderGeometry(sR, sR, sT, 20), rMat);
           sRoller.rotation.z = Math.PI / 2;
           sRoller.position.set(sX, sY, rz);
           shoe.add(sRoller);
-
-          // 피봇 암 (집게 형태)
           const offsetDir = Math.sign(rz - railZ);
-          createBox(0.08, 0.08, 0.016, bMat, sX + (0.02 * xSign), 0.04, rz + offsetDir * 0.022, shoe);
-          // 사이드 롤러 축
-          createCylinder(0.006, 0.006, 0.05, axMat, sX, sY, rz + offsetDir * 0.01, shoe).rotation.z = Math.PI / 2;
+          createBox(0.055, 0.055, 0.014, brktBrn,
+            sX - 0.02 * xSign, 0.055, rz + offsetDir * 0.020, shoe);
+          createCylinder(0.006, 0.006, 0.045, axMat,
+            sX, sY, rz + offsetDir * 0.008, shoe).rotation.z = Math.PI / 2;
         });
+        createBox(0.012, 0.012, Math.abs(backZ - frontZ) + 0.02, axMat,
+          sX - 0.025 * xSign, 0.095, railZ, shoe);
 
-        // ④ 텐션 스프링 메커니즘
-        const rodY = 0.075;
-        // 레일 웹을 가로지르도록 X축 방향으로 로드 설치
-        const rodX = rX - (0.02 * xSign);
-        const rodLen = Math.abs(backZ - frontZ) + 0.06;
+        // ④ 급유기 — 슈 위 녹색 오일통 + 뚜껑 (PDF 13p ②)
+        const lubX = shoeX - 0.01 * xSign;
+        const lubY = 0.175;
+        createBox(0.070, 0.085, 0.055, lubBody, lubX, lubY, railZ, shoe);
+        createBox(0.074, 0.012, 0.059, lubLid,  lubX, lubY + 0.048, railZ, shoe);
+        createBox(0.010, 0.016, 0.008, axMat, lubX + 0.030 * xSign, lubY + 0.048, railZ + 0.028, shoe);
+        createCylinder(0.006, 0.006, 0.035, axMat, lubX, lubY - 0.055, railZ, shoe);
 
-        createCylinder(0.004, 0.004, rodLen, axMat, rodX, rodY, railZ, shoe).rotation.x = Math.PI / 2;
-
-        for (let i = 0; i < 7; i++) {
-          const coil = new THREE.Mesh(new THREE.TorusGeometry(0.008, 0.003, 8, 16), spMat);
-          coil.rotation.x = Math.PI / 2;
-          coil.position.set(rodX, rodY, railZ + 0.015 + i * 0.012);
-          shoe.add(coil);
-        }
-
-        shoe.position.set(0, isTop ? (H / 2 + 0.12 + 0.01) : (-H / 2 - 0.12 - 0.01), 0);
-        if (!isTop) shoe.scale.y = -1;
+        shoe.position.set(0, H / 2 + 0.13, 0);
         return shoe;
       }
 
-      // 상/하, 좌/우 4세트의 고정밀 3롤러 장착
       rollerGuideGrp.add(
-        createGuideShoe(1, true),   // 상단 우측
-        createGuideShoe(-1, true),  // 상단 좌측
-        createGuideShoe(1, false),  // 하단 우측
-        createGuideShoe(-1, false)  // 하단 좌측
+        createGuideShoe(1),
+        createGuideShoe(-1)
       );
-
       carGrp.add(rollerGuideGrp);
-
-      // Lubricator: 상단 가이드슈 위 급유기 (좌우 2개) — PDF 13p
-      const lubMat = M.paint(0x4a6b3a); // 녹색 오일컵
-      [-0.815, 0.815].forEach(lx => {
-        createBox(0.06, 0.07, 0.05, lubMat, lx, H/2+0.22, 0.04, carGrp);
-        createCylinder(0.008, 0.008, 0.05, silvMat, lx, H/2+0.265, 0.04, carGrp);
-      });
 
       /* ──────────────────────────────────────────────────────────────
          F. 천장 어셈블리 (Ceiling Assembly) — PDF 17p
@@ -433,13 +463,15 @@
 
       // Light Frame: 카 내부 천장 격자 + 반투명 커버
       const lfY = H/2 - 0.035;
-      createBox(0.95, 0.020, 0.020, frmMat, 0, lfY,  0.20, ceilingGrp);
-      createBox(0.95, 0.020, 0.020, frmMat, 0, lfY,  0,    ceilingGrp);
-      createBox(0.95, 0.020, 0.020, frmMat, 0, lfY, -0.20, ceilingGrp);
-      createBox(0.020, 0.020, 0.70, frmMat, -0.35, lfY, 0, ceilingGrp);
-      createBox(0.020, 0.020, 0.70, frmMat,  0.35, lfY, 0, ceilingGrp);
+      const lfW = S.CAR_W * 0.59;
+      const lfX = S.CAR_W * 0.22;
+      createBox(lfW, 0.020, 0.020, frmMat, 0, lfY,  0.20, ceilingGrp);
+      createBox(lfW, 0.020, 0.020, frmMat, 0, lfY,  0,    ceilingGrp);
+      createBox(lfW, 0.020, 0.020, frmMat, 0, lfY, -0.20, ceilingGrp);
+      createBox(0.020, 0.020, 0.70, frmMat, -lfX, lfY, 0, ceilingGrp);
+      createBox(0.020, 0.020, 0.70, frmMat,  lfX, lfY, 0, ceilingGrp);
       // 반투명 커버
-      createBox(0.95, 0.010, 0.70, M.glass(), 0, lfY-0.012, 0, ceilingGrp);
+      createBox(lfW, 0.010, 0.70, M.glass(), 0, lfY-0.012, 0, ceilingGrp);
 
       carGrp.add(ceilingGrp);
 
@@ -567,21 +599,22 @@
       const hgMat  = M.ss(0x9aa2aa);    // 행거판 스테인리스
 
       // Hanger Plate: Door Machine Base 위에 얹히는 가로 판
-      createBox(S.CAR_W+0.10, 0.32, 0.015, hpMat, 0, S.CAR_H/2+0.26, 0.645, doorHangerGrp);
+      const dhZ = S.CAR_D / 2; // 도어 행어 Z = CAR_D/2 기준 오프셋
+      createBox(S.CAR_W+0.10, 0.32, 0.015, hpMat, 0, S.CAR_H/2+0.26, dhZ - 0.030, doorHangerGrp);
 
       // Door Rail: 행거 롤러가 걸리는 원봉 레일
       const railMesh = new THREE.Mesh(
         new THREE.CylinderGeometry(0.012, 0.012, S.CAR_W+0.05, 14),
         M.ss(0xc0c8d0));
       railMesh.rotation.z = Math.PI / 2;
-      railMesh.position.set(0, S.CAR_H/2+0.345, 0.672);
+      railMesh.position.set(0, S.CAR_H/2+0.345, dhZ - 0.003);
       doorHangerGrp.add(railMesh);
 
       // Door Machine: 우측단 — 수직판 + 풀리 그룹
       const dmX = S.CAR_W/2 - 0.10;
-      createBox(0.16, 0.40, 0.018, hpMat, dmX, S.CAR_H/2+0.27, 0.635, doorHangerGrp);
+      createBox(0.16, 0.40, 0.018, hpMat, dmX, S.CAR_H/2+0.27, dhZ - 0.040, doorHangerGrp);
       const dmGrp = new THREE.Group(); // 풀리·모터 그룹 (향후 회전 애니메이션)
-      dmGrp.position.set(dmX, S.CAR_H/2+0.27, 0.628);
+      dmGrp.position.set(dmX, S.CAR_H/2+0.27, dhZ - 0.047);
       // 대풀리(하부)
       const bigPulley = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.040, 16), M.ss(0x7a828a));
       bigPulley.rotation.x = Math.PI/2;
@@ -598,7 +631,7 @@
       doorHangerGrp.add(dmGrp);
       // Door Motor: 모터 원통 + 냉각핀
       const motorGrp = new THREE.Group();
-      motorGrp.position.set(S.CAR_W/2+0.01, S.CAR_H/2+0.27, 0.628);
+      motorGrp.position.set(S.CAR_W/2+0.01, S.CAR_H/2+0.27, dhZ - 0.047);
       const motorBody = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.16, 14), M.paint(0x374151));
       motorBody.rotation.z = Math.PI/2;
       motorGrp.add(motorBody);
@@ -617,13 +650,13 @@
 
       // Gate Switch: 상부 중앙 도어 닫힘 검출
       const gsw = createBox(0.05, 0.07, 0.04, M.paint(0x374151),
-        -0.05, S.CAR_H/2+0.16, 0.66, doorHangerGrp);
+        -0.05, S.CAR_H/2+0.16, dhZ - 0.015, doorHangerGrp);
       gsw.userData = { type: 'gate-switch' };
-      createBox(0.04, 0.008, 0.008, M.ss(0x9aa2aa), -0.05, S.CAR_H/2+0.13, 0.66, doorHangerGrp); // 레버
+      createBox(0.04, 0.008, 0.008, M.ss(0x9aa2aa), -0.05, S.CAR_H/2+0.13, dhZ - 0.015, doorHangerGrp); // 레버
 
       // Door Sensor / Maintenance Switch
-      createBox(0.05, 0.055, 0.04, M.paint(0x22272d), -S.CAR_W/2+0.14, S.CAR_H/2+0.22, 0.655, doorHangerGrp);
-      createBox(0.04, 0.065, 0.04, M.paint(0x374151), -S.CAR_W/2+0.05, S.CAR_H/2+0.19, 0.655, doorHangerGrp);
+      createBox(0.05, 0.055, 0.04, M.paint(0x22272d), -S.CAR_W/2+0.14, S.CAR_H/2+0.22, dhZ - 0.020, doorHangerGrp);
+      createBox(0.04, 0.065, 0.04, M.paint(0x374151), -S.CAR_W/2+0.05, S.CAR_H/2+0.19, dhZ - 0.020, doorHangerGrp);
 
       carGrp.add(doorHangerGrp);
 
@@ -636,12 +669,13 @@
         const doorCx = idx === 0 ? -cx : cx; // 도어그룹 X
 
         // 행거판
-        createBox(0.30, 0.18, 0.012, hgMat, -doorCx, 1.13, -0.02, hangerGrp);
+        createBox(S.DOOR_W * 0.30, 0.18, 0.012, hgMat, -doorCx, 1.13, -0.02, hangerGrp);
 
         // 상부 롤러 2개 (레일에 걸림)
         const rollerY = H/2+0.40 - 0.1775; // ≈ 0.9725+0.40=1.3725 → local 1.195
         const localRollerY = (H/2 + 0.40) - 0.1775;
-        [-0.10, 0.10].forEach(rx => {
+        const rollerSpan = S.DOOR_W * 0.10;
+        [-rollerSpan, rollerSpan].forEach(rx => {
           const rol = new THREE.Mesh(
             new THREE.CylinderGeometry(0.045, 0.045, 0.022, 14), M.ss(0x7a828a));
           rol.rotation.x = Math.PI/2;
@@ -650,7 +684,7 @@
         });
 
         // 업스러스트 롤러 2개 (레일 하부)
-        [-0.10, 0.10].forEach(rx => {
+        [-rollerSpan, rollerSpan].forEach(rx => {
           const uRol = new THREE.Mesh(
             new THREE.CylinderGeometry(0.018, 0.018, 0.018, 12), M.paint(0x1a1a1a));
           uRol.rotation.x = Math.PI/2;
@@ -791,9 +825,10 @@
           const hHgGrp = new THREE.Group();
           const doorCx  = idx === 0 ? -cx : cx;
           // 행거판 (로컬좌표: 도어그룹 기준)
-          createBox(0.26, 0.15, 0.012, M.ss(0x9aa2aa), -doorCx, dh/2+0.10, -0.08, hHgGrp);
+          createBox(S.DOOR_W * 0.26, 0.15, 0.012, M.ss(0x9aa2aa), -doorCx, dh/2+0.10, -0.08, hHgGrp);
           // 행거 롤러 2개
-          [-0.09, 0.09].forEach(rx => {
+          const hRollerSpan = S.DOOR_W * 0.09;
+          [-hRollerSpan, hRollerSpan].forEach(rx => {
             const rol = new THREE.Mesh(
               new THREE.CylinderGeometry(0.040, 0.040, 0.020, 12), M.ss(0x7a828a));
             rol.rotation.x = Math.PI/2;
@@ -873,7 +908,7 @@
       const rMat = M.rope();
       // [수정] 3. 로프 5가닥 동기화
       for (let i = 0; i < 5; i++) {
-        const rx = -0.04 + i * 0.02; // 보조 시브 홈과 동일한 간격
+        const rx = -0.06 + i * 0.03; // 히치로드·보조 시브 홈과 동일한 간격
         const line = new THREE.Line(new THREE.BufferGeometry(), rMat);
         ropeObjs.push({ line: line, defY: defY, defZ: defZ, rx: rx });
         scene.add(line);
@@ -891,4 +926,16 @@
         ];
         r.line.geometry.setFromPoints(pts);
       });
+    }
+
+    function refreshGovernorRope() {
+      if (!govRopeLine || !govRopeData) return;
+      // safetyGearGrp의 safetyClamp 로컬 Y(H/2+0.19)와 동일 — 카상부 벨크랭크 로프 클램프 지점
+      const clampY = carGrp.position.y + S.CAR_H / 2 + 0.19;
+      const pts = [
+        new THREE.Vector3(govRopeData.x, govRopeData.topY, govRopeData.z),
+        new THREE.Vector3(govRopeData.x, clampY, govRopeData.z),
+        new THREE.Vector3(govRopeData.x, govRopeData.botY, govRopeData.z)
+      ];
+      govRopeLine.geometry.setFromPoints(pts);
     }
