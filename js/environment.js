@@ -2468,10 +2468,10 @@
       // 상판 (Top Plate)
       createBox(0.16, 0.025, 0.36, govStandMat, 0, pHeight + 0.047, 0, govGrp);
 
-      // 디테일: 상판 로프 관통 홀 2개 (조속기 로프 z ±0.15 정렬) + 하판 양단 볼트 홀
+      // 디테일: 상판 로프 관통 홀 2개 — 로컬 ±0.10 × 스케일 1.5 = 월드 ±0.15 (로프 가닥 정렬)
       const holeMat = M.paint(0x050505);
-      createCylinder(0.026, 0.026, 0.024, holeMat, 0, pHeight + 0.047, 0.15, govGrp);
-      createCylinder(0.026, 0.026, 0.024, holeMat, 0, pHeight + 0.047, -0.15, govGrp);
+      createCylinder(0.020, 0.020, 0.024, holeMat, 0, pHeight + 0.047, 0.10, govGrp);
+      createCylinder(0.020, 0.020, 0.024, holeMat, 0, pHeight + 0.047, -0.10, govGrp);
 
       const boltHoleZ = 0.22;
       const boltHoleX = 0.05;
@@ -2482,17 +2482,34 @@
       
       mrGrp.add(govGrp);
 
-      /* 7. 조속기 본체 (Overspeed Governor) — KR100839584B1 + Part design 11~17p
-         커버 미장착(내부 기구 노출). 정적 대기 포즈. 트립 애니 없음.
-         부품 매핑:
-           100/110 베이스·U프레임 | 130 시브(림·홈·스포크) | 140 원심추×2
-           150/160 롤러·연동링크 | 170 라체트 | 180/182 작동암+스프링
-           190/192 과속스위치 (16~17p) | 커버=보류
-         유지: gR·GOV_TENS 축·governorWheelGrp·받침대 */
+      /* 7. 조속기 본체 (Overspeed Governor) — KR10-0839584 B1 도면 재구현
+         근거: 도2·도3(사시) / 도4~도6(정면, 제동 전·후) / 도7·도8a~8c(스위치 복귀장치)
+         부품 번호 = 특허 도면 부호.
+           100 베이스 | 110 프레임(후면판+전면 베어링판) | 130 조속기휠 | 131 중심축
+           140/140' 진자 | 141 트립볼트 | 143 지지편
+           12 제동자(120 바디·122 연장부·123 첨예부·127 돌출턱·121a/b 복귀레버) | 13 스프링
+           15 트립레버(151 힌지축·152 돌출부·153 연장편·154 속도조정볼트)
+           170 라체트(171 걸림홈부 3개 @120°·177 절개공) | 180 로프고정체(182 링크·183 로프캐쳐)
+           190 과속스위치 | 192 레버(평상시 수평) | 50 복귀장치(51 솔레노이드·52 작동핀·53 브라켓·530 안내홈)
+           200 보조휠(200a 절개부) | 220 광센서 | 제어회로부(후면판 배면)
+         ── 로프 정렬: 홈반경 로컬 0.10 × govGrp 스케일 1.5 = 월드 0.15
+            → 로프 가닥(z = govZ ± 0.15)·피트 인장시브 홈(0.15)과 정확히 일치.
+         ── 가동부는 전부 "피벗 원점 Group"으로 만들고 rotation.z = 0 을 대기 자세로 한다.
+            추후 트립 시퀀스(elevator.js 연동 예정):
+            ① 과속 → 진자(140) 원심 회동(+z) → 트립볼트(141) 회전반경 증가
+            ② 141이 스위치 레버(192)를 상/하로 제낌 → 전동기 전원 차단 (1차 동작)
+            ③ 동시에 트립레버(15) 회동 → 돌출부(152)가 돌출턱(127)에서 이탈
+            ④ 스프링(13)이 제동자(12)를 당겨 첨예부(123)가 라체트(170) 걸림홈부(171)에 걸림
+            ⑤ 휠 관성으로 라체트가 끌려 돌며 링크(182)를 당김 → 로프캐쳐(183)가
+               조속기로프(135)를 휠 홈에 압착 → 로프 정지
+            ⑥ 카 상부 safetyClamp(elevator.js 'safety-link')가 당겨져 비상정지장치 작동 (2차 동작)
+            ⑦ 복귀: 솔레노이드(51) 작동핀(52) → 브라켓(53) 전진 → 안내홈(530)이 지지핀(54)을
+               타고 레버(192)를 수평 복귀
+            모든 가동부 참조는 mrGrp.userData.governor 에 노출. */
       const govYBase = pHeight + 0.04;
       const govBodyGrp = new THREE.Group();
       govBodyGrp.position.set(0, govYBase, 0);
-      govBodyGrp.rotation.y = Math.PI / 2;
+      govBodyGrp.rotation.y = Math.PI / 2; // 로컬 +X=월드 -Z(카측 가닥·로프고정체측), 로컬 +Z=월드 +X(기계실 카메라측)
 
       const govBaseMat = M.paint(0x6f7780);
       const govFrmMat  = M.paint(0x2f78bd);
@@ -2502,154 +2519,273 @@
       const springMat  = M.ss(0xc6ccd3);
       const goldBolt   = M.paint(0xd8c818);
       const weightMat  = M.paint(0x8a9098);
-      const ratchetMat = M.paint(0x5a6068);
+      const ratchetMat = M.ss(0x596069);
+      const darkSteel  = M.ss(0x454b52);
+      const holeDark   = M.paint(0x14171a);
+      const swCaseMat  = M.paint(0x565c63);
 
-      // 휠 홈 반경 — 피트 로프 ±0.15 / 스탠드 홀과 정렬 유지
-      const gR = 0.145;
-      const gWX = -0.010;
-      const gWY = 0.225;
-      const frontZ = 0.065;
+      const gR  = 0.10;   // 홈반경(로컬) — ×1.5 = 월드 0.15
+      const gWY = 0.225;  // 휠 중심 높이 (govWheelY 유지)
 
-      // ─── 100/110 베이스 + 청색 U프레임 ───
-      createBox(0.48, 0.038, 0.20, govBaseMat, 0, 0.019, 0, govBodyGrp);
-      createBox(0.44, 0.024, 0.18, govBaseMat, 0, 0.052, 0, govBodyGrp);
-      createBox(0.44, 0.088, 0.022, govFrmMat, 0, 0.108, frontZ, govBodyGrp);
-      createBox(0.038, 0.175, 0.052, govFrmDark, -0.195, 0.155, frontZ + 0.008, govBodyGrp);
-      createBox(0.038, 0.155, 0.034, govFrmDark,  0.195, 0.145, frontZ, govBodyGrp);
-      createBox(0.36, 0.016, 0.022, govFrmDark, 0, 0.168, frontZ, govBodyGrp);
-      createBox(0.38, 0.016, 0.085, govFrmDark, 0, 0.076, 0.012, govBodyGrp);
-      // 후면 지지판(220)
-      createBox(0.40, 0.20, 0.012, govFrmDark, 0, 0.160, -0.055, govBodyGrp);
-      [[-0.185, 0.100], [0.185, 0.102], [0.195, 0.225]].forEach(([bx, by]) => {
-        createCylinder(0.010, 0.010, 0.018, silverMat, bx, by, frontZ + 0.016, govBodyGrp).rotation.x = Math.PI / 2;
+      // ─── 100 베이스 + 110 프레임 ───
+      createBox(0.46, 0.036, 0.20, govBaseMat, 0, 0.018, 0, govBodyGrp);
+      createBox(0.42, 0.020, 0.17, govBaseMat, 0, 0.046, 0, govBodyGrp);
+      // 로프 관통 슬롯 (가닥 x = ±gR)
+      createBox(0.040, 0.006, 0.055, holeDark,  gR, 0.057, 0, govBodyGrp);
+      createBox(0.040, 0.006, 0.055, holeDark, -gR, 0.057, 0, govBodyGrp);
+      // 베이스 앵커볼트 4개
+      [[-0.20, 0.075], [0.20, 0.075], [-0.20, -0.075], [0.20, -0.075]].forEach(([bx, bz]) => {
+        createCylinder(0.007, 0.007, 0.014, silverMat, bx, 0.042, bz, govBodyGrp);
       });
+      // 후면판 (제어회로부 장착면) + 하부 리브
+      createBox(0.32, 0.34, 0.012, govFrmMat, 0, 0.21, -0.062, govBodyGrp);
+      createBox(0.34, 0.028, 0.060, govFrmDark, 0, 0.050, -0.048, govBodyGrp);
+      // 전면 베어링판 (도2의 우측 지지벽 상당) + 우측 플랜지 + 축 보스
+      createBox(0.085, 0.31, 0.012, govFrmMat, 0.010, 0.195, 0.072, govBodyGrp);
+      createBox(0.014, 0.31, 0.026, govFrmDark, 0.058, 0.195, 0.080, govBodyGrp);
+      createCylinder(0.030, 0.030, 0.016, govFrmDark, 0, gWY, 0.074, govBodyGrp).rotation.x = Math.PI / 2;
+      [[-0.018, 0.062], [0.038, 0.062], [-0.018, 0.330], [0.038, 0.330]].forEach(([bx, by]) => {
+        createCylinder(0.005, 0.005, 0.010, silverMat, bx, by, 0.080, govBodyGrp).rotation.x = Math.PI / 2;
+      });
+      // 131 중심축 (후면판 → 전면 베어링판 관통) + 전면 고정너트
+      const govAxle = createCylinder(0.014, 0.014, 0.155, silverMat, 0, gWY, 0.013, govBodyGrp);
+      govAxle.rotation.x = Math.PI / 2;
+      createCylinder(0.021, 0.021, 0.014, M.gold(), 0, gWY, 0.093, govBodyGrp).rotation.x = Math.PI / 2;
 
-      // ─── 130 시브 + 140/150/160/170 (휠과 함께 회전) ───
-      const govWheelSpinGrp = new THREE.Group();
-      govWheelSpinGrp.position.set(gWX, gWY, 0);
-      govBodyGrp.add(govWheelSpinGrp);
-      governorWheelGrp = govWheelSpinGrp;
+      // ─── 130 조속기휠 (로프 구동 회전부 — 진자·제동자·트립레버 탑재) ───
+      const govWheelGrpL = new THREE.Group();
+      govWheelGrpL.position.set(0, gWY, 0);
+      govBodyGrp.add(govWheelGrpL);
+      governorWheelGrp = govWheelGrpL;
 
-      govWheelSpinGrp.add(new THREE.Mesh(new THREE.TorusGeometry(gR, 0.028, 14, 52), M.gold()));
-      govWheelSpinGrp.add(new THREE.Mesh(new THREE.TorusGeometry(gR - 0.032, 0.009, 10, 52), M.gold()));
-      govWheelSpinGrp.add(new THREE.Mesh(new THREE.TorusGeometry(gR + 0.014, 0.005, 8, 52), M.paint(0x2c2c2c)));
-      for (let i = 0; i < 5; i++) {
-        const ang = i * Math.PI * 2 / 5 + 0.18;
-        const spoke = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, gR - 0.038, 8), M.gold());
-        spoke.position.set(Math.cos(ang) * (gR - 0.038) / 2, Math.sin(ang) * (gR - 0.038) / 2, 0);
+      // 림 — V홈 플랜지 2겹 + 홈 바닥(r = gR, 로프 안착선)
+      [-0.011, 0.011].forEach(fz => {
+        const flange = new THREE.Mesh(new THREE.TorusGeometry(0.108, 0.011, 12, 56), M.gold());
+        flange.position.z = fz;
+        govWheelGrpL.add(flange);
+      });
+      govWheelGrpL.add(new THREE.Mesh(new THREE.TorusGeometry(gR, 0.006, 8, 56), M.paint(0x2c2c2c)));
+      govWheelGrpL.add(new THREE.Mesh(new THREE.TorusGeometry(0.082, 0.008, 10, 56), M.gold()));
+      for (let i = 0; i < 6; i++) {
+        const ang = i * Math.PI / 3;
+        const spoke = new THREE.Mesh(new THREE.CylinderGeometry(0.0085, 0.0105, 0.056, 10), M.gold());
+        spoke.position.set(Math.cos(ang) * 0.053, Math.sin(ang) * 0.053, 0);
         spoke.rotation.z = ang + Math.PI / 2;
-        govWheelSpinGrp.add(spoke);
+        govWheelGrpL.add(spoke);
       }
-      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.040, 0.040, 0.050, 18), M.gold());
-      hub.rotation.x = Math.PI / 2;
-      govWheelSpinGrp.add(hub);
+      const govHub = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.055, 20), M.gold());
+      govHub.rotation.x = Math.PI / 2;
+      govWheelGrpL.add(govHub);
 
-      // 170 라체트 — 중심 톱니 디스크
-      const ratchet = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.014, 16), ratchetMat);
-      ratchet.rotation.x = Math.PI / 2;
-      ratchet.position.set(0, 0, 0.028);
-      govWheelSpinGrp.add(ratchet);
-      for (let i = 0; i < 12; i++) {
-        const ta = i * Math.PI * 2 / 12;
-        const tooth = createBox(0.012, 0.018, 0.010, ratchetMat,
-          Math.cos(ta) * 0.058, Math.sin(ta) * 0.058, 0.028, govWheelSpinGrp);
-        tooth.rotation.z = ta;
+      // 200 보조휠 + 200a 절개부 — 휠 후면 동축 회전, 220 광센서가 회전속도 검출
+      const auxWheel = createCylinder(0.072, 0.072, 0.010, darkSteel, 0, 0, -0.040, govWheelGrpL);
+      auxWheel.rotation.x = Math.PI / 2;
+      for (let i = 0; i < 8; i++) {
+        const sa = i * Math.PI / 4 + 0.2;
+        const slot = createBox(0.020, 0.013, 0.012, holeDark,
+          Math.cos(sa) * 0.060, Math.sin(sa) * 0.060, -0.040, govWheelGrpL);
+        slot.rotation.z = sa;
       }
 
-      // 140 원심추 ×2 — 대기 포즈. 1.3배 과속 시 볼트(141)→스위치(192) (애니 없음)
-      function addCentrifugalWeight(ang0, side) {
-        const wGrp = new THREE.Group();
-        wGrp.rotation.z = ang0;
-        createBox(0.055, 0.028, 0.022, weightMat, 0.070, 0.008 * side, 0.018, wGrp);
-        createBox(0.040, 0.022, 0.018, weightMat, 0.095, 0.022 * side, 0.018, wGrp);
-        createCylinder(0.006, 0.006, 0.028, silverMat, 0.042, 0, 0.018, wGrp).rotation.x = Math.PI / 2;
-        createCylinder(0.008, 0.008, 0.012, silverMat, 0.088, 0.030 * side, 0.030, wGrp).rotation.x = Math.PI / 2;
-        if (side < 0) {
-          createBox(0.035, 0.010, 0.010, leverMat, 0.108, -0.012, 0.036, wGrp);
-          const tripBolt = createCylinder(0.007, 0.007, 0.022, goldBolt, 0.128, -0.012, 0.040, wGrp);
-          tripBolt.rotation.x = Math.PI / 2;
-        }
-        govWheelSpinGrp.add(wGrp);
+      // 140/140' 진자 ×2 — 휠 전면에 힌지. rotation.z += 가 원심 벌어짐(트립볼트 반경 증가)
+      function buildGovPendulum(mountAng) {
+        const pg = new THREE.Group();
+        pg.position.set(Math.cos(mountAng) * 0.070, Math.sin(mountAng) * 0.070, 0.042);
+        pg.rotation.z = mountAng - Math.PI / 2; // 로컬 +x = 접선 방향
+        createCylinder(0.0075, 0.0075, 0.024, silverMat, 0, 0, -0.008, pg).rotation.x = Math.PI / 2; // 힌지핀
+        createBox(0.060, 0.026, 0.013, weightMat, 0.038, -0.002, 0, pg);  // 중량체 몸통
+        createBox(0.030, 0.036, 0.015, weightMat, 0.078, 0.002, 0, pg);   // 선단 중량부
+        // 141 트립볼트 — 전방(+z) 돌출. 과속 회동 시 회전반경 0.104→0.121로 커져 192 타격
+        createCylinder(0.0055, 0.0055, 0.020, goldBolt, 0.062, 0.008, 0.016, pg).rotation.x = Math.PI / 2;
+        govWheelGrpL.add(pg);
+        return pg;
       }
-      addCentrifugalWeight(Math.PI * 0.15, -1);
-      addCentrifugalWeight(Math.PI * 0.15 + Math.PI, 1);
+      const govPendA = buildGovPendulum(-0.26);           // 도4의 140 — 143·15·12 연동측
+      const govPendB = buildGovPendulum(-0.26 + Math.PI); // 140' — 대칭 밸런스
+      // 143 지지편 — 진자 상부, 트립레버 속도조정볼트(154)와 접지
+      createBox(0.030, 0.007, 0.012, leverMat, 0.018, 0.017, 0.004, govPendA);
 
-      // 160 연동 링크
-      createBox(0.090, 0.008, 0.008, leverMat, 0.020, 0.055, 0.022, govWheelSpinGrp);
-      createBox(0.090, 0.008, 0.008, leverMat, -0.020, -0.055, 0.022, govWheelSpinGrp);
-      createCylinder(0.005, 0.005, 0.014, silverMat, 0.055, 0.055, 0.022, govWheelSpinGrp).rotation.x = Math.PI / 2;
-      createCylinder(0.005, 0.005, 0.014, silverMat, -0.055, -0.055, 0.022, govWheelSpinGrp).rotation.x = Math.PI / 2;
+      // 12 제동자 — 휠 전면 힌지. 스프링(13)이 중심측으로 당겨 123을 라체트에 걸리게 함
+      const govPawlGrp = new THREE.Group();
+      govPawlGrp.position.set(0.068, 0.030, 0.042);
+      govPawlGrp.rotation.z = 2.374; // 연장부(122)가 라체트 상부 홈 방향을 향함
+      govWheelGrpL.add(govPawlGrp);
+      createBox(0.026, 0.022, 0.012, weightMat, 0, 0, 0, govPawlGrp);                              // 120 바디
+      createCylinder(0.006, 0.006, 0.020, silverMat, 0, 0, -0.006, govPawlGrp).rotation.x = Math.PI / 2;
+      createBox(0.044, 0.012, 0.010, weightMat, 0.026, 0, 0, govPawlGrp);                          // 122 연장부
+      createBox(0.015, 0.016, 0.011, weightMat, 0.048, 0.002, -0.016, govPawlGrp);                 // 123 첨예부(라체트 평면 단차)
+      const pawlTooth = createBox(0.013, 0.010, 0.011, weightMat, 0.054, 0.010, -0.016, govPawlGrp);
+      pawlTooth.rotation.z = 0.55;                                                                 // 제1/제2 경사면(125/126)
+      createBox(0.013, 0.010, 0.010, weightMat, -0.015, 0.005, 0, govPawlGrp);                     // 127 돌출턱
+      const govRet1 = createCylinder(0.0035, 0.0035, 0.034, silverMat, -0.008, 0.020, 0.005, govPawlGrp);
+      govRet1.rotation.z = 0.45;                                                                   // 121a 복귀레버
+      const govRet2 = createCylinder(0.0035, 0.0035, 0.030, silverMat, 0.006, -0.017, 0.005, govPawlGrp);
+      govRet2.rotation.z = -0.40;                                                                  // 121b 복귀레버
+      // 13 인장스프링 — 연장부(122)를 휠 중심측으로 당김 (제동 예압)
+      createCylinder(0.004, 0.004, 0.016, silverMat, 0.012, 0.030, 0.042, govWheelGrpL).rotation.x = Math.PI / 2;
+      const govSpr13 = createCylinder(0.0028, 0.0028, 0.043, springMat, 0.032, 0.038, 0.042, govWheelGrpL);
+      govSpr13.rotation.z = -1.212;
 
-      createCylinder(0.045, 0.045, 0.022, govFrmMat, gWX, gWY, frontZ + 0.010, govBodyGrp).rotation.x = Math.PI / 2;
-      createCylinder(0.022, 0.022, 0.032, M.gold(), gWX, gWY, frontZ + 0.026, govBodyGrp).rotation.x = Math.PI / 2;
-      for (let i = 0; i < 5; i++) {
-        const ba = i * Math.PI * 2 / 5 + 0.30;
-        createCylinder(0.0045, 0.0045, 0.012, silverMat,
-          gWX + Math.cos(ba) * 0.032, gWY + Math.sin(ba) * 0.032, frontZ + 0.035, govBodyGrp).rotation.x = Math.PI / 2;
+      // 15 트립레버 — 151 힌지. 평상시 152가 127을 눌러 제동자를 대기 위치에 구속
+      const govTripGrp = new THREE.Group();
+      govTripGrp.position.set(0.085, 0.010, 0.042);
+      govWheelGrpL.add(govTripGrp);
+      createCylinder(0.006, 0.006, 0.020, silverMat, 0, 0, -0.006, govTripGrp).rotation.x = Math.PI / 2; // 151 힌지축
+      createBox(0.020, 0.022, 0.010, leverMat, 0, 0, 0, govTripGrp);
+      createBox(0.010, 0.020, 0.008, leverMat, -0.013, 0.010, 0, govTripGrp);   // 152 돌출부 → 127 상면 가압
+      createBox(0.012, 0.040, 0.008, leverMat, -0.004, -0.028, 0, govTripGrp);  // 153 연장편 → 143 방향
+      createCylinder(0.004, 0.004, 0.016, goldBolt, -0.006, -0.048, 0, govTripGrp); // 154 속도조정볼트(143 접지)
+
+      // ─── 170 라체트 — 휠과 동축·독립 회전. 걸림홈부(171) 3개 @120°, 절개공(177) ───
+      const govRatchetGrp = new THREE.Group();
+      govRatchetGrp.position.set(0, gWY, 0.026);
+      govBodyGrp.add(govRatchetGrp);
+      const ratShape = new THREE.Shape();
+      const ratR = 0.068, notchD = 0.016, notchHalf = 0.10; // 홈 깊이·개구 반각(rad)
+      for (let s = 0; s < 3; s++) {
+        const aN = s * 2 * Math.PI / 3 + Math.PI / 2;
+        const aStart = aN + notchHalf;
+        const aEnd = aN + 2 * Math.PI / 3 - notchHalf;
+        if (s === 0) ratShape.moveTo(Math.cos(aStart) * ratR, Math.sin(aStart) * ratR);
+        ratShape.absarc(0, 0, ratR, aStart, aEnd, false);
+        const aN2 = aN + 2 * Math.PI / 3;
+        ratShape.lineTo(Math.cos(aN2) * (ratR - notchD), Math.sin(aN2) * (ratR - notchD)); // 173/174 경사면+172 홈
+        ratShape.lineTo(Math.cos(aN2 + notchHalf) * ratR, Math.sin(aN2 + notchHalf) * ratR);
       }
+      const ratMesh = new THREE.Mesh(
+        new THREE.ExtrudeGeometry(ratShape, { depth: 0.012, bevelEnabled: false }), ratchetMat);
+      ratMesh.position.z = -0.006;
+      govRatchetGrp.add(ratMesh);
+      for (let s = 0; s < 3; s++) { // 177 절개공 (충격 흡수)
+        const aN = s * 2 * Math.PI / 3 + Math.PI / 2;
+        const cutHole = createCylinder(0.004, 0.004, 0.014, holeDark,
+          Math.cos(aN) * (ratR - notchD - 0.007), Math.sin(aN) * (ratR - notchD - 0.007), 0, govRatchetGrp);
+        cutHole.rotation.x = Math.PI / 2;
+      }
+      createCylinder(0.030, 0.030, 0.016, ratchetMat, 0, 0, 0, govRatchetGrp).rotation.x = Math.PI / 2; // 축 칼라
+      const govRatPin = createCylinder(0.005, 0.005, 0.030, silverMat,
+        Math.cos(-1.05) * 0.052, Math.sin(-1.05) * 0.052, 0.014, govRatchetGrp); // 182 링크 연결핀
+      govRatPin.rotation.x = Math.PI / 2;
 
-      // ─── 190/192 과속 스위치 (Part design 16~17p) ───
-      const swCaseMat = M.paint(0x565c63);
-      const swGrp = new THREE.Group();
-      swGrp.position.set(-0.175, gWY - 0.004, frontZ + 0.016);
-      swGrp.name = 'govOverspeedSwitch';
-      govBodyGrp.add(swGrp);
-      createBox(0.052, 0.078, 0.054, swCaseMat, 0.026, 0.006, 0, swGrp);
-      createBox(0.052, 0.014, 0.014, swCaseMat, 0.026, 0.048, 0.022, swGrp);
-      [-0.014, 0, 0.014].forEach(pz => {
-        createCylinder(0.006, 0.006, 0.006, M.paint(0x22272d), 0.052, 0.010, pz, swGrp).rotation.z = Math.PI / 2;
+      // ─── 180 로프고정체 — 휠 상부 우측. 암·스프링 ≈ 수평 대비 35°
+      const armAng = Math.PI * 35 / 180; // 35°
+      const armLen = 0.118;
+      const pivX = 0.028;
+      const pivY = gWY - 0.008;
+
+      // 프레임측 피벗 러그 (암 기부)
+      createBox(0.014, 0.036, 0.012, govFrmDark, pivX, pivY - 0.004, 0.022, govBodyGrp);
+      createBox(0.014, 0.036, 0.012, govFrmDark, pivX, pivY - 0.004, 0.046, govBodyGrp);
+      createCylinder(0.006, 0.006, 0.038, silverMat, pivX, pivY, 0.034, govBodyGrp).rotation.x = Math.PI / 2;
+
+      // 작동암 그룹 — 피벗 원점, rotation.z += 가 로프 압착
+      const govCatcherGrp = new THREE.Group();
+      govCatcherGrp.position.set(pivX, pivY, 0.034);
+      govBodyGrp.add(govCatcherGrp);
+      // 182 링크 암 (우상향 35°)
+      const catArm = createBox(armLen, 0.016, 0.012, leverMat, armLen * 0.5, 0, -0.010, govCatcherGrp);
+      catArm.rotation.z = armAng;
+      // 181 누름판(캐치슈) — 암 선단, 림에 면한 직사각 판
+      const shoeX = Math.cos(armAng) * armLen;
+      const shoeY = Math.sin(armAng) * armLen;
+      createBox(0.026, 0.052, 0.022, darkSteel, shoeX, shoeY, -0.018, govCatcherGrp);
+      createBox(0.005, 0.052, 0.012, holeDark, shoeX + Math.cos(armAng) * 0.014, shoeY + Math.sin(armAng) * 0.014, -0.018, govCatcherGrp);
+      // 183 로프캐쳐 쐐기 — 림 홈 쪽
+      createBox(0.018, 0.028, 0.016, darkSteel,
+        shoeX - Math.cos(armAng) * 0.020, shoeY - Math.sin(armAng) * 0.020, -0.024, govCatcherGrp);
+      createCylinder(0.004, 0.004, 0.018, silverMat, shoeX * 0.92, shoeY * 0.92, 0.004, govCatcherGrp).rotation.x = Math.PI / 2;
+
+      // 182 보조 링크 — 라체트 핀 ↔ 암 중간 (정지 자세)
+      const ratPinX = Math.cos(-1.05) * 0.052;
+      const ratPinY = gWY + Math.sin(-1.05) * 0.052;
+      const midX = pivX + Math.cos(armAng) * armLen * 0.45;
+      const midY = pivY + Math.sin(armAng) * armLen * 0.45;
+      const linkDx = midX - ratPinX;
+      const linkDy = midY - ratPinY;
+      const linkLen = Math.sqrt(linkDx * linkDx + linkDy * linkDy) || 0.055;
+      const govLink = createBox(linkLen, 0.009, 0.006, leverMat,
+        (ratPinX + midX) * 0.5, (ratPinY + midY) * 0.5, 0.040, govBodyGrp);
+      govLink.rotation.z = Math.atan2(linkDy, linkDx);
+
+      // 스프링 로드 조립체 — 181 뒤, 동일 60° 축으로 외측 연장
+      const govSprGrp = new THREE.Group();
+      govSprGrp.position.set(
+        pivX + Math.cos(armAng) * (armLen + 0.012),
+        pivY + Math.sin(armAng) * (armLen + 0.012),
+        0.034);
+      govSprGrp.rotation.z = armAng - Math.PI / 2; // 로컬 +Y = 35° 우상향
+      govBodyGrp.add(govSprGrp);
+      createCylinder(0.0045, 0.0045, 0.120, silverMat, 0, 0.060, 0, govSprGrp); // 로드
+      createBox(0.022, 0.010, 0.028, darkSteel, 0, 0.004, 0, govSprGrp);       // 181 배면 누름판 받침
+      createBox(0.036, 0.008, 0.032, govFrmDark, 0, 0.028, 0, govSprGrp);       // 반력 브라켓
+      for (let i = 0; i < 8; i++) {
+        const govCoil = new THREE.Mesh(new THREE.TorusGeometry(0.0135, 0.0035, 8, 18), springMat);
+        govCoil.rotation.x = Math.PI / 2;
+        govCoil.position.set(0, 0.038 + i * 0.009, 0);
+        govSprGrp.add(govCoil);
+      }
+      createCylinder(0.016, 0.016, 0.005, silverMat, 0, 0.034, 0, govSprGrp);
+      createCylinder(0.016, 0.016, 0.005, silverMat, 0, 0.106, 0, govSprGrp);
+      createCylinder(0.008, 0.008, 0.007, silverMat, 0, 0.114, 0, govSprGrp);
+      createCylinder(0.008, 0.008, 0.007, silverMat, 0, 0.122, 0, govSprGrp);
+      // 상부 거싯 (프레임↔스프링 브라켓)
+      createBox(0.014, 0.028, 0.020, govFrmDark,
+        pivX + Math.cos(armAng) * (armLen + 0.02),
+        pivY + Math.sin(armAng) * (armLen + 0.02) - 0.02,
+        0.034, govBodyGrp);
+
+      // ─── 190 과속스위치 + 192 레버(평상시 수평) + 50 복귀장치 (도7·도8a~8c) ───
+      const govSwitchGrp = new THREE.Group();
+      govSwitchGrp.name = 'govOverspeedSwitch';
+      govBodyGrp.add(govSwitchGrp);
+      createBox(0.026, 0.150, 0.050, govFrmDark, -0.218, 0.115, 0.030, govSwitchGrp); // 장착 채널
+      createBox(0.050, 0.016, 0.050, govFrmDark, -0.206, 0.048, 0.030, govSwitchGrp); // 하부 거싯
+      createBox(0.055, 0.092, 0.048, swCaseMat, -0.205, 0.225, 0.038, govSwitchGrp);  // 190 스위치 박스
+      createBox(0.057, 0.0025, 0.050, holeDark, -0.205, 0.246, 0.038, govSwitchGrp);  // 커버 절개선
+      [[-0.226, 0.190], [-0.184, 0.190], [-0.226, 0.260], [-0.184, 0.260]].forEach(([sx, sy]) => {
+        createCylinder(0.003, 0.003, 0.005, silverMat, sx, sy, 0.063, govSwitchGrp).rotation.x = Math.PI / 2;
       });
-      createBox(0.005, 0.010, 0.010, M.paint(0xc8a020), 0.026, 0.034, -0.020, swGrp);
-      createBox(0.005, 0.006, 0.048, silverMat, 0.028, -0.040, 0, swGrp);
-      createBox(0.005, 0.020, 0.006, silverMat, 0.028, -0.032, -0.024, swGrp);
-      createBox(0.005, 0.020, 0.006, silverMat, 0.028, -0.032, 0.024, swGrp);
-      const swFoldL = createBox(0.003, 0.028, 0.020, silverMat, 0.028, -0.036, 0.007, swGrp);
-      swFoldL.rotation.x = -0.58;
-      const swFoldR = createBox(0.003, 0.028, 0.020, silverMat, 0.028, -0.036, -0.007, swGrp);
-      swFoldR.rotation.x = 0.58;
-      createCylinder(0.004, 0.004, 0.006, silverMat, 0.028, -0.028, 0.015, swGrp).rotation.x = Math.PI / 2;
-      createCylinder(0.004, 0.004, 0.006, silverMat, 0.028, -0.028, -0.015, swGrp).rotation.x = Math.PI / 2;
+      [0.024, 0.038, 0.052].forEach(pz => { // 전선관 포트 3개 (하면)
+        createCylinder(0.0065, 0.0065, 0.010, holeDark, -0.205, 0.176, pz, govSwitchGrp);
+      });
+      createCylinder(0.003, 0.003, 0.115, darkSteel, -0.205, 0.118, 0.038, govSwitchGrp); // 인입 케이블
+      // 192 레버 — 평상시 수평. 진자 볼트(141) 타격 시 상/하로 제껴짐 (rotation.z = ±0.55)
+      const govLeverGrp = new THREE.Group();
+      govLeverGrp.position.set(-0.176, 0.218, 0.056);
+      govSwitchGrp.add(govLeverGrp);
+      createCylinder(0.008, 0.008, 0.012, darkSteel, 0, 0, 0, govLeverGrp).rotation.x = Math.PI / 2; // 레버축
+      createBox(0.046, 0.013, 0.005, leverMat, 0.026, 0, 0.004, govLeverGrp);   // 블레이드
+      createBox(0.018, 0.009, 0.005, leverMat, 0.055, 0, 0.004, govLeverGrp);   // 선단(타격면, 반경≈0.114)
+      createBox(0.016, 0.010, 0.005, leverMat, -0.012, 0, 0.004, govLeverGrp);  // 후단 꼬리
+      const govPin54 = createCylinder(0.0035, 0.0035, 0.018, silverMat, 0.014, 0, 0.010, govLeverGrp);
+      govPin54.rotation.x = Math.PI / 2;                                        // 54 지지핀 → 530 안내홈 삽입
+      // 50 복귀장치 — 51 솔레노이드 → 52 작동핀 → 53 브라켓 전진 → 530(<형 홈, 531/532 경사면)이
+      //               54를 안내해 레버를 수평 복귀 (도8b: 하향 제낌 / 도8c: 상향 제낌 복귀)
+      createBox(0.026, 0.032, 0.026, darkSteel, -0.252, 0.218, 0.068, govSwitchGrp);       // 51 솔레노이드
+      const govSolCoil = createCylinder(0.011, 0.011, 0.018, silverMat, -0.235, 0.218, 0.068, govSwitchGrp);
+      govSolCoil.rotation.z = Math.PI / 2;
+      const govPin52 = createCylinder(0.0035, 0.0035, 0.050, silverMat, -0.201, 0.218, 0.068, govSwitchGrp);
+      govPin52.rotation.z = Math.PI / 2;                                                   // 52 작동핀
+      createBox(0.008, 0.042, 0.007, leverMat, -0.173, 0.218, 0.068, govSwitchGrp);        // 53 브라켓
+      const govFin531 = createBox(0.022, 0.006, 0.007, leverMat, -0.161, 0.2255, 0.068, govSwitchGrp);
+      govFin531.rotation.z = -0.55;                                                        // 531 상부경사면
+      const govFin532 = createBox(0.022, 0.006, 0.007, leverMat, -0.161, 0.2105, 0.068, govSwitchGrp);
+      govFin532.rotation.z = 0.55;                                                         // 532 하부경사면
 
-      // ─── 180/182 작동암 + 캐치 + 압축스프링 ───
-      const lowerLever = createBox(0.210, 0.026, 0.018, leverMat, -0.050, 0.148, frontZ + 0.028, govBodyGrp);
-      lowerLever.rotation.z = -0.28;
-      const upperLever = createBox(0.215, 0.032, 0.020, leverMat, 0.082, 0.232, frontZ + 0.032, govBodyGrp);
-      upperLever.rotation.z = 0.52;
-      createCylinder(0.012, 0.012, 0.022, silverMat, -0.038, 0.128, frontZ + 0.042, govBodyGrp).rotation.x = Math.PI / 2;
-      createCylinder(0.012, 0.012, 0.022, silverMat, -0.012, 0.186, frontZ + 0.044, govBodyGrp).rotation.x = Math.PI / 2;
-      createBox(0.058, 0.036, 0.030, leverMat, 0.195, 0.285, frontZ + 0.028, govBodyGrp);
-      const wedgeShape = new THREE.Shape();
-      wedgeShape.moveTo(-0.030, -0.022);
-      wedgeShape.lineTo(0.028, -0.010);
-      wedgeShape.lineTo(0.028, 0.010);
-      wedgeShape.lineTo(-0.030, 0.022);
-      wedgeShape.lineTo(-0.030, -0.022);
-      const catchWedge = new THREE.Mesh(
-        new THREE.ExtrudeGeometry(wedgeShape, { depth: 0.020, bevelEnabled: false }),
-        leverMat);
-      catchWedge.position.set(0.060, 0.148, frontZ + 0.022);
-      catchWedge.rotation.z = -0.28;
-      govBodyGrp.add(catchWedge);
+      // ─── 220 광센서 (U포크, 후면판 장착 — 보조휠 절개부 통과광 검출) ───
+      createBox(0.022, 0.018, 0.005, darkSteel, -0.062, 0.261, -0.030, govBodyGrp);
+      createBox(0.022, 0.018, 0.005, darkSteel, -0.062, 0.261, -0.052, govBodyGrp);
+      createBox(0.008, 0.018, 0.030, darkSteel, -0.076, 0.261, -0.041, govBodyGrp);
+      createBox(0.006, 0.010, 0.012, darkSteel, -0.076, 0.261, -0.058, govBodyGrp);
 
-      const sprY = 0.288, sprZ = frontZ + 0.030;
-      createCylinder(0.006, 0.006, 0.220, springMat, 0.290, sprY, sprZ, govBodyGrp).rotation.z = Math.PI / 2;
-      for (let i = 0; i < 9; i++) {
-        const coil = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0045, 8, 18), springMat);
-        coil.rotation.y = Math.PI / 2;
-        coil.position.set(0.208 + i * 0.017, sprY, sprZ);
-        govBodyGrp.add(coil);
-      }
-      createCylinder(0.024, 0.024, 0.022, silverMat, 0.195, sprY, sprZ, govBodyGrp).rotation.z = Math.PI / 2;
-      createCylinder(0.024, 0.024, 0.020, silverMat, 0.378, sprY, sprZ, govBodyGrp).rotation.z = Math.PI / 2;
-      createCylinder(0.017, 0.017, 0.018, M.paint(0x5c636b), 0.410, sprY, sprZ, govBodyGrp).rotation.z = Math.PI / 2;
+      // ─── 제어회로부 — 후면판 배면 (광센서 신호로 속도 산출·OVER/EMER 판정) ───
+      createBox(0.10, 0.13, 0.008, M.paint(0x1f4d2a), 0.03, 0.20, -0.073, govBodyGrp);
+      createBox(0.030, 0.020, 0.006, holeDark, 0.010, 0.23, -0.078, govBodyGrp);
+      createBox(0.016, 0.012, 0.005, silverMat, 0.055, 0.17, -0.078, govBodyGrp);
 
-      createBox(0.055, 0.045, 0.005, M.ss(0xd8dde2), 0.065, 0.145, frontZ + 0.020, govBodyGrp);
-      createBox(0.052, 0.038, 0.004, M.paint(0xf0d64a), 0.155, 0.120, frontZ + 0.022, govBodyGrp);
-      createBox(0.052, 0.032, 0.004, M.ss(0xe9e9e5), 0.080, 0.173, frontZ + 0.024, govBodyGrp);
-      for (let i = 0; i < 4; i++) {
-        createBox(0.038, 0.004, 0.003, M.paint(0x111111), 0.080, 0.166 + i * 0.007, frontZ + 0.027, govBodyGrp);
-      }
-      createCylinder(0.012, 0.012, 0.016, silverMat, 0.000, 0.080, frontZ + 0.030, govBodyGrp).rotation.x = Math.PI / 2;
+      // 사양 라벨·제조 명판 (후면판 전면 상부 코너)
+      createBox(0.052, 0.036, 0.004, M.paint(0xf0d64a), -0.115, 0.315, -0.054, govBodyGrp);
+      createBox(0.046, 0.028, 0.004, M.ss(0xe9e9e5), 0.115, 0.315, -0.054, govBodyGrp);
 
       govGrp.add(govBodyGrp);
 
@@ -2661,7 +2797,23 @@
         govX: govX,
         govZ: govZ,
         govWheelY: govWheelWorldY,
-        govR: gR
+        govR: gR * govScale, // 월드 홈반경 0.15 — 로프 가닥 z=govZ±0.15·ui.js 회전 환산 공통
+        // ── 추후 트립/복귀 애니메이션용 가동부 핸들 (rotation.z = 0 이 대기 자세) ──
+        governor: {
+          wheel: govWheelGrpL,          // 로프 구동 회전 (ui.js에서 사용 중)
+          ratchet: govRatchetGrp,       // 제동 시 끌려 도는 라체트
+          pendulums: [govPendA, govPendB], // 진자 — +z 회전이 원심 벌어짐
+          pawl: govPawlGrp,             // 제동자 — +z 회전이 라체트 걸림
+          tripLever: govTripGrp,        // 트립레버 — -z 회전이 구속 해제
+          switchLever: govLeverGrp,     // 과속스위치 레버 — ±z 제낌 (0 = 수평 대기)
+          catcherArm: govCatcherGrp,    // 로프고정체 작동암 — +z 회전이 로프 압착
+          link: govLink,                // 라체트↔작동암 링크 (재배치 시 양단 핀 참조)
+          resetPin: govPin52,           // 복귀 솔레노이드 작동핀 — +x(로컬) 전진
+          pose: {                       // 근사 초기값 — 실제 연동 구현 시 미세조정
+            rest: { pendulum: 0, pawl: 0, tripLever: 0, switchLever: 0, catcherArm: 0, ratchet: 0 },
+            trip: { pendulum: 0.5, pawl: 0.22, tripLever: -0.30, switchLever: -0.55, catcherArm: 0.12, ratchet: -0.35 }
+          }
+        }
       };
       scene.add(mrGrp);
     }
