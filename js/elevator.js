@@ -939,3 +939,79 @@
       ];
       govRopeLine.geometry.setFromPoints(pts);
     }
+
+    /* ==========================================================================
+       조속기 트립/복귀 — CAD형 상단암·라체트 걸림 (environment.js §7)
+       호출: ui.js startOverspeedFault() → governorTrip() / governorReset()
+       ========================================================================== */
+    let governorPhase = 'rest'; // rest | tripping | tripped | resetting
+    let govSpinDir = 1;         // 트립 직전 휠 회전 부호 (+1 = rotation.z 증가 = 카 하강)
+
+    function govHandles() { return (mrGrp && mrGrp.userData && mrGrp.userData.governor) || null; }
+
+    /* 과속 트립 (CAD 시퀀스)
+       ① 진자 원심 개방 → ② 스위치 레버 제낌 → ③ 휠 관성 감속
+       ④ 상단암 하향(훅→라체트 걸림) + 스프링 압축 → ⑤ 라체트·휠 동반 견인 후 정지 */
+    function governorTrip(spinDir, onLocked) {
+      const gov = govHandles(); if (!gov || governorPhase !== 'rest') return null;
+      governorPhase = 'tripping';
+      govSpinDir = spinDir;
+      const pose = gov.pose.trip, wheel = gov.wheel, g = gov.geom;
+      const arm = gov.topArm || gov.catcherArm;
+      const W = wheel.rotation.z;
+      const coast = Math.PI * 2 * 1.15;
+      // 톱니 정렬 — 관성 주행 후 toothStep 격자 스냅
+      let rem = (-(W + spinDir * coast)) % g.toothStep;
+      if (spinDir > 0 && rem < 0) rem += g.toothStep;
+      if (spinDir < 0 && rem > 0) rem -= g.toothStep;
+      const Wstop = W + spinDir * coast + rem;
+      const drag = spinDir * Math.abs(pose.ratchet);
+      const armTrip = g.armRot0 + pose.topArm;
+      const sprTrip = pose.spring;
+
+      const tl = gsap.timeline();
+      tl.to(gov.pendulums[0].rotation, { z: g.pendRot0[0] + pose.pendulum, duration: 0.35, ease: 'power2.out' }, 0);
+      tl.to(gov.pendulums[1].rotation, { z: g.pendRot0[1] + pose.pendulum, duration: 0.35, ease: 'power2.out' }, 0);
+      tl.to(gov.switchLever.rotation,
+        { z: -spinDir * Math.abs(pose.switchLever), duration: 0.12, ease: 'back.out(2.5)' }, 0.28);
+      tl.to(wheel.rotation, { z: Wstop, duration: 0.60, ease: 'power2.out' }, 0);
+      // 훅 걸림 — 제동자 진입 + 상단암 하향 + 스프링 압축
+      tl.to(gov.pawl.rotation, { z: g.pawlRot0 + (pose.pawl || 0), duration: 0.14, ease: 'power4.in' }, 0.46);
+      tl.to(arm.rotation, { z: armTrip, duration: 0.18, ease: 'power4.in' }, 0.48);
+      if (gov.spring) tl.to(gov.spring.scale, { y: sprTrip, duration: 0.18, ease: 'power2.in' }, 0.48);
+      tl.add(() => { if (onLocked) onLocked(); }, 0.58);
+      // 걸린 채 짧게 끌림
+      const rat0 = gov.ratchet.rotation.z;
+      tl.to(gov.ratchet.rotation, { z: rat0 + drag, duration: 0.40, ease: 'power3.out' }, 0.58);
+      tl.to(wheel.rotation, { z: Wstop + drag, duration: 0.40, ease: 'power3.out' }, 0.58);
+      tl.add(() => { governorPhase = 'tripped'; });
+      return tl;
+    }
+
+    /* 복귀: 암·스프링 대기각 → 라체트·휠 역회전 → 진자 복귀 → 스위치 솔레노이드 복귀 */
+    function governorReset(onDone) {
+      const gov = govHandles(); if (!gov || governorPhase !== 'tripped') return null;
+      governorPhase = 'resetting';
+      const wheel = gov.wheel;
+      const arm = gov.topArm || gov.catcherArm;
+      const ratRot = gov.ratchet.rotation.z;
+      const w1 = wheel.rotation.z - ratRot;
+      const w2 = w1 - govSpinDir * 0.55;
+
+      const tl = gsap.timeline();
+      tl.to(arm.rotation, { z: gov.geom.armRot0, duration: 0.55, ease: 'power2.inOut' }, 0);
+      if (gov.spring) tl.to(gov.spring.scale, { y: gov.geom.sprScale0 || 1, duration: 0.55, ease: 'power2.inOut' }, 0);
+      tl.to(gov.pawl.rotation, { z: gov.geom.pawlRot0, duration: 0.50, ease: 'power2.inOut' }, 0.15);
+      tl.to(gov.ratchet.rotation, { z: 0, duration: 0.55, ease: 'power2.inOut' }, 0);
+      tl.to(wheel.rotation, { z: w1, duration: 0.55, ease: 'power2.inOut' }, 0);
+      tl.to(wheel.rotation, { z: w2, duration: 0.80, ease: 'power1.inOut' }, 0.55);
+      tl.to(gov.pendulums[0].rotation, { z: gov.geom.pendRot0[0], duration: 0.80, ease: 'power2.inOut' }, 0.55);
+      tl.to(gov.pendulums[1].rotation, { z: gov.geom.pendRot0[1], duration: 0.80, ease: 'power2.inOut' }, 0.55);
+      tl.to(gov.resetPin.position, { x: '+=0.018', duration: 0.22, ease: 'power3.out' }, 1.35);
+      tl.to(gov.resetBracket.position, { x: '+=0.018', duration: 0.22, ease: 'power3.out' }, 1.37);
+      tl.to(gov.switchLever.rotation, { z: 0, duration: 0.28, ease: 'power2.inOut' }, 1.45);
+      tl.to(gov.resetPin.position, { x: '-=0.018', duration: 0.28, ease: 'power2.in' }, 1.80);
+      tl.to(gov.resetBracket.position, { x: '-=0.018', duration: 0.28, ease: 'power2.in' }, 1.80);
+      tl.add(() => { governorPhase = 'rest'; if (onDone) onDone(); });
+      return tl;
+    }

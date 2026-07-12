@@ -39,6 +39,122 @@
       if (tensionSheaveGrp) tensionSheaveGrp.rotation.x += deltaY / 0.15;
     }
 
+    /* ─────────────────────────────────────────────────────────────
+       돌상/돌하 (Overspeed) 고장 주입 — 조속기 트립 시퀀스 연동
+       카 폭주 가속 → 정격 130% 검출 → governorTrip() → 카 급정지 →
+       governorReset() → 최근접 층 구출 운전
+    ───────────────────────────────────────────────────────────── */
+    let overspeedActive = false;
+
+    function startOverspeedFault(btn) {
+      const gov = mrGrp.userData.governor;
+      if (!gov || moving || doorOpen || estop || gsap.isTweening(carDoorL.position)) return;
+
+      // 방향 결정: 하부층이면 돌상(폭주 상승), 상부층이면 돌하(폭주 하강)
+      const goingUp = curFloor <= 1;
+      const fIdx = goingUp ? FLOORS - 1 : 0;
+      const ty = FLOOR_Y[fIdx] + S.CAR_H / 2, cy = carGrp.position.y;
+      const spinDir = goingUp ? -1 : 1; // rotateGovernorTension: 상승 시 휠 rotation.z 감소
+
+      overspeedActive = true; moving = true;
+      currentState = ELEVATOR_STATE.MOVING;
+      updateStatus('v-dir', goingUp ? '▲▲ 돌상 (과속)' : '▼▼ 돌하 (과속)', '#f85149');
+      btn.disabled = true;
+
+      const vTrip = targetSpeed * 1.3; // 트립 임계 — 정격 130%
+      const dur = Math.abs(ty - cy) / (targetSpeed * 1.6 / 60); // 종단 160%까지 가속되는 폭주
+      let prevY = cy, prevT = performance.now(), tripped = false;
+      const tw = gsap.to(carGrp.position, {
+        y: ty, duration: dur, ease: 'power2.in',
+        onUpdate: () => {
+          const now = performance.now();
+          const dt = Math.max((now - prevT) / 1000, 1e-4);
+          const deltaY = carGrp.position.y - prevY;
+          prevY = carGrp.position.y; prevT = now;
+          rotateGovernorTension(deltaY);
+          cwtGrp.position.y -= deltaY;
+          refreshRopes(); refreshGovernorRope();
+          let curF = 1;
+          for (let i = FLOORS - 1; i >= 0; i--) { if (carGrp.position.y >= FLOOR_Y[i]) { curF = i + 1; break; } }
+          syncAllIndicators(curF, goingUp ? '↑' : '↓');
+          const v = Math.abs(deltaY) / dt * 60; // m/min
+          updateStatus('v-spd', Math.round(v) + ' m/min', '#f85149');
+          // 진자 원심 개방 — 정격 90%부터 속도 비례로 벌어짐 (대기각 기준, 트립 최대각의 80%까지)
+          const open = Math.min(Math.max((v - targetSpeed * 0.9) / (vTrip - targetSpeed * 0.9), 0), 1)
+            * gov.pose.trip.pendulum * 0.8;
+          gov.pendulums[0].rotation.z = gov.geom.pendRot0[0] + open;
+          gov.pendulums[1].rotation.z = gov.geom.pendRot0[1] + open;
+          if (!tripped && v >= vTrip) { tripped = true; tw.kill(); onGovernorOverspeed(spinDir, btn); }
+        },
+        onComplete: () => { if (!tripped) { tripped = true; onGovernorOverspeed(spinDir, btn); } }
+      });
+    }
+
+    function onGovernorOverspeed(spinDir, btn) {
+      estop = true; moving = false;
+      currentState = ELEVATOR_STATE.ESTOP;
+      updateStatus('v-dir', '⚠ 과속 검출 — 조속기 트립', '#f85149');
+      governorTrip(spinDir, () => {
+        // 쐐기 걸림 → 조속기로프 정지 → 세이프티 링크 견인 → 카 짧은 미끄럼 후 급정지
+        let prevY = carGrp.position.y;
+        gsap.to(carGrp.position, {
+          y: carGrp.position.y + (spinDir > 0 ? -0.22 : 0.22), duration: 0.5, ease: 'power3.out',
+          onUpdate: () => {
+            const deltaY = carGrp.position.y - prevY; prevY = carGrp.position.y;
+            cwtGrp.position.y -= deltaY;
+            refreshRopes(); refreshGovernorRope();
+          },
+          onComplete: () => {
+            updateStatus('v-spd', '0 m/min', '#f0883e');
+            updateStatus('v-dir', '■ 비상정지 (조속기 작동)', '#f85149');
+            btn.disabled = false; btn.textContent = 'RESET';
+          }
+        });
+      });
+    }
+
+    function resetGovernorFault(btn) {
+      btn.disabled = true;
+      updateStatus('v-dir', '조속기 복귀 중…', '#f0883e');
+      governorReset(() => {
+        estop = false; overspeedActive = false;
+        btn.disabled = false; btn.textContent = 'OVERSPEED';
+        rescueToNearestFloor();
+      });
+    }
+
+    // 구출 운전 — 최근접 층까지 서행 이동 후 도어 개방
+    function rescueToNearestFloor() {
+      let nf = 0, best = Infinity;
+      FLOOR_Y.forEach((fy, i) => {
+        const d = Math.abs(carGrp.position.y - (fy + S.CAR_H / 2));
+        if (d < best) { best = d; nf = i; }
+      });
+      const ty = FLOOR_Y[nf] + S.CAR_H / 2;
+      moving = true; currentState = ELEVATOR_STATE.MOVING;
+      updateStatus('v-dir', '구출 운전 (서행)', '#f0883e');
+      let prevY = carGrp.position.y;
+      gsap.to(carGrp.position, {
+        y: ty, duration: Math.max(Math.abs(ty - carGrp.position.y) / 0.4, 0.6), ease: 'power1.inOut',
+        onUpdate: () => {
+          const deltaY = carGrp.position.y - prevY; prevY = carGrp.position.y;
+          rotateGovernorTension(deltaY);
+          cwtGrp.position.y -= deltaY;
+          refreshRopes(); refreshGovernorRope();
+        },
+        onComplete: () => {
+          moving = false; currentState = ELEVATOR_STATE.IDLE;
+          curFloor = nf;
+          syncAllIndicators(nf + 1, '');
+          updateStatus('v-floor', (nf + 1) + 'F', '#3fb950');
+          updateStatus('v-dir', '정지 대기', '#8b949e');
+          updateStatus('v-spd', '0 m/min', '#f0883e');
+          document.querySelectorAll('#fbtns .c-btn').forEach((b, i) => b.classList.toggle('active', i === nf));
+          setTimeout(() => openDoors(), 300);
+        }
+      });
+    }
+
     function moveElevator(fIdx) {
       if (moving || estop || fIdx === curFloor) return;
       if (doorOpen || gsap.isTweening(carDoorL.position)) { closeDoors(() => moveElevator(fIdx)); return; }
@@ -90,9 +206,50 @@
       });
     }
 
+    // 독 팝오버 — 한 번에 하나만 열림, 아이콘 재탭·다른 아이콘·접기 버튼으로 닫힘
+    function closeAllMenus() {
+      document.querySelectorAll('.dropdown.open').forEach(d => d.classList.remove('open'));
+      document.querySelectorAll('.dock-btn.active').forEach(b => b.classList.remove('active'));
+    }
+
+    // HUD 드래그 이동 — 상태 디스플레이가 핸들 (마우스·터치 공용)
+    function makeHudDraggable() {
+      const hud = document.getElementById('hud');
+      const handle = document.getElementById('statusbar');
+      let dragging = false, sx = 0, sy = 0, ox = 0, oy = 0;
+      handle.addEventListener('pointerdown', e => {
+        if (e.target.closest('#hud-toggle')) return;
+        dragging = true; sx = e.clientX; sy = e.clientY;
+        ox = hud.offsetLeft; oy = hud.offsetTop;
+        handle.setPointerCapture(e.pointerId);
+      });
+      handle.addEventListener('pointermove', e => {
+        if (!dragging) return;
+        const nx = Math.min(Math.max(ox + e.clientX - sx, 4), window.innerWidth - 80);
+        const ny = Math.min(Math.max(oy + e.clientY - sy, 4), window.innerHeight - 48);
+        hud.style.left = nx + 'px'; hud.style.top = ny + 'px';
+      });
+      handle.addEventListener('pointerup', () => { dragging = false; });
+      handle.addEventListener('pointercancel', () => { dragging = false; });
+    }
+
     function bindUIEvents() {
-      document.getElementById('btn-menu-left').addEventListener('click', () => document.getElementById('panel-left').classList.toggle('open'));
-      document.getElementById('btn-menu-right').addEventListener('click', () => document.getElementById('panel-right').classList.toggle('open'));
+      document.querySelectorAll('.dock-btn[data-menu]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const menu = document.getElementById(btn.dataset.menu);
+          const wasOpen = menu.classList.contains('open');
+          closeAllMenus();
+          if (!wasOpen) { menu.classList.add('open'); btn.classList.add('active'); }
+        });
+      });
+      // 메뉴는 아이콘 재탭·다른 아이콘 선택·접기 버튼으로만 닫힘 (실행 중 사라짐 방지)
+
+      // 접기/펴기 — 독(아이콘) 숨김, 열린 메뉴도 함께 닫음
+      document.getElementById('hud-toggle').addEventListener('click', () => {
+        closeAllMenus();
+        document.getElementById('hud').classList.toggle('collapsed');
+      });
+      makeHudDraggable();
 
       document.querySelectorAll('input[name="speed"]').forEach(r => {
         r.addEventListener('change', e => {
@@ -106,12 +263,14 @@
       });
 
       document.getElementById('fbtns').addEventListener('click', e => {
-        const btn = e.target.closest('.c-btn'); if (btn) moveElevator(parseInt(btn.dataset.f));
+        const btn = e.target.closest('.c-btn');
+        if (btn) moveElevator(parseInt(btn.dataset.f));
       });
       document.getElementById('btn-open').addEventListener('click', () => { if (!moving && !estop) openDoors(); });
       document.getElementById('btn-close').addEventListener('click', () => { if (!moving) closeDoors(); });
 
       document.getElementById('btn-estop').addEventListener('click', e => {
+        if (overspeedActive) { updateStatus('v-dir', '조속기 트립 — 우측 패널에서 복귀', '#f85149'); return; }
         estop = !estop;
         if (estop) {
           gsap.killTweensOf(carGrp.position); gsap.killTweensOf(cwtGrp.position); moving = false;
@@ -119,23 +278,29 @@
           updateStatus('v-dir', '■ 비상정지', '#f85149'); updateStatus('v-spd', '0 m/min');
           e.target.textContent = '▶ 운전 재개 (RESET)'; e.target.className = 'c-btn blue';
         } else {
-          e.target.textContent = '🔴 E-STOP'; e.target.className = 'c-btn red'; updateStatus('v-dir', '정지 대기', '#8b949e');
+          e.target.textContent = 'E-STOP'; e.target.className = 'c-btn red'; updateStatus('v-dir', '정지 대기', '#8b949e');
         }
+      });
+
+      const ovBtn = document.getElementById('btn-overspeed');
+      if (ovBtn) ovBtn.addEventListener('click', () => {
+        if (!overspeedActive) startOverspeedFault(ovBtn);
+        else if (governorPhase === 'tripped') resetGovernorFault(ovBtn);
       });
 
       document.getElementById('t-wall')?.addEventListener('change', e => { if (wallGrp) wallGrp.visible = e.target.checked; });
       document.getElementById('t-rope')?.addEventListener('change', e => { ropeObjs.forEach(r => r.line.visible = e.target.checked); });
 
+      // 카메라 4뷰
       const midY = Y0 + TOTAL_H * 0.4;
-      document.getElementById('c-front').addEventListener('click', () => moveCam(18, midY, 21, 0, midY, 0));
-      document.getElementById('c-iso').addEventListener('click', () => moveCam(21, midY + 6, 21, 0, midY, 0));
-      document.getElementById('c-mr').addEventListener('click', () => moveCam(8, Y0 + TOTAL_H + 5, 8, 0, Y0 + TOTAL_H + 0.8, 0));
-      document.getElementById('c-pit').addEventListener('click', () => moveCam(6.5, Y0 + 1.0, 6.5, 0, Y0 + 1.0, 0));
-      document.getElementById('c-car').addEventListener('click', () => {
-        const cy = carGrp.position.y; moveCam(0, cy, S.CAR_D / 2 + 0.5, 0, cy - 0.1, 0);
-      });
-      document.getElementById('c-cwt').addEventListener('click', () => {
-        const cy = cwtGrp.position.y; moveCam(-5.5, cy, CWT_CENTER_Z + 2, 0, cy, CWT_CENTER_Z);
+      const camViews = {
+        'c-mr': () => moveCam(8, Y0 + TOTAL_H + 5, 8, 0, Y0 + TOTAL_H + 0.8, 0),
+        'c-pit': () => moveCam(6.5, Y0 + 1.0, 6.5, 0, Y0 + 1.0, 0),
+        'c-car': () => { const cy = carGrp.position.y; moveCam(0, cy, S.CAR_D / 2 + 0.5, 0, cy - 0.1, 0); },
+        'c-shaft': () => moveCam(18, midY, 21, 0, midY, 0)
+      };
+      Object.keys(camViews).forEach(id => {
+        document.getElementById(id).addEventListener('click', camViews[id]);
       });
     }
 
@@ -144,18 +309,4 @@
       gsap.to(controls.target, { x: tx, y: ty, z: tz, duration: 1.2, onUpdate: () => controls.update() });
     }
 
-    function makeDraggable(btn) {
-      let isDragging = false, startX, startY, initialLeft, initialTop, dragged = false;
-      btn.addEventListener('mousedown', (e) => {
-        isDragging = true; dragged = false; startX = e.clientX; startY = e.clientY;
-        initialLeft = btn.offsetLeft; initialTop = btn.offsetTop; btn.style.cursor = 'grabbing';
-      });
-      document.addEventListener('mousemove', (e) => {
-        if (!isDragging) return;
-        const dx = e.clientX - startX, dy = e.clientY - startY;
-        if (Math.abs(dx) > 5 || Math.abs(dy) > 5) dragged = true;
-        btn.style.left = `${initialLeft + dx}px`; btn.style.top = `${initialTop + dy}px`; btn.style.right = 'auto';
-      });
-      document.addEventListener('mouseup', () => { isDragging = false; btn.style.cursor = 'grab'; });
-      btn.addEventListener('click', (e) => { if (dragged) e.stopImmediatePropagation(); }, true);
-    }
+    // makeDraggable(구 플로팅 메뉴 버튼용)은 상단 바 개편으로 제거됨

@@ -58,297 +58,249 @@
       z-index: 80;
     }
 
-    /* 플로팅 메뉴 버튼 */
-    .menu-btn {
+    /* ── HUD 컨테이너 — 기본 좌상단, 드래그 이동 가능 ── */
+    #hud {
       position: absolute;
+      top: 10px;
+      left: 10px;
       z-index: 100;
-      background: #1f6feb;
-      border: none;
-      border-radius: 8px;
-      color: white;
-      width: 38px;
-      height: 38px;
-      font-size: 16px;
-      cursor: grab;
-      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
-    }
-
-    #btn-menu-left {
-      top: 15px;
-      left: 15px;
-    }
-
-    #btn-menu-right {
-      top: 15px;
-      right: 15px;
-      background: #b62324;
-    }
-
-    /* 듀얼 패널 공통 */
-    .panel {
-      position: absolute;
-      top: 0;
-      height: 100vh;
-      width: 180px;
-      background: #0d1117;
-      padding: 12px 8px;
       display: flex;
       flex-direction: column;
-      gap: 8px;
-      overflow-y: auto;
-      z-index: 90;
-      transition: transform 0.3s ease;
-    }
-
-    #panel-left {
-      left: 0;
-      border-right: 1px solid #21262d;
-      transform: translateX(-100%);
-    }
-
-    #panel-right {
-      right: 0;
-      border-left: 1px solid #21262d;
-      transform: translateX(100%);
-    }
-
-    #panel-left.open {
-      transform: translateX(0);
-    }
-
-    #panel-right.open {
-      transform: translateX(0);
-    }
-
-    .panel-header h1 {
-      font-size: 16px;
-      font-weight: 700;
-      color: #58a6ff;
-      letter-spacing: 0.04em;
-    }
-
-    .panel-header p {
-      font-size: 11px;
-      color: #6b7280;
-      margin-top: 6px;
-      line-height: 1.4;
-    }
-
-    .divider {
-      height: 1px;
-      background-color: #21262d;
-      margin: 4px 0;
-    }
-
-    .section {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    .section-title {
-      font-size: 12px;
-      font-weight: 700;
-      color: #8b949e;
-      letter-spacing: 0.05em;
-    }
-
-    /* 상태 표시 UI */
-    .status-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
+      align-items: flex-start;
       gap: 8px;
     }
 
-    .status-item {
-      background-color: #161b22;
-      border: 1px solid #21262d;
-      border-radius: 8px;
-      padding: 12px;
-    }
-
-    .status-item .label {
-      font-size: 10px;
-      color: #6b7280;
-    }
-
-    .status-item .value {
-      font-size: 16px;
-      font-weight: 700;
-      margin-top: 4px;
-      color: #58a6ff;
-    }
-
-    /* 층 선택 및 제어 버튼 */
-    .floor-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 5px;
-    }
-
-    .floor-btn {
-      background-color: #161b22;
-      border: 1px solid #21262d;
-      border-radius: 6px;
-      color: #8b949e;
-      font-size: 13px;
-      font-weight: 700;
-      padding: 12px 0;
-      cursor: pointer;
-      text-align: center;
-      transition: all 0.15s ease;
-    }
-
-    .floor-btn:hover {
-      border-color: #58a6ff;
-      color: #58a6ff;
-      background-color: #0d2045;
-    }
-
-    .floor-btn.active {
-      background-color: #1f6feb;
-      border-color: #58a6ff;
-      color: #ffffff;
-    }
-
-    .control-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-    }
-
-    .ctrl-btn {
-      background-color: #161b22;
-      border: 1px solid #21262d;
-      border-radius: 8px;
-      color: #e2e8f0;
-      font-size: 13px;
-      font-weight: 600;
-      padding: 14px 8px;
-      cursor: pointer;
-      transition: all 0.12s ease;
-    }
-
-    .ctrl-btn.full-width {
-      grid-column: 1 / -1;
-    }
-
-    .ctrl-btn.blue {
-      background-color: #1f6feb;
-      border-color: #58a6ff;
-      color: #ffffff;
-    }
-
-    .ctrl-btn.red {
-      background-color: #b62324;
-      border-color: #f85149;
-      color: #ffffff;
-    }
-
-    .ctrl-btn.green {
-      background-color: #1a7f4a;
-      border-color: #3fb950;
-      color: #ffffff;
-    }
-
-    /* 옵션 셀렉트 박스 */
-    .select-box {
-      width: 100%;
-      background-color: #161b22;
-      color: #c9d1d9;
-      border: 1px solid #30363d;
-      border-radius: 6px;
-      padding: 8px;
-      font-size: 11px;
-    }
-
-    .notice-box {
-      background-color: #221a0f;
-      border: 1px solid #4d3a1e;
-      color: #e3b341;
-      padding: 10px;
-      border-radius: 6px;
-      font-size: 11px;
-      margin-top: 4px;
-      line-height: 1.5;
-    }
-
-    /* 토글 스위치 */
-    .toggle-row {
+    /* 상태 디스플레이 (엘리베이터 인디케이터풍 LCD) — 드래그 핸들 겸용 */
+    #statusbar {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      font-size: 12px;
-      color: #c9d1d9;
+      gap: 9px;
+      padding: 6px 10px 6px 14px;
+      max-width: calc(100vw - 24px);
+      background: linear-gradient(180deg, #10161d, #1b232c);
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      border-radius: 13px;
+      box-shadow: 0 8px 20px rgba(31, 41, 55, 0.25), inset 0 0 14px rgba(0, 0, 0, 0.55);
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 13.5px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
     }
 
-    .toggle-switch {
-      position: relative;
-      width: 42px;
-      height: 22px;
+    #statusbar:active {
+      cursor: grabbing;
     }
 
-    .toggle-switch input {
-      opacity: 0;
-      width: 0;
-      height: 0;
-    }
-
-    .toggle-slider {
-      position: absolute;
-      inset: 0;
-      background-color: #21262d;
-      border-radius: 11px;
+    /* 접기/펴기 토글 */
+    #hud-toggle {
+      flex: none;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.09);
+      color: #8b949e;
       cursor: pointer;
-      border: 1px solid #30363d;
-      transition: 0.2s;
+      -webkit-tap-highlight-color: transparent;
     }
 
-    .toggle-slider::before {
-      content: '';
-      position: absolute;
-      width: 16px;
-      height: 16px;
-      left: 2px;
-      top: 2px;
-      background-color: #6b7280;
+    #hud-toggle svg {
+      width: 14px;
+      height: 14px;
+      transition: transform 0.2s ease;
+    }
+
+    #hud.collapsed #hud-toggle svg {
+      transform: rotate(180deg);
+    }
+
+    #hud.collapsed #dock {
+      display: none;
+    }
+
+    .tb-dot {
+      flex: none;
+      width: 8px;
+      height: 8px;
       border-radius: 50%;
-      transition: 0.2s;
+      background: #34c759;
+      box-shadow: 0 0 8px rgba(52, 199, 89, 0.9);
     }
 
-    .toggle-switch input:checked+.toggle-slider {
-      background-color: #1f6feb;
-      border-color: #58a6ff;
+    #statusbar #v-floor {
+      color: #3fb950;
+      text-shadow: 0 0 9px rgba(63, 185, 80, 0.7);
     }
 
-    .toggle-switch input:checked+.toggle-slider::before {
-      transform: translateX(20px);
-      background-color: #ffffff;
+    #statusbar #v-spd {
+      color: #f0883e;
+      text-shadow: 0 0 9px rgba(240, 136, 62, 0.6);
+      white-space: nowrap;
     }
 
-    /* 카메라 뷰 버튼 */
-    .cam-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 5px;
+    .tb-sep {
+      flex: none;
+      width: 1px;
+      height: 14px;
+      background: rgba(255, 255, 255, 0.14);
     }
 
-    .cam-btn {
-      background-color: #161b22;
-      border: 1px solid #21262d;
-      border-radius: 6px;
+    #statusbar #v-dir {
       color: #8b949e;
       font-size: 11px;
-      padding: 10px 4px;
-      cursor: pointer;
-      text-align: center;
-      transition: all 0.15s;
+      font-weight: 600;
+      font-family: 'Malgun Gothic', sans-serif;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
-    .cam-btn:hover {
-      border-color: #a78bfa;
-      color: #a78bfa;
-      background-color: #1e1b4b;
+    /* ── 가로 아이콘 독 (애플 스타일) — 서브메뉴와 동일 폭 ── */
+    #dock {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      width: 190px;
+      padding: 9px 14px;
+      background: rgba(255, 255, 255, 0.6);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border: 1px solid rgba(255, 255, 255, 0.65);
+      border-radius: 24px;
+      box-shadow: 0 10px 30px rgba(31, 41, 55, 0.18);
+    }
+
+    .dock-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 0;
+      border: none;
+      background: none;
+      cursor: pointer;
+      font-family: inherit;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .dock-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 3px 9px rgba(31, 41, 55, 0.25);
+      transition: transform 0.16s ease;
+    }
+
+    .dock-icon svg {
+      width: 21px;
+      height: 21px;
+    }
+
+    .dock-btn:active .dock-icon {
+      transform: scale(0.88);
+    }
+
+    .dock-btn.active .dock-icon {
+      outline: 3px solid rgba(10, 132, 255, 0.5);
+      outline-offset: 2px;
+    }
+
+    .dock-icon.ic-op {
+      background: linear-gradient(180deg, #4da3ff, #0a63e8);
+    }
+
+    .dock-icon.ic-cam {
+      background: linear-gradient(180deg, #5bd669, #26b33e);
+    }
+
+    .dock-icon.ic-inst {
+      background: linear-gradient(180deg, #ffb340, #f27d0c);
+    }
+
+    .dock-btn > span {
+      font-size: 9px;
+      font-weight: 600;
+      color: #3a3a3c;
+      letter-spacing: 0.01em;
+    }
+
+    /* ── 독 아래로 펼쳐지는 세로 서브메뉴 (HUD와 함께 이동) ── */
+    .dropdown {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      z-index: 99;
+      width: 190px; /* 독 끝단과 정렬 */
+      max-height: calc(100vh - 170px);
+      overflow-y: auto;
+      background: rgba(255, 255, 255, 0.72);
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      border: 1px solid rgba(255, 255, 255, 0.7);
+      border-radius: 18px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      box-shadow: 0 16px 44px rgba(31, 41, 55, 0.22);
+      opacity: 0;
+      transform: translateY(-10px) scale(0.94);
+      transform-origin: top left;
+      pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.22s cubic-bezier(0.34, 1.45, 0.64, 1);
+    }
+
+    .dropdown.open {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      pointer-events: auto;
+    }
+
+    .dd-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #6e6e73;
+      letter-spacing: 0.06em;
+      margin-top: 2px;
+    }
+
+    .dd-title:first-child {
+      margin-top: 0;
+    }
+
+    .dd-select {
+      width: 100%;
+      background: rgba(120, 120, 128, 0.12);
+      color: #1c1c1e;
+      border: none;
+      border-radius: 11px;
+      padding: 10px;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: inherit;
+    }
+
+    @media (max-width: 430px) {
+      #statusbar #v-dir,
+      .tb-sep.tb-dir-sep {
+        display: none;
+      }
+    }
+
+    @media (hover: none), (max-width: 700px) {
+      .ui-hint {
+        display: none;
+      }
     }
 
     /* 로딩 화면 */
@@ -385,88 +337,65 @@
       }
     }
 
-    /* 초슬림 컴팩트 UI 스타일 */
-    .icon-title {
-      font-size: 9px;
-      color: #8b949e;
-      text-align: center;
-      font-weight: 600;
-      margin-top: 4px;
-      border-bottom: 1px solid #21262d;
-      padding-bottom: 3px;
-    }
-
+    /* 공통 버튼·그리드 (iOS 라이트 스타일) */
     .grid-2 {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 4px;
+      gap: 7px;
     }
 
-    .grid-4 {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 4px;
-    }
-
-    .stat-box {
-      background: #161b22;
-      border: 1px solid #21262d;
-      border-radius: 4px;
-      padding: 6px;
-      text-align: center;
-    }
-
-    .stat-val {
-      font-size: 13px;
-      font-weight: bold;
-    }
-
-    .stat-lbl {
-      font-size: 8px;
-      color: #6b7280;
+    .stack {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
     }
 
     .c-btn {
-      background: #161b22;
-      border: 1px solid #21262d;
-      color: #c9d1d9;
-      border-radius: 4px;
-      padding: 6px 0;
-      font-size: 11px;
-      font-weight: bold;
+      background: rgba(120, 120, 128, 0.12);
+      border: none;
+      color: #1c1c1e;
+      border-radius: 11px;
+      padding: 10px 6px;
+      font-size: 12px;
+      font-weight: 600;
       cursor: pointer;
       text-align: center;
-      transition: all 0.2s;
+      font-family: inherit;
+      transition: background 0.15s, transform 0.1s;
+      -webkit-tap-highlight-color: transparent;
     }
 
     .c-btn:hover {
-      background: #21262d;
+      background: rgba(120, 120, 128, 0.22);
+    }
+
+    .c-btn:active {
+      transform: scale(0.96);
     }
 
     .c-btn.active {
-      background: #1f6feb;
-      color: white;
-      border-color: #58a6ff;
+      background: #0a84ff;
+      color: #ffffff;
     }
 
     .c-btn.green {
-      background: #1a7f4a;
-      color: white;
+      background: #34c759;
+      color: #ffffff;
     }
 
     .c-btn.blue {
-      background: #1f6feb;
-      color: white;
+      background: #0a84ff;
+      color: #ffffff;
     }
 
     .c-btn.red {
-      background: #b62324;
-      color: white;
+      background: #ff3b30;
+      color: #ffffff;
     }
 
     .c-btn.warn {
-      background: #d29922;
-      color: #000;
+      background: #ff9f0a;
+      color: #ffffff;
     }
   </style>
 </head>
@@ -475,8 +404,104 @@
 
   <!-- 3D 캔버스 영역 -->
   <div id="canvas-wrap">
-    <button id="btn-menu-left" class="menu-btn">☰</button>
-    <button id="btn-menu-right" class="menu-btn">⚙️</button>
+
+    <!-- HUD: 상태 디스플레이 + 아이콘 독 + 서브메뉴 (기본 좌상단, 드래그 이동·접기 가능) -->
+    <div id="hud">
+
+      <!-- 상태 디스플레이 (드래그 핸들) -->
+      <div id="statusbar">
+        <span class="tb-dot"></span>
+        <span id="v-floor">1F</span>
+        <span class="tb-sep"></span>
+        <span id="v-spd">0 m/min</span>
+        <span class="tb-sep tb-dir-sep"></span>
+        <span id="v-dir">정지 대기</span>
+        <button id="hud-toggle" title="메뉴 접기/펴기" aria-label="메뉴 접기/펴기">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="18 15 12 9 6 15"></polyline>
+          </svg>
+        </button>
+      </div>
+
+      <!-- 가로 아이콘 독 (애플 스타일: 컬러 아이콘 + 작은 한글 라벨) -->
+      <nav id="dock">
+      <button class="dock-btn" data-menu="dd-op" title="운행 제어" aria-label="운행 메뉴">
+        <div class="dock-icon ic-op">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="7 9 12 4 17 9"></polyline>
+            <polyline points="7 15 12 20 17 15"></polyline>
+          </svg>
+        </div>
+        <span>운행</span>
+      </button>
+      <button class="dock-btn" data-menu="dd-cam" title="카메라 뷰" aria-label="카메라 메뉴">
+        <div class="dock-icon ic-cam">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M23 7l-7 5 7 5V7z"></path>
+            <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+          </svg>
+        </div>
+        <span>카메라</span>
+      </button>
+      <button class="dock-btn" data-menu="dd-inst" title="고장 재현·안전장치 작동" aria-label="고장 메뉴">
+        <div class="dock-icon ic-inst">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+            <line x1="12" y1="9" x2="12" y2="13"></line>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+        </div>
+        <span>고장</span>
+      </button>
+    </nav>
+
+    <!-- 드롭다운: 운행 (세로 배열, 아이콘 위주) -->
+    <div class="dropdown" id="dd-op">
+      <div class="grid-2">
+        <button class="c-btn green" id="btn-open" title="도어 열림">◀▶</button>
+        <button class="c-btn blue" id="btn-close" title="도어 닫힘">▶◀</button>
+      </div>
+      <div class="stack" id="fbtns">
+        <div class="c-btn active" data-f="0">1F</div>
+        <div class="c-btn" data-f="1">2F</div>
+        <div class="c-btn" data-f="2">3F</div>
+        <div class="c-btn" data-f="3">4F</div>
+      </div>
+      <button class="c-btn red" id="btn-estop">E-STOP</button>
+      <select id="speed-select" class="dd-select" title="정격 속도">
+        <option value="60">60 m/min</option>
+        <option value="90">90 m/min</option>
+      </select>
+    </div>
+
+    <!-- 드롭다운: 카메라 (세로 일렬) -->
+    <div class="dropdown" id="dd-cam">
+      <div class="stack">
+        <button class="c-btn" id="c-mr">기계실</button>
+        <button class="c-btn" id="c-pit">피트</button>
+        <button class="c-btn" id="c-car">카내부</button>
+        <button class="c-btn" id="c-shaft">승강로</button>
+      </div>
+    </div>
+
+    <!-- 드롭다운: 고장 (고장 재현·안전장치 작동 — 현장 용어 영문) -->
+    <div class="dropdown" id="dd-inst">
+      <div class="grid-2">
+        <button class="c-btn blue">AUTO</button>
+        <button class="c-btn warn">INS</button>
+      </div>
+      <div class="grid-2">
+        <button class="c-btn">▲ UP</button>
+        <button class="c-btn">▼ DN</button>
+      </div>
+      <div class="stack">
+        <button class="c-btn red">DOOR FAULT</button>
+        <button class="c-btn red" id="btn-overspeed">OVERSPEED</button>
+        <button class="c-btn red">SAFETY GEAR</button>
+      </div>
+    </div>
+
+    </div><!-- /#hud -->
 
     <div id="loading">
       <div class="spinner"></div>
@@ -490,70 +515,6 @@
       🖱 <b>마우스 휠:</b> 확대 / 축소<br>
       🖱 <b>우클릭 드래그:</b> 화면 이동(Pan)
     </div>
-  </div>
-
-  <!-- 좌측 패널 (정상 운전) -->
-  <div id="panel-left" class="panel">
-    <div class="icon-title">STATUS</div>
-    <div class="grid-2">
-      <div class="stat-box">
-        <div class="stat-val" id="v-floor" style="color:#3fb950">1F</div>
-        <div class="stat-lbl">FLOOR</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-val" id="v-spd" style="color:#f0883e">0</div>
-        <div class="stat-lbl">SPEED</div>
-      </div>
-    </div>
-
-    <div class="icon-title">OP & CALL</div>
-    <div class="grid-2">
-      <button class="c-btn green" id="btn-open">◀▶</button>
-      <button class="c-btn blue" id="btn-close">▶◀</button>
-    </div>
-    <div class="grid-4" id="fbtns">
-      <div class="c-btn active" data-f="0">1F</div>
-      <div class="c-btn" data-f="1">2F</div>
-      <div class="c-btn" data-f="2">3F</div>
-      <div class="c-btn" data-f="3">4F</div>
-    </div>
-    <button class="c-btn red" id="btn-estop">🔴 E-STOP</button>
-
-    <div class="icon-title">SPEC</div>
-    <select id="speed-select" class="c-btn" style="width:100%;">
-      <option value="60">60 m/min</option>
-      <option value="90">90 m/min</option>
-    </select>
-
-    <div class="icon-title">CAM</div>
-    <div class="grid-2">
-      <div class="c-btn" id="c-front">정면</div>
-      <div class="c-btn" id="c-iso">ISO</div>
-      <div class="c-btn" id="c-mr">기계실</div>
-      <div class="c-btn" id="c-pit">피트</div>
-      <div class="c-btn" id="c-car">카내부</div>
-      <div class="c-btn" id="c-cwt">균형추</div>
-    </div>
-  </div>
-
-  <!-- 우측 패널 (교관용 / 고장 및 점검) -->
-  <div id="panel-right" class="panel">
-    <div class="icon-title">INSTRUCTOR MODE</div>
-    <div class="grid-2">
-      <button class="c-btn blue">자동(AUTO)</button>
-      <button class="c-btn warn">수동(MAN)</button>
-    </div>
-
-    <div class="icon-title">MANUAL JOG</div>
-    <div class="grid-2">
-      <button class="c-btn">▲ UP</button>
-      <button class="c-btn">▼ DN</button>
-    </div>
-
-    <div class="icon-title">FAULT INJECTION (고장)</div>
-    <button class="c-btn red">⚠️ 개문발차 (Door Fault)</button>
-    <button class="c-btn red">⚠️ 돌상/돌하 (Overspeed)</button>
-    <button class="c-btn red">⚠️ 추락방지안전장치</button>
   </div>
 
   <!-- 라이브러리 로드 -->
@@ -709,8 +670,6 @@
     }
 
     init();
-    makeDraggable(document.getElementById('btn-menu-left'));
-    makeDraggable(document.getElementById('btn-menu-right'));
   </script>
 </body>
 
