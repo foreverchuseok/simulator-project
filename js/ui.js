@@ -6,29 +6,37 @@
       currentState = ELEVATOR_STATE.DOOR_OPENING;
       doorOpen = true; updateStatus('v-door', '열리는 중', '#f0883e'); clearTimeout(autoTimer);
       currentState = ELEVATOR_STATE.DOOR_OPEN;
-      gsap.to(carDoorL.position, { x: carDoorL.userData.ox, duration: 1.15, ease: 'power2.out' });
+      const h = hatchDoors[curFloor];
+      // 인터록 해정: 클러치가 적층 롤러를 물고 록 레버를 젖힘 → 접점 분리 → 도어 개방
+      if (h && h.hook) gsap.to(h.hook.rotation, { z: -0.28, duration: 0.28, ease: 'power1.out' });
+      gsap.to(carDoorL.position, { x: carDoorL.userData.ox, duration: 1.15, ease: 'power2.out', delay: 0.22 });
       gsap.to(carDoorR.position, {
-        x: carDoorR.userData.ox, duration: 1.15, ease: 'power2.out', onComplete: () => {
+        x: carDoorR.userData.ox, duration: 1.15, ease: 'power2.out', delay: 0.22,
+        onUpdate: () => spinDoorDrive(h),
+        onComplete: () => {
           updateStatus('v-door', '완전 개방', '#3fb950'); if (cb) cb();
           autoTimer = setTimeout(() => { if (doorOpen && !moving) closeDoors(); }, 3500);
         }
       });
-      const h = hatchDoors[curFloor];
-      if (h) { gsap.to(h.left.position, { x: h.left.userData.ox, duration: 1.15, ease: 'power2.out' }); gsap.to(h.right.position, { x: h.right.userData.ox, duration: 1.15, ease: 'power2.out' }); }
+      if (h) { gsap.to(h.left.position, { x: h.left.userData.ox, duration: 1.15, ease: 'power2.out', delay: 0.22 }); gsap.to(h.right.position, { x: h.right.userData.ox, duration: 1.15, ease: 'power2.out', delay: 0.22 }); }
     }
 
     function closeDoors(cb) {
       if (!doorOpen) { if (cb) cb(); return; }
       currentState = ELEVATOR_STATE.DOOR_CLOSING;
       clearTimeout(autoTimer); updateStatus('v-door', '닫히는 중', '#f0883e');
+      const h = hatchDoors[curFloor];
       gsap.to(carDoorL.position, { x: carDoorL.userData.cx, duration: 0.95, ease: 'power2.inOut' });
       gsap.to(carDoorR.position, {
-        x: carDoorR.userData.cx, duration: 0.95, ease: 'power2.inOut', onComplete: () => {
+        x: carDoorR.userData.cx, duration: 0.95, ease: 'power2.inOut',
+        onUpdate: () => spinDoorDrive(h),
+        onComplete: () => {
           doorOpen = false; updateStatus('v-door', '닫힘', '#3fb950'); if (cb) cb();
           currentState = ELEVATOR_STATE.IDLE;
+          // 인터록 재잠금: 후크 복귀 → 접점 브리지 삽입 (회로 폐성)
+          if (h && h.hook) gsap.to(h.hook.rotation, { z: 0, duration: 0.25, ease: 'power1.in' });
         }
       });
-      const h = hatchDoors[curFloor];
       if (h) { gsap.to(h.left.position, { x: h.left.userData.cx, duration: 0.95, ease: 'power2.inOut' }); gsap.to(h.right.position, { x: h.right.userData.cx, duration: 0.95, ease: 'power2.inOut' }); }
     }
 

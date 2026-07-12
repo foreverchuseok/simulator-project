@@ -303,6 +303,98 @@
       }
     }
 
+    /* ── 태블릿·폰 세로: 좌측 세로 HUD + 운행 메뉴는 우측 반대편 ── */
+    @media (orientation: portrait) and (max-width: 1100px) {
+      #hud {
+        top: max(10px, env(safe-area-inset-top));
+        left: max(8px, env(safe-area-inset-left));
+        gap: 6px;
+        max-width: 76px;
+      }
+
+      /* 층 · 속도 · 상태 세로 스택 */
+      #statusbar {
+        flex-direction: column;
+        align-items: center;
+        gap: 3px;
+        padding: 8px 8px 6px;
+        width: 68px;
+        max-width: 68px;
+        border-radius: 16px;
+        font-size: 12px;
+      }
+
+      #statusbar .tb-sep {
+        width: 28px;
+        height: 1px;
+      }
+
+      #statusbar #v-floor,
+      #statusbar #v-spd {
+        text-align: center;
+        line-height: 1.2;
+      }
+
+      #statusbar #v-spd {
+        font-size: 10.5px;
+      }
+
+      #statusbar #v-dir {
+        display: block;
+        font-size: 9px;
+        max-width: 56px;
+        text-align: center;
+        white-space: normal;
+        line-height: 1.25;
+      }
+
+      #hud-toggle {
+        margin-top: 2px;
+      }
+
+      /* 운행 · 카메라 · 고장 세로 독 */
+      #dock {
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        width: 68px;
+        padding: 10px 6px;
+        gap: 10px;
+        border-radius: 20px;
+      }
+
+      .dock-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 13px;
+      }
+
+      .dock-btn > span {
+        font-size: 10px;
+      }
+
+      /* 서브메뉴 — 화면 반대편(우측) 세로 패널 (3D 가림 최소화) */
+      .dropdown {
+        position: fixed;
+        top: max(10px, env(safe-area-inset-top));
+        right: max(8px, env(safe-area-inset-right));
+        left: auto;
+        width: min(200px, calc(100vw - 96px));
+        max-height: calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+        transform: translateX(12px) scale(0.96);
+        transform-origin: top right;
+      }
+
+      .dropdown.open {
+        transform: translateX(0) scale(1);
+      }
+
+      /* 운행 메뉴는 우측에서 세로로 (층·도어·속도) */
+      #dd-op {
+        width: min(188px, calc(100vw - 96px));
+      }
+    }
+
     /* 로딩 화면 */
     #loading {
       position: absolute;
@@ -623,7 +715,32 @@
       if (location.search.includes('mrcam')) {
         document.getElementById('loading').style.display = 'none';
       }
-      if (location.search.includes('mrcam=3')) {
+      if (location.search.includes('doorcam')) controls.minDistance = 0.25; // 근접 프리셋 허용
+      if (location.search.includes('doorcam=1')) {
+        // 2층 승장도어 헤더 — 승강로 내부 시점 (인터록·행거·연동 로프)
+        camera.position.set(1.05, FLOOR_Y[1] + 2.55, -0.55);
+        controls.target.set(0, FLOOR_Y[1] + 2.05, 1.05);
+        document.getElementById('loading').style.display = 'none';
+      } else if (location.search.includes('doorcam=2')) {
+        // 카도어 오퍼레이터 — 카 상부 후방 시점 (모터·벨트·노란 풀리)
+        camera.position.set(1.3, FLOOR_Y[0] + 3.6, -1.1);
+        controls.target.set(0, FLOOR_Y[0] + 2.75, 1.0);
+        document.getElementById('loading').style.display = 'none';
+      } else if (location.search.includes('doorcam=3')) {
+        // 1층 도어 인터록 클로즈업 (카 클러치 맞물림)
+        camera.position.set(1.05, FLOOR_Y[0] + 2.75, 0.15);
+        controls.target.set(-0.05, FLOOR_Y[0] + 1.98, 1.04);
+        document.getElementById('loading').style.display = 'none';
+      } else if (location.search.includes('doorcam=4')) {
+        // 2층 인터록 초근접 (후크·적층 롤러·접점)
+        camera.position.set(0.55, FLOOR_Y[1] + 2.25, 0.30);
+        controls.target.set(-0.02, FLOOR_Y[1] + 2.02, 1.05);
+        document.getElementById('loading').style.display = 'none';
+      } else if (location.search.includes('mrcam=4')) {
+        // 로프브레이크·현수도르래 근접 뷰
+        camera.position.set(2.1, Y0 + TOTAL_H + 1.45, -0.15);
+        controls.target.set(0, Y0 + TOTAL_H + 0.85, -0.95);
+      } else if (location.search.includes('mrcam=3')) {
         camera.position.set(1.6, Y0 + TOTAL_H + 1.5, 1.2);
         controls.target.set(-0.15, Y0 + TOTAL_H + 0.65, -0.25);
       } else if (location.search.includes('mrcam=2')) {
