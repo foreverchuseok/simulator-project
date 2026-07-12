@@ -1,16 +1,45 @@
-# 로컬 참고용 화면 녹화 (앱 실행·배포에 불필요)
+# ─── 앱 실행에 필요한 것만 Git에 유지 ───
+# 유지: index.html, js/, assets/, vercel.json, AGENTS.md, package.json, .gitignore
+
+# 로컬 참고용 화면 녹화
 *.mp4
 Screen_Recording_*.mp4
 
-# Claude Code → Cursor 핸드오프용 임시 계획서 (GitHub 미업로드)
+# Claude / Antigravity → Cursor 핸드오프용 임시 계획서
 PLAN.md
 
-# AI/개발용 임시 스크린샷·PDF 추출·캡처 스크립트
+# AI·개발용 임시 스크린샷·PDF 추출·캡처 스크립트
 .shot-*.png
 .rv-*.png
 .pdf-*.png
 .claude-tmp-shot*.js
+.claude-tmp*
 
-# Playwright 시각 검증용 (로컬 전용, 앱 실행·배포에 불필요)
+# 참고용 PDF (앱이 로드하지 않음 — 로컬 디자인/규격 문서)
+*.pdf
+Part design.pdf
+size.pdf
+KR100839584B1.pdf
+
+# Playwright 시각 검증용 (로컬 전용)
 node_modules/
 package-lock.json
+
+# Claude Code / 로컬 AI 설정
+.claude/
+
+# OS·에디터 잡파일
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.log
+*.tmp
+*~
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 로컬 참고 폴더 (스크린샷·예제 — 앱 미사용)
+ex/
+stot/

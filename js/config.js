@@ -40,9 +40,9 @@ const M = {
   conc: (c = 0xd5dadf) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.95, metalness: 0.0 }),
   marble: () => new THREE.MeshStandardMaterial({ color: 0xe8ecef, roughness: 0.2, metalness: 0.1 }),
   floor: () => new THREE.MeshStandardMaterial({ color: 0x6b7280, roughness: 0.8, metalness: 0.1 }),
-  // 포인트 (골드, 점자블록)
+  // 포인트 (골드, 점형블록)
   gold: () => new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.5, roughness: 0.3 }),
-  tactile: () => new THREE.MeshStandardMaterial({ color: 0xf1c40f, roughness: 0.9, metalness: 0.1, bumpScale: 0.02 }),
+  tactile: () => new THREE.MeshStandardMaterial({ color: 0xffcc00, roughness: 0.92, metalness: 0.05 }),
   // 유리
   glass: () => new THREE.MeshPhysicalMaterial({ color: 0x90c8e8, transmission: 0.9, opacity: 1, transparent: true, roughness: 0.1, ior: 1.5, side: THREE.DoubleSide }),
   // 발광체 (버튼, 층표시기)

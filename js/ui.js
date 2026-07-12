@@ -97,11 +97,29 @@
       governorTrip(spinDir, () => {
         // 쐐기 걸림 → 조속기로프 정지 → 세이프티 링크 견인 → 카 짧은 미끄럼 후 급정지
         let prevY = carGrp.position.y;
-        gsap.to(carGrp.position, {
+        const stopTween = gsap.to(carGrp.position, {
           y: carGrp.position.y + (spinDir > 0 ? -0.22 : 0.22), duration: 0.5, ease: 'power3.out',
           onUpdate: () => {
             const deltaY = carGrp.position.y - prevY; prevY = carGrp.position.y;
             cwtGrp.position.y -= deltaY;
+
+            // 세이프티 기어 동적 애니메이션 연동 (하부 샤프트 회전 복원)
+            const progress = stopTween.progress(); // 0 ~ 1
+            const sg = carGrp.userData.safetyGear;
+            if (sg) {
+              const targetRotX = -0.35 * progress;
+              sg.shaft.rotation.x = targetRotX;
+              
+              const targetLiftY = 0.07 * progress;
+              sg.liftL.position.y = targetLiftY;
+              sg.liftR.position.y = targetLiftY;
+              
+              const targetScaleZ = 1.0 + 0.18 * progress;
+              sg.uSprings.forEach(spr => {
+                spr.scale.z = targetScaleZ;
+              });
+            }
+
             refreshRopes(); refreshGovernorRope();
           },
           onComplete: () => {

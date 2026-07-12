@@ -12,31 +12,48 @@
 
 ## 워크플로우
 
+터미널을 **2개** 연다. 하나는 **Claude Code**, 다른 하나는 **Google Antigravity**. 코딩은 **Cursor (Grok 4.5 Fast)** 가 담당한다.
+
 ### 역할 분담
 
-| 도구 | 역할 |
-|------|------|
-| **Claude Code — Fable 5 (Plan)** | 계획 담당. 스크린샷·PDF·파일 분석 후 `PLAN.md` 작성. 코드는 짜지 않는다. |
-| **Claude Code — Sonnet 4.6 (실행)** | 실행 담당. `PLAN.md`대로 실제 코드 작성. |
-| **Cursor** | 세부 위치 이동만. `position.set`·`rotation` 좌표값 옮기는 정도의 아주 쉬운 조정만. |
+| 도구 | 정확한 명칭 | 역할 |
+|------|-------------|------|
+| **Claude Code** | 모델 **Claude Fable 5** (`claude-fable-5`, `/model` → Fable) | 스크린샷·PDF·파일 분석 후 `PLAN.md` 작성. 코드는 짜지 않는다. |
+| **Google Antigravity** | 제품명 **Google Antigravity** (약칭 Antigravity; “Gravity”가 아님) | YouTube·동영상·메커니즘 영상 분석에 강점. 분석 결과를 `PLAN.md`로 저장. 코드는 짜지 않는다. |
+| **Cursor** | 모델 **Grok 4.5 Fast** (Cursor에서 Grok 4.5 Fast / High 계열로 선택) | `PLAN.md`를 보고 **코드 작성·수정**. 좌표 미세 조정도 여기서 처리. |
 
-### 기본 작업 흐름 (토큰 절약형)
+### 기본 작업 흐름
 
 ```
-① /model → Fable 5 선택, Plan Mode(Shift+Tab)
-   스크린샷·PDF 주고 "PLAN.md로 계획만 저장해줘"
+① [터미널 A] Claude Code → Claude Fable 5
+   스크린샷·PDF·파일 분석 → PLAN.md 저장
+        또는
+   [터미널 B] Google Antigravity
+   YouTube·승강기 메커니즘 동영상 분석 → PLAN.md 저장
         ↓
-② /model → Sonnet 4.6 전환
-   "PLAN.md 보고 코드 작성해줘"
+② [Cursor] Grok 4.5 Fast
+   "PLAN.md 보고 코드 작성해줘" (계획서에 없는 내용 추가 금지)
         ↓
 ③ Live Server 확인
         ↓
-④ 미세한 위치 이동만 필요하면 Cursor로
+④ 필요 시 Cursor에서 position/rotation만 미세 조정
         ↓
-⑤ GitHub 푸시 → PLAN.md 삭제
+⑤ GitHub 푸시 → PLAN.md 삭제(또는 덮어쓰기)
 ```
 
-핵심: 비싼 판단(계획)은 Fable, 단순 실행(코딩)은 Sonnet. 계획이 정확하면 Sonnet 실행으로 충분하다.
+핵심:
+- **계획(Plan)** = Claude Code(Fable 5) 또는 Google Antigravity → 산출물은 항상 `PLAN.md`.
+- **실행(Code)** = Cursor Grok 4.5 Fast.
+- 영상·동작 메커니즘 파악은 Antigravity, 도면·캡처·PDF는 Claude Code(Fable 5)를 우선한다.
+
+### 명칭 검증 (혼동 방지)
+
+| 잘못된 말 | 올바른 표기 |
+|-----------|-------------|
+| 페이블 / fable5 (모호) | **Claude Fable 5** (`claude-fable-5`) |
+| 그래비티 / Gravity | **Google Antigravity** |
+| Cursor Grok high fast (비공식) | Cursor에서 **Grok 4.5 Fast** (필요 시 High thinking 설정) |
+| Sonnet으로 코드 실행 (구 워크플로) | 현재는 **Cursor Grok 4.5 Fast** 가 실행 담당 |
 
 ---
 
@@ -115,24 +132,40 @@ elevatorState = {
 
 ---
 
-# 2. Fable 5 (Plan) 전용 지침
+# 2. 계획 담당 — Claude Code (Claude Fable 5) · Google Antigravity
 
-> Plan Mode로 계획만 세운다. 코드를 직접 수정하지 않는다.
+> 둘 다 **계획만** 한다. 코드를 직접 수정하지 않는다. 산출물은 `PLAN.md`다.
 
-## 역할
+## Claude Code — Claude Fable 5
 
-- 스크린샷·PDF·파일을 분석하고 결과를 `PLAN.md` 파일로 저장한다.
-- 채팅창에 긴 코드를 출력하지 않는다. `PLAN.md` 저장 완료만 짧게 보고한다.
+- 용도: 스크린샷·PDF·로컬 파일 분석, 도면·캡처 기반 계획.
+- Claude Code에서 `/model` → **Fable** / `claude-fable-5` 선택.
+- Plan Mode(Shift+Tab)로 분석만 하고 `PLAN.md`에 저장한다.
+- 채팅창에 긴 코드를 출력하지 않는다. 저장 완료만 짧게 보고한다.
 
-## 고정 명령어
+### 고정 명령어 (Claude Code)
 
 ```
 Plan Mode로 분석해줘. 코드 수정하지 말고.
 분석 결과를 PLAN.md 파일로 저장해줘.
-파일명, 함수명, 줄번호 반드시 명시해줘.
+파일명, 함수명, 줄번호를 반드시 명시해줘.
 ```
 
-## PLAN.md 작성 형식
+## Google Antigravity
+
+- 용도: YouTube·동영상·승강기 메커니즘 동작 분석 (용어를 몰라도 영상으로 구조·시퀀스 파악).
+- 분석 결과를 같은 형식의 `PLAN.md`로 저장한다.
+- 코드 작성·파일 대량 수정은 Antigravity에 맡기지 않는다. 계획은 Antigravity, 구현은 Cursor Grok 4.5 Fast.
+
+### 고정 명령어 (Antigravity)
+
+```
+이 동영상(또는 YouTube)의 승강기 메커니즘을 분석해줘. 코드는 수정하지 말고.
+분석 결과를 PLAN.md 파일로 저장해줘.
+파일명, 함수명, 줄번호를 알면 명시하고, 모르면 추정 근거를 적어줘.
+```
+
+## PLAN.md 작성 형식 (공통)
 
 ```markdown
 # PLAN — [작업명] ([날짜])
@@ -143,24 +176,30 @@ Plan Mode로 분석해줘. 코드 수정하지 말고.
 ## 주의사항
 ```
 
-## 완료 후 보고 형식
+## 계획 완료 후 보고 형식
 
 ```
 [분석 완료] PLAN.md 파일에 저장했습니다.
-Sonnet 4.6에서 PLAN.md 보고 코드 작성하세요.
+Cursor에서 Grok 4.5 Fast로 PLAN.md를 보고 코드 작성하세요.
 ```
 
 ---
 
-# 3. Sonnet 4.6 (실행) 전용 지침
+# 3. 실행 담당 — Cursor (Grok 4.5 Fast)
 
-> `PLAN.md`대로 실제 코드를 작성한다.
+> `PLAN.md`대로 실제 코드를 작성한다. 계획이 정확하면 이 단계만으로 구현한다.
 
 ## 역할
 
 - `PLAN.md`에 적힌 내용만 그대로 구현한다.
 - 계획서에 없는 내용은 추가하지 않는다.
 - 기존 구조를 먼저 읽고, 필요한 함수 블록만 최소 범위로 수정한다.
+- 미세한 `position.set()` / `rotation` 조정도 Cursor에서 처리한다.
+
+## 모델 선택
+
+- Cursor 채팅 모델: **Grok 4.5 Fast** (High thinking이 필요하면 해당 설정 사용).
+- Agent Mode로 `PLAN.md` 구현. Ask/Plan Mode는 질문·설계 확인용.
 
 ## 고정 명령어
 
@@ -187,21 +226,11 @@ PLAN.md 보고 코드 작성해줘.
 
 ---
 
-# 4. Cursor 전용 지침 (세부 위치 이동만)
-
-> Cursor는 이미 만들어진 부품의 위치를 옮기는 정도의 아주 쉬운 작업만 한다.
-
-- `position.set()`, `rotation` 좌표값 조정 정도만 처리한다.
-- 새 부품 생성, 재질 변경, 복잡한 로직은 Cursor에 맡기지 않는다.
-- `@PLAN.md`가 첨부된 경우에도 Sonnet 4.6 실행 범위에 해당하면 Cursor는 좌표 미세 조정만 한다.
-- 요청한 좌표만 수정하고 인접 코드는 손대지 않는다.
-
----
-
 ## PLAN.md 관리
 
 - `PLAN.md`는 `.gitignore`에 등록되어 GitHub에 올라가지 않는다.
 - 작업 완료 후 삭제하거나 덮어쓴다. 다음 작업과 섞이지 않도록 매번 초기화한다.
+- Claude Code와 Antigravity가 같은 `PLAN.md`를 쓰면 **덮어쓰기 전에 이전 계획을 백업하거나 작업명을 바꿔** 섞이지 않게 한다.
 
 ## 임시 파일 (로컬 전용)
 
