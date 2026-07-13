@@ -1456,7 +1456,7 @@
       const wallMat = M.conc(0xb8956a);
       const terracottaMat = M.paint(0xa95032);
       const oliveMat = M.paint(0x3f4a36);
-      const wallZ = FRONT_INNER_Z + S.WALL_T / 2;
+      const wallZ = FRONT_WALL_INNER_Z + S.WALL_T / 2; // 승강로 전면벽 — 카 전면에서 ~200mm (문 구역 깊이 확보)
       const doorHoleW = S.DOOR_W + 0.1;
       const totalWallW = S.SHAFT_W + S.WALL_T * 2;
       const sideW = (totalWallW - doorHoleW) / 2;
@@ -1486,7 +1486,7 @@
           0, fy + fh - 0.055, facadeZ + 0.004, wallGrp);
 
         // 로비 대리석 바닥 (전면벽 이동에 맞춰 깊이 보정, 외부 끝 위치 유지)
-        const lobbyDepth = 1.5 + (S.SHAFT_D / 2 - FRONT_INNER_Z);
+        const lobbyDepth = 1.5 + (S.SHAFT_D / 2 - FRONT_WALL_INNER_Z);
         createBox(totalWallW, 0.12, lobbyDepth, M.ss(0x8b7962), 0, fy - 0.06, wallZ + S.WALL_T / 2 + lobbyDepth / 2, wallGrp);
 
         // 천장 Y 좌표 (해당 층 바닥 + 층고)
@@ -1518,11 +1518,12 @@
       // 피트 전면벽 추가
       createBox(totalWallW, PIT, S.WALL_T, wallMat, 0, Y0 + PIT / 2, wallZ, wallGrp);
 
-      // [수정] 좌측 벽면 — 전면벽 이동에 맞춰 깊이/Z 중심 보정
-      const sideWallD = S.SHAFT_D / 2 + FRONT_INNER_Z + S.WALL_T;
+      // [수정] 좌측 벽면 — 전면(FRONT_INNER_Z) 고정, 후면은 SHAFT_BACK_Z 로 확장
       const sideWallH = TOTAL_H + 2.2;
       const sideWallX = -(S.SHAFT_W / 2 + S.WALL_T / 2);
-      const sideWallCZ = (FRONT_INNER_Z + S.WALL_T - S.SHAFT_D / 2) / 2;
+      const sideWallFront = FRONT_WALL_INNER_Z + S.WALL_T; // 전면 외측 (전면벽 정렬)
+      const sideWallD = sideWallFront - SHAFT_BACK_Z; // 깊이 확장 시 후방으로만 성장
+      const sideWallCZ = (sideWallFront + SHAFT_BACK_Z) / 2;
 
       createBox(S.WALL_T, sideWallH, sideWallD, wallMat, sideWallX, Y0 + sideWallH / 2, sideWallCZ, wallGrp);
 
@@ -1554,8 +1555,10 @@
 
       const chH = 0.1;
       const baseMat = M.paint(0x374151);
+      // 카 레일 Z — 항상 카 중심을 따라감 (깊이 확장 시 후방 이동)
+      const carRailZ = CAR_CTR_Z + 0.04;
       // 카 레일 지지 채널
-      createBox(S.CAR_BG + 0.3, chH, 0.2, baseMat, 0, Y0 + chH / 2, 0.04, railGrp);
+      createBox(S.CAR_BG + 0.3, chH, 0.2, baseMat, 0, Y0 + chH / 2, carRailZ, railGrp);
       // 균형추 레일 지지 채널
       createBox(S.CWT_W + 0.3, chH, 0.2, baseMat, 0, Y0 + chH / 2, CWT_CENTER_Z, railGrp);
 
@@ -1573,9 +1576,9 @@
 
       // [수정] 카 측 레일 방향 90도 회전 (웹이 안쪽을 바라보도록)
       // 좌측 레일(-Math.PI / 2): 웹이 +X 방향을 향함
-      railGrp.add(drawRail(-S.CAR_BG / 2, 0.04, false, -Math.PI / 2));
+      railGrp.add(drawRail(-S.CAR_BG / 2, carRailZ, false, -Math.PI / 2));
       // 우측 레일(Math.PI / 2): 웹이 -X 방향을 향함
-      railGrp.add(drawRail(S.CAR_BG / 2, 0.04, false, Math.PI / 2));
+      railGrp.add(drawRail(S.CAR_BG / 2, carRailZ, false, Math.PI / 2));
 
       // 균형추 측 레일 (후면, 마주보게 회전)
       railGrp.add(
@@ -1590,8 +1593,8 @@
       const landingDeviceGrp = new THREE.Group();
       // 레일 좌표 기준 (buildGuideRails 동일)
       const rightRailX = S.CAR_BG / 2;   // +0.875
-      const railZ      = 0.04;            // 레일 중심 Z
-      const sensorZ    = 0.10;            // 센서/베인 Z — 나중에 카 차폐판 Z와 맞춤
+      const railZ      = CAR_CTR_Z + 0.04;  // 레일 중심 Z (카 중심 추종)
+      const sensorZ    = CAR_CTR_Z + 0.10;  // 센서/베인 Z — 카 차폐판(로컬 0.10)과 정렬
       const bracketMat = M.ss(0x5a6575);
 
       landingDevices.length = 0;
@@ -1663,8 +1666,8 @@
       const leftRailX = -S.CAR_BG / 2;         // -0.875
       const lOuterX   = leftRailX - 0.017;      // -0.892
       const lSwitchX  = leftRailX - 0.18;       // -1.055 (스위치 본체 X)
-      const railZ     = 0.04;
-      const sensorZ   = 0.10;
+      const railZ     = CAR_CTR_Z + 0.04;       // 카 중심 추종
+      const sensorZ   = CAR_CTR_Z + 0.10;
       const bktMat    = M.ss(0x5a6575);
       const swSp      = 0.22;                   // 스위치 수직 간격 220mm
       const camH      = S.CAR_H * 0.85;
@@ -1796,10 +1799,11 @@
       mrGrp = new THREE.Group();
       const my = Y0 + TOTAL_H;
 
-      // 기계실 바닥 (초록색 계열로 변경)
+      // 기계실 바닥 (초록색 계열로 변경) — 전면 고정, 후면은 SHAFT_BACK_Z 로 확장
       const mrFloorY = my + 0.02; // 마감 바닥 상면
-      createBox(S.SHAFT_W + 0.4, 0.25, S.SHAFT_D + 0.4, M.conc(), 0, my - 0.12, 0, mrGrp);
-      createBox(S.SHAFT_W + 0.2, 0.02, S.SHAFT_D + 0.2, M.paint(0x2e7d32), 0, my + 0.01, 0, mrGrp); // 진한 초록색 (우레탄 도장 느낌)
+      const mrSlabCZ = (S.SHAFT_D / 2 + SHAFT_BACK_Z) / 2;            // 슬래브 Z 중심
+      createBox(S.SHAFT_W + 0.4, 0.25, S.SHAFT_D / 2 - SHAFT_BACK_Z + 0.4, M.conc(), 0, my - 0.12, mrSlabCZ, mrGrp);
+      createBox(S.SHAFT_W + 0.2, 0.02, S.SHAFT_D / 2 - SHAFT_BACK_Z + 0.2, M.paint(0x2e7d32), 0, my + 0.01, mrSlabCZ, mrGrp); // 진한 초록색 (우레탄 도장 느낌)
 
       // 로프 이송구 — 네모 홀 + 회색 플라스틱 방수턱 (검사기준 ≥50mm / 체대는 그 50%)
       const ropeHoleMat = M.paint(0x141618);
@@ -1822,8 +1826,8 @@
       const floorSillH = 0.050; // ≥50mm
       const bedSillH = floorSillH * 0.5; // 체대측 1번 = 50%
       const rhW = 0.20, rhD = 0.14; // 5가닥(±0.06) + 여유
-      // ② 카측 주로프 — 기계실 바닥 (Z≈0)
-      addRopeHole(0, mrFloorY, 0, rhW, rhD, floorSillH);
+      // ② 카측 주로프 — 기계실 바닥 (Z=CAR_CTR_Z, 카 히치 수직선)
+      addRopeHole(0, mrFloorY, CAR_CTR_Z, rhW, rhD, floorSillH);
       // ③ 균형추측 주로프 — 기계실 바닥 (Z=CWT)
       addRopeHole(0, mrFloorY, CWT_CENTER_Z, rhW, rhD, floorSillH);
 
@@ -1872,9 +1876,19 @@
       const beamMat = M.paint(0x1c2833);
       const beamWH = 0.18, beamFW = 0.15, beamTk = 0.014;
       const lowerY  = my + 0.09;
-      const offsetZ = -0.13; // 메인 시브 전면부를 카 수직선(Z=0)에 완벽하게 맞추기 위한 정확한 오프셋
-      const lowerZc = -0.10 + offsetZ;
-      const lowerL  = S.SHAFT_W - 0.28;
+      // 전단(카/시브측) 앵커: 메인 시브 전면 접선을 카 로프 수직선(CAR_CTR_Z)에 정렬
+      //   tmCenterZ = -0.20 + offsetZ, mainR = 0.33 → tmCenterZ + mainR = CAR_CTR_Z
+      const offsetZ = CAR_CTR_Z - 0.13;
+      // 후단(균형추/편향도르래측) 앵커: 카 깊이 확장 시 체대·빔이 후방으로 성장
+      const bedZ1 = 0.57 + offsetZ;           // 체대 전단 (base 0.44)
+      const bedZ2 = CWT_CENTER_Z - 0.3125;    // 체대 후단 (base -1.525)
+      const machBackSup = CWT_CENTER_Z - 0.2975; // 후단 써포트빔·앵글 (base -1.51)
+      const machBackPad = CWT_CENTER_Z - 0.0875; // 후단 방진고무      (base -1.30)
+      // 주 I-빔은 체대 전·후단을 모두 덮도록 스팬을 산출 (base 길이 3.05, 중심 -0.23 보존)
+      const beamFrontEnd = bedZ1 + 0.855;
+      const beamBackEnd  = bedZ2 - 0.23;
+      const lowerZc = (beamFrontEnd + beamBackEnd) / 2;
+      const lowerL  = beamFrontEnd - beamBackEnd;
 
       // 주 I-빔 2개 (X=±0.6, Z축 방향)
       [-0.6, 0.6].forEach(bx => {
@@ -1883,8 +1897,8 @@
         createBox(beamFW, beamTk, lowerL, beamMat, bx, lowerY - (beamWH - beamTk) / 2, lowerZc, mrGrp);
       });
 
-      // 써포트 빔 (Support Beam) 2개 - X축 방향 가로 I-빔
-      [1.26 + offsetZ, -1.38 + offsetZ].forEach(sz => {
+      // 써포트 빔 (Support Beam) 2개 - X축 방향 가로 I-빔 (전단=시브측, 후단=도르래측)
+      [1.26 + offsetZ, machBackSup].forEach(sz => {
         const sLen = 1.44;
         createBox(sLen, beamWH - beamTk * 2, beamTk, beamMat, 0, lowerY, sz, mrGrp);
         createBox(sLen, beamTk, beamFW, beamMat, 0, lowerY + (beamWH - beamTk) / 2, sz, mrGrp);
@@ -1893,7 +1907,7 @@
 
       // 써포트 앵글 (Support Angle) - ㄱ형강 코너 보강 4개소
       const angleMat = M.paint(0x2c3e50);
-      [[-0.6, 1.26 + offsetZ], [-0.6, -1.38 + offsetZ], [0.6, 1.26 + offsetZ], [0.6, -1.38 + offsetZ]].forEach(([ax, az]) => {
+      [[-0.6, 1.26 + offsetZ], [-0.6, machBackSup], [0.6, 1.26 + offsetZ], [0.6, machBackSup]].forEach(([ax, az]) => {
         createBox(0.016, 0.14, 0.07, angleMat, ax, lowerY + 0.05, az, mrGrp);
         createBox(0.07, 0.016, 0.07, angleMat, ax, lowerY + 0.09, az, mrGrp);
       });
@@ -1906,7 +1920,7 @@
       const padStkMat = M.ss(0xd0d0d0);
       const padBaseY  = lowerY + (beamWH - beamTk) / 2 + beamTk;
       const padH      = 0.065;
-      const pxs = [-0.6, 0.6], pzs = [-1.17 + offsetZ, 0.57 + offsetZ];
+      const pxs = [-0.6, 0.6], pzs = [machBackPad, 0.57 + offsetZ];
 
       pxs.forEach(x => {
         pzs.forEach(z => {
@@ -1934,7 +1948,7 @@
       const bedY   = padTopY + 0.004;
       const bedFH  = 0.11, bedFW = 0.09, bedFT = 0.013;
       const bedX1 = -0.66, bedX2 = 0.66;
-      const bedZ1 =  0.57 + offsetZ, bedZ2 = -1.395 + offsetZ;
+      // bedZ1(전단)·bedZ2(후단)은 상단 빔 섹션에서 이미 정의 (체대 후방 성장 앵커)
       const bedXC = (bedX1 + bedX2) / 2;
       const bedZC = (bedZ1 + bedZ2) / 2;
       const bedXL = bedX2 - bedX1;
@@ -1963,7 +1977,7 @@
         createBox(xLen, bedCrossT, bedCrossW, bedMat, bedXC, bedY + bedFH, bz, mrGrp);
         createBox(xLen, bedCrossT, bedCrossW, bedMat, bedXC, bedY, bz, mrGrp);
       }
-      [-0.42, 0.12].forEach(bz => addBedCrossBeam(bz));
+      [offsetZ - 0.29, offsetZ + 0.25].forEach(bz => addBedCrossBeam(bz)); // 전측 권상기 받침대 하중 지지 (기계 추종)
 
       const bedTopY = bedY + bedFH; // 머신 베드 상단 높이 원상 복구
 
@@ -2126,8 +2140,8 @@
       const pedBodyH = tmPedestalH - 0.02;
       const pedBodyY = bedTopY + pedBodyH / 2;
       const pedTopY = bedTopY + tmPedestalH - 0.009;
-      // ① 로프 홀 (카측 Z=0) — 받침대 전체를 관통하는 네모 개구
-      const pedHoleCX = 0, pedHoleCZ = 0;
+      // ① 로프 홀 (카측 Z=CAR_CTR_Z) — 받침대 전체를 관통하는 네모 개구
+      const pedHoleCX = 0, pedHoleCZ = CAR_CTR_Z;
       const pedHoleW = rhW, pedHoleD = rhD;
       function addPedestalWithRopeHole(mat, cy, fullH, fullW, fullD) {
         const fx0 = pedX - fullW / 2, fx1 = pedX + fullW / 2;
@@ -3122,13 +3136,15 @@
 
     function buildPitFoundation() {
       pitGrp = new THREE.Group();
-      createBox(S.SHAFT_W + S.WALL_T * 2, 0.2, S.SHAFT_D + S.WALL_T * 2, M.conc(), 0, Y0 - 0.1, 0, pitGrp);
-      createBox(S.SHAFT_W - 0.1, 0.02, S.SHAFT_D - 0.1, M.paint(0x4b5563), 0, Y0 + 0.01, 0, pitGrp);
+      // 피트 기초·바닥 — 전면 고정, 후면은 SHAFT_BACK_Z 로 확장 (기계실 슬래브와 동일 원리)
+      const pitSlabCZ = (S.SHAFT_D / 2 + SHAFT_BACK_Z) / 2;
+      createBox(S.SHAFT_W + S.WALL_T * 2, 0.2, S.SHAFT_D / 2 - SHAFT_BACK_Z + S.WALL_T * 2, M.conc(), 0, Y0 - 0.1, pitSlabCZ, pitGrp);
+      createBox(S.SHAFT_W - 0.1, 0.02, S.SHAFT_D / 2 - SHAFT_BACK_Z - 0.1, M.paint(0x4b5563), 0, Y0 + 0.01, pitSlabCZ, pitGrp);
       
       // [추가] 1. 피트 사다리 (승강로 좌측 벽면 안쪽 — 전면벽 관통 방지)
       const ladderH = FLOOR_Y[0] + 1.1;
-      // 폭 확장 후 SHAFT_D/2 기준이면 전면벽을 뚫음 → FRONT_INNER_Z 안쪽으로 배치
-      const ladderZ = FRONT_INNER_Z - 0.40;
+      // 전면벽 안쪽으로 배치 (전면벽 내측에서 이격)
+      const ladderZ = FRONT_WALL_INNER_Z - 0.40;
       const ladderX = -(S.SHAFT_W / 2) + 0.18; // 좌측 벽 내면에서 안쪽 이격
       const rungCount = Math.floor(ladderH / 0.3); // 30cm 간격
       const lMat = M.paint(0xf1c40f); // 안전 노란색
@@ -3161,9 +3177,9 @@
       const bracketMat = M.ss(0x4b5563);
       const armMat = M.paint(0x8a5a28);   // 적동색 플랫 암
 
-      // 수직 베이스판 (가이드 레일 웹/플랜지 측면에 체결되는 지지대)
+      // 수직 베이스판 (가이드 레일 웹/플랜지 측면에 체결되는 지지대) — 카 레일 Z 추종
       createBox(0.04, 0.45, 0.08, bracketMat,
-        S.CAR_BG / 2 - 0.02, tensionerY + 0.15, 0.04, pitGrp);
+        S.CAR_BG / 2 - 0.02, tensionerY + 0.15, CAR_CTR_Z + 0.04, pitGrp);
 
       // 레일측 피벗 클레비스 + 핀 (로프 늘어짐 시 암이 회전하며 시브가 하강)
       createBox(0.035, 0.050, 0.050, bracketMat,
@@ -3274,7 +3290,7 @@
 
       // 위치: [x좌표, z좌표, 지지대 높이 비율(1.0=기본, 0.33=균형추용)]
       const pos = [
-        [0, 0, 1.0],                 // 카 하부 (기본 높이)
+        [0, CAR_CTR_Z, 1.0],         // 카 하부 (카 중심 추종)
         [0, CWT_CENTER_Z, 0.35]      // 균형추 하부 (약 1/3 높이)
       ];
 

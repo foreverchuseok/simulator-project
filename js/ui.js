@@ -1,4 +1,24 @@
 // 엘리베이터 상태 제어와 UI 이벤트 로직을 정의한다.
+    const snd = {
+      doorOpen: new Audio('sound/door_open.wav'),
+      doorClose: new Audio('sound/door_close.wav'),
+      doorVoice: new Audio('sound/door_closing_voice.mp3'),
+      move: new Audio('sound/extracted_move.wav'),
+      chime: new Audio('sound/chime.wav'),
+      departUp: new Audio('sound/depart_up.mp3'),
+      departDown: new Audio('sound/depart_down.mp3'),
+      floor: [
+        new Audio('sound/floor_1.mp3'),
+        new Audio('sound/floor_2.mp3'),
+        new Audio('sound/floor_3.mp3'),
+        new Audio('sound/floor_4.mp3')
+      ]
+    };
+    snd.move.loop = true;
+    snd.doorOpen.volume = 0.5;
+    snd.doorClose.volume = 0.5;
+    snd.move.volume = 0.3;
+
     function updateStatus(id, txt, col) { const e = document.getElementById(id); if (e) { e.textContent = txt; if (col) e.style.color = col; } console.log("Current FSM State:", currentState); }
 
     function openDoors(cb) {
@@ -9,6 +29,7 @@
       const h = hatchDoors[curFloor];
       // 인터록 해정: 클러치가 적층 롤러를 물고 록 레버를 젖힘 → 접점 분리 → 도어 개방
       if (h && h.hook) gsap.to(h.hook.rotation, { z: -0.28, duration: 0.28, ease: 'power1.out' });
+      snd.doorOpen.currentTime = 0; snd.doorOpen.play();
       gsap.to(carDoorL.position, { x: carDoorL.userData.ox, duration: 1.15, ease: 'power2.out', delay: 0.22 });
       gsap.to(carDoorR.position, {
         x: carDoorR.userData.ox, duration: 1.15, ease: 'power2.out', delay: 0.22,
@@ -26,6 +47,8 @@
       currentState = ELEVATOR_STATE.DOOR_CLOSING;
       clearTimeout(autoTimer); updateStatus('v-door', '닫히는 중', '#f0883e');
       const h = hatchDoors[curFloor];
+      snd.doorVoice.currentTime = 0; snd.doorVoice.play().catch(e=>console.log(e));
+      snd.doorClose.currentTime = 0; snd.doorClose.play().catch(e=>console.log(e));
       gsap.to(carDoorL.position, { x: carDoorL.userData.cx, duration: 0.95, ease: 'power2.inOut' });
       gsap.to(carDoorR.position, {
         x: carDoorR.userData.cx, duration: 0.95, ease: 'power2.inOut',
@@ -133,7 +156,7 @@
           onComplete: () => {
             updateStatus('v-spd', '0 m/min', '#f0883e');
             updateStatus('v-dir', '■ 비상정지 (조속기 작동)', '#f85149');
-            btn.disabled = false; btn.textContent = 'RESET';
+            btn.disabled = false; btn.textContent = 'RST';
           }
         });
       });
@@ -144,7 +167,7 @@
       updateStatus('v-dir', '조속기 복귀 중…', '#f0883e');
       governorReset(() => {
         estop = false; overspeedActive = false;
-        btn.disabled = false; btn.textContent = 'OVERSPEED';
+        btn.disabled = false; btn.textContent = 'OVS';
         rescueToNearestFloor();
       });
     }
@@ -197,6 +220,10 @@
       const dirStr = isUp ? '↑' : '↓';
       updateStatus('v-dir', isUp ? '▲ 상승' : '▼ 하강', '#3fb950');
 
+      if (isUp) { snd.departUp.currentTime = 0; snd.departUp.play().catch(e=>console.log(e)); }
+      else { snd.departDown.currentTime = 0; snd.departDown.play().catch(e=>console.log(e)); }
+      snd.move.currentTime = 0; snd.move.play().catch(e=>console.log(e));
+
       gsap.to(carGrp.position, {
         y: ty, duration: dur, ease: 'power2.inOut',
         onUpdate: () => {
@@ -221,6 +248,11 @@
         onComplete: () => {
           curFloor = fIdx; moving = false;
           currentState = ELEVATOR_STATE.IDLE;
+          snd.move.pause(); snd.move.currentTime = 0;
+          snd.chime.currentTime = 0; snd.chime.play().catch(e=>console.log(e));
+          setTimeout(() => {
+            if (snd.floor[fIdx]) { snd.floor[fIdx].currentTime = 0; snd.floor[fIdx].play().catch(e=>console.log(e)); }
+          }, 800);
           // 도착 완료 시 화살표 제거하고 해당 층수만 표시
           syncAllIndicators(fIdx + 1, '');
           updateStatus('v-dir', '정지 대기', '#8b949e');
@@ -300,11 +332,12 @@
         estop = !estop;
         if (estop) {
           gsap.killTweensOf(carGrp.position); gsap.killTweensOf(cwtGrp.position); moving = false;
+          snd.move.pause(); snd.move.currentTime = 0;
           currentState = ELEVATOR_STATE.ESTOP;
           updateStatus('v-dir', '■ 비상정지', '#f85149'); updateStatus('v-spd', '0 m/min');
-          e.target.textContent = '▶ 운전 재개 (RESET)'; e.target.className = 'c-btn blue';
+          e.target.textContent = '▶'; e.target.className = 'c-btn blue';
         } else {
-          e.target.textContent = 'E-STOP'; e.target.className = 'c-btn red'; updateStatus('v-dir', '정지 대기', '#8b949e');
+          e.target.textContent = '■'; e.target.className = 'c-btn red'; updateStatus('v-dir', '정지 대기', '#8b949e');
         }
       });
 
@@ -322,7 +355,7 @@
       const camViews = {
         'c-mr': () => moveCam(8, Y0 + TOTAL_H + 5, 8, 0, Y0 + TOTAL_H + 0.8, 0),
         'c-pit': () => moveCam(6.5, Y0 + 1.0, 6.5, 0, Y0 + 1.0, 0),
-        'c-car': () => { const cy = carGrp.position.y; moveCam(0, cy, S.CAR_D / 2 + 0.5, 0, cy - 0.1, 0); },
+        'c-car': () => { const cy = carGrp.position.y; moveCam(0, cy, CAR_FRONT_Z + 0.5, 0, cy - 0.1, CAR_CTR_Z); },
         'c-shaft': () => moveCam(18, midY, 21, 0, midY, 0)
       };
       Object.keys(camViews).forEach(id => {

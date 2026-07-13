@@ -18,39 +18,62 @@
 
 | 도구 | 정확한 명칭 | 역할 |
 |------|-------------|------|
-| **Claude Code** | 모델 **Claude Fable 5** (`claude-fable-5`, `/model` → Fable) | 스크린샷·PDF·파일 분석 후 `PLAN.md` 작성. 코드는 짜지 않는다. |
-| **Google Antigravity** | 제품명 **Google Antigravity** (약칭 Antigravity; “Gravity”가 아님) | YouTube·동영상·메커니즘 영상 분석에 강점. 분석 결과를 `PLAN.md`로 저장. 코드는 짜지 않는다. |
-| **Cursor** | 모델 **Grok 4.5 Fast** (Cursor에서 Grok 4.5 Fast / High 계열로 선택) | `PLAN.md`를 보고 **코드 작성·수정**. 좌표 미세 조정도 여기서 처리. |
+| **Claude Code** | 터미널에서 **Claude Fable 5** (`claude-fable-5`, `/model` → Fable) **최대한 권장**(강제 아님) | 스크린샷·PDF·파일 분석. **Plan 모드** 또는 사용자가 **PLAN.md 생성을 명시 요청**할 때만 `PLAN.md` 작성. 그 외 일반 작업은 바로 실행·직접 코딩. |
+| **Google Antigravity** | 제품명 **Google Antigravity** (약칭 Antigravity; “Gravity”가 아님) | YouTube·동영상·메커니즘 영상 분석에 강점. **Plan 모드** 또는 사용자가 **PLAN.md 생성을 명시 요청**할 때만 `PLAN.md`로 저장. 그 외는 일반 분석·작업 흐름. |
+| **Cursor** | 모델 **Grok 4.5 Fast** (Cursor에서 Grok 4.5 Fast / High 계열로 선택) | **일반 작업은 바로 코드 작성·수정**. `PLAN.md`가 있을 때만 계획서 기준으로 구현. 좌표 미세 조정도 여기서 처리. |
+
+### 모델 지정 (권장 · 강제 아님)
+
+- Claude Code를 **터미널 환경**에서 사용할 때는 **Claude Fable 5**를 **최대한 권장**한다.
+- 이는 **강제 사항이 아니라 권장 사항**이다. 다른 모델 사용을 금지하지 않는다.
+- 가능하면 `/model` → **Fable** / `claude-fable-5` 를 선택한다.
+
+### PLAN.md 생성 조건 (중요)
+
+아래 **2가지 경우에만** `PLAN.md`를 생성한다.
+
+1. **Plan 모드** 사용 시
+2. 사용자가 **별도로 PLAN.md 생성을 명시적으로 요청**할 때
+
+그 외의 **일반 작업 흐름에서는 `PLAN.md`를 자동 생성하지 않는다.**  
+일반 요청은 **바로 실행·직접 코딩**한다.
 
 ### 기본 작업 흐름
 
 ```
-① [터미널 A] Claude Code → Claude Fable 5
+① 일반 작업 (기본)
+   Claude Code / Antigravity / Cursor
+   → PLAN.md 없이 바로 분석·코드 작성·수정
+
+② 계획 작업 (조건부만)
+   [터미널 A] Claude Code → Claude Fable 5 (권장)
+   Plan 모드 또는 「PLAN.md로 저장」명시 요청
    스크린샷·PDF·파일 분석 → PLAN.md 저장
         또는
    [터미널 B] Google Antigravity
+   Plan 모드 또는 「PLAN.md로 저장」명시 요청
    YouTube·승강기 메커니즘 동영상 분석 → PLAN.md 저장
         ↓
-② [Cursor] Grok 4.5 Fast
+   [Cursor] Grok 4.5 Fast
    "PLAN.md 보고 코드 작성해줘" (계획서에 없는 내용 추가 금지)
-        ↓
+
 ③ Live Server 확인
         ↓
 ④ 필요 시 Cursor에서 position/rotation만 미세 조정
         ↓
-⑤ GitHub 푸시 → PLAN.md 삭제(또는 덮어쓰기)
+⑤ GitHub 푸시 → PLAN.md가 있으면 삭제(또는 덮어쓰기)
 ```
 
 핵심:
-- **계획(Plan)** = Claude Code(Fable 5) 또는 Google Antigravity → 산출물은 항상 `PLAN.md`.
-- **실행(Code)** = Cursor Grok 4.5 Fast.
-- 영상·동작 메커니즘 파악은 Antigravity, 도면·캡처·PDF는 Claude Code(Fable 5)를 우선한다.
+- **일반 실행(Code)** = PLAN.md 없이 바로 코딩. Cursor Grok 4.5 Fast 중심.
+- **계획(Plan)** = Plan 모드 또는 사용자 명시 요청 시에만. Claude Code(Fable 5 권장) 또는 Google Antigravity → 산출물 `PLAN.md`.
+- 영상·동작 메커니즘 파악은 Antigravity, 도면·캡처·PDF는 Claude Code(Fable 5 권장)를 우선한다.
 
 ### 명칭 검증 (혼동 방지)
 
 | 잘못된 말 | 올바른 표기 |
 |-----------|-------------|
-| 페이블 / fable5 (모호) | **Claude Fable 5** (`claude-fable-5`) |
+| 페이블 / fable5 (모호) | **Claude Fable 5** (`claude-fable-5`) — 터미널 Claude Code에서 **최대한 권장**(강제 아님) |
 | 그래비티 / Gravity | **Google Antigravity** |
 | Cursor Grok high fast (비공식) | Cursor에서 **Grok 4.5 Fast** (필요 시 High thinking 설정) |
 | Sonnet으로 코드 실행 (구 워크플로) | 현재는 **Cursor Grok 4.5 Fast** 가 실행 담당 |
@@ -132,18 +155,21 @@ elevatorState = {
 
 ---
 
-# 2. 계획 담당 — Claude Code (Claude Fable 5) · Google Antigravity
+# 2. 계획 담당 — Claude Code (Claude Fable 5 권장) · Google Antigravity
 
-> 둘 다 **계획만** 한다. 코드를 직접 수정하지 않는다. 산출물은 `PLAN.md`다.
+> **Plan 모드** 또는 사용자가 **PLAN.md 생성을 명시 요청**한 경우에만 계획 문서를 만든다.  
+> 그 외 일반 작업에서는 `PLAN.md`를 만들지 않고 **바로 실행·직접 코딩**한다.
 
-## Claude Code — Claude Fable 5
+## Claude Code — Claude Fable 5 (권장)
 
-- 용도: 스크린샷·PDF·로컬 파일 분석, 도면·캡처 기반 계획.
-- Claude Code에서 `/model` → **Fable** / `claude-fable-5` 선택.
-- Plan Mode(Shift+Tab)로 분석만 하고 `PLAN.md`에 저장한다.
-- 채팅창에 긴 코드를 출력하지 않는다. 저장 완료만 짧게 보고한다.
+- 용도: 스크린샷·PDF·로컬 파일 분석, 도면·캡처 기반 작업.
+- 터미널 Claude Code에서는 **Claude Fable 5**를 **최대한 권장**한다. **강제 사항은 아니다.**
+- 가능하면 `/model` → **Fable** / `claude-fable-5` 선택.
+- **Plan Mode(Shift+Tab)** 사용 시, 또는 사용자가 `PLAN.md` 저장을 명시할 때만 `PLAN.md`에 저장한다.
+- 일반 요청은 Plan 없이도 바로 분석·작업한다. (자동으로 PLAN.md를 만들지 않음)
+- 채팅창에 긴 코드를 불필요하게 출력하지 않는다. 저장이 필요할 때만 완료를 짧게 보고한다.
 
-### 고정 명령어 (Claude Code)
+### 고정 명령어 (Claude Code · PLAN.md가 필요할 때만)
 
 ```
 Plan Mode로 분석해줘. 코드 수정하지 말고.
@@ -154,10 +180,11 @@ Plan Mode로 분석해줘. 코드 수정하지 말고.
 ## Google Antigravity
 
 - 용도: YouTube·동영상·승강기 메커니즘 동작 분석 (용어를 몰라도 영상으로 구조·시퀀스 파악).
-- 분석 결과를 같은 형식의 `PLAN.md`로 저장한다.
-- 코드 작성·파일 대량 수정은 Antigravity에 맡기지 않는다. 계획은 Antigravity, 구현은 Cursor Grok 4.5 Fast.
+- **Plan 모드** 또는 사용자가 **PLAN.md 생성을 명시 요청**할 때만 같은 형식의 `PLAN.md`로 저장한다.
+- 그 외에는 PLAN.md를 자동 생성하지 않는다.
+- 코드 작성·파일 대량 수정의 기본 담당은 Cursor Grok 4.5 Fast다. Antigravity는 영상 분석·계획에 우선한다.
 
-### 고정 명령어 (Antigravity)
+### 고정 명령어 (Antigravity · PLAN.md가 필요할 때만)
 
 ```
 이 동영상(또는 YouTube)의 승강기 메커니즘을 분석해줘. 코드는 수정하지 말고.
@@ -165,7 +192,7 @@ Plan Mode로 분석해줘. 코드 수정하지 말고.
 파일명, 함수명, 줄번호를 알면 명시하고, 모르면 추정 근거를 적어줘.
 ```
 
-## PLAN.md 작성 형식 (공통)
+## PLAN.md 작성 형식 (공통 · 생성 시에만)
 
 ```markdown
 # PLAN — [작업명] ([날짜])
@@ -176,7 +203,7 @@ Plan Mode로 분석해줘. 코드 수정하지 말고.
 ## 주의사항
 ```
 
-## 계획 완료 후 보고 형식
+## 계획 완료 후 보고 형식 (PLAN.md를 만든 경우만)
 
 ```
 [분석 완료] PLAN.md 파일에 저장했습니다.
@@ -187,21 +214,31 @@ Cursor에서 Grok 4.5 Fast로 PLAN.md를 보고 코드 작성하세요.
 
 # 3. 실행 담당 — Cursor (Grok 4.5 Fast)
 
-> `PLAN.md`대로 실제 코드를 작성한다. 계획이 정확하면 이 단계만으로 구현한다.
+> **기본:** 사용자 요청을 바로 코드로 구현한다. (`PLAN.md` 자동 생성 없음)  
+> **조건부:** `PLAN.md`가 있을 때만 계획서대로 구현한다.
 
 ## 역할
 
-- `PLAN.md`에 적힌 내용만 그대로 구현한다.
-- 계획서에 없는 내용은 추가하지 않는다.
+- 일반 작업: 요청한 범위만 최소 수정으로 **바로 코딩**한다.
+- `PLAN.md`가 있을 때: 계획서에 적힌 내용만 그대로 구현한다. 계획서에 없는 내용은 추가하지 않는다.
 - 기존 구조를 먼저 읽고, 필요한 함수 블록만 최소 범위로 수정한다.
 - 미세한 `position.set()` / `rotation` 조정도 Cursor에서 처리한다.
 
 ## 모델 선택
 
 - Cursor 채팅 모델: **Grok 4.5 Fast** (High thinking이 필요하면 해당 설정 사용).
-- Agent Mode로 `PLAN.md` 구현. Ask/Plan Mode는 질문·설계 확인용.
+- 일반 구현은 Agent Mode. Ask/Plan Mode는 질문·설계 확인용.
+- Cursor Plan Mode를 쓰거나 사용자가 PLAN.md를 요청한 경우에만 `PLAN.md`를 만든다.
 
 ## 고정 명령어
+
+일반 작업:
+
+```
+이 부분 바로 코드로 수정해줘.
+```
+
+PLAN.md가 있을 때:
 
 ```
 PLAN.md 보고 코드 작성해줘.
@@ -216,7 +253,8 @@ PLAN.md 보고 코드 작성해줘.
 - 관련 없는 리팩터링, 함수 삭제, 기존 애니메이션 흐름 변경 금지.
 - 요청하지 않은 기능 추가 금지.
 - 사용자가 만든 변경 되돌리기 금지.
-- `PLAN.md`에 없는 내용 임의 추가 금지.
+- `PLAN.md`가 있을 때 계획서에 없는 내용 임의 추가 금지.
+- Plan 모드·명시 요청 없이 `PLAN.md` 자동 생성 금지.
 
 ## 수정 원칙
 
@@ -228,6 +266,7 @@ PLAN.md 보고 코드 작성해줘.
 
 ## PLAN.md 관리
 
+- `PLAN.md`는 **Plan 모드** 또는 **사용자 명시 요청** 시에만 생성한다. 일반 작업에서는 만들지 않는다.
 - `PLAN.md`는 `.gitignore`에 등록되어 GitHub에 올라가지 않는다.
 - 작업 완료 후 삭제하거나 덮어쓴다. 다음 작업과 섞이지 않도록 매번 초기화한다.
 - Claude Code와 Antigravity가 같은 `PLAN.md`를 쓰면 **덮어쓰기 전에 이전 계획을 백업하거나 작업명을 바꿔** 섞이지 않게 한다.

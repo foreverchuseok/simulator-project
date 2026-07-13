@@ -268,9 +268,10 @@
       createBox(W+0.08, 0.012, 0.045, kickMat, 0, -H/2-0.020, -(D/2+0.014), platformGrp);
 
       // ④ Car Sill: 핑크레드 압출 프로파일 + 도어 홈 2줄
-      createBox(S.DOOR_W+0.25, 0.05, 0.10, M.paint(0xb56060), 0, -H/2-0.025, D/2+0.06, platformGrp);
-      createBox(S.DOOR_W+0.25, 0.004, 0.012, M.paint(0x111111), 0, -H/2+0.002, D/2+0.035, platformGrp);
-      createBox(S.DOOR_W+0.25, 0.004, 0.012, M.paint(0x111111), 0, -H/2+0.002, D/2+0.085, platformGrp);
+      // 카 문턱 코 = 카 전면 +70mm (승장 문턱과 SILL_GAP 이격되도록 돌출 축소, 기존 +0.06→+0.02)
+      createBox(S.DOOR_W+0.25, 0.05, 0.10, M.paint(0xb56060), 0, -H/2-0.025, D/2+0.02, platformGrp);
+      createBox(S.DOOR_W+0.25, 0.004, 0.012, M.paint(0x111111), 0, -H/2+0.002, D/2-0.005, platformGrp);
+      createBox(S.DOOR_W+0.25, 0.004, 0.012, M.paint(0x111111), 0, -H/2+0.002, D/2+0.045, platformGrp);
 
       // ⑤ Apron: 갈색 수직판 + 하단 경사판 + 금색 거싯 2개
       createBox(S.DOOR_W+0.15, 0.60, 0.012, brownMat, 0, -H/2-0.35, D/2+0.05, platformGrp);
@@ -522,6 +523,10 @@
       createBox(0.06, S.DOOR_H*0.9, 0.03, M.ss(0xb0b6be),  (S.DOOR_W/2+0.06), 0, D/2-0.015, carGrp);
 
       carGrp.position.y = FLOOR_Y[0] + H / 2;
+      // 카 깊이 확장: 전면(도어) 고정을 위해 카 전체를 후방(CAR_CTR_Z)으로 이동.
+      // 도어·도어오퍼레이터(로컬 +D/2)는 월드 CAR_FRONT_Z 에 그대로 남고,
+      // 히치플레이트·크로스헤드·센서·거울 등 중심/후면 요소만 뒤로 이동한다.
+      carGrp.position.z = CAR_CTR_Z;
       scene.add(carGrp);
     }
 
@@ -595,7 +600,8 @@
       //    승장 인터록 적층 롤러(월드 x≈0.015~0.045)를 사이에 두고 맞물림
       // ──────────────────────────────────────────────────────────────
       const clutchGrp = new THREE.Group();
-      clutchGrp.position.set(-cx, 0.42, dt / 2); // 정중앙 맞물림 위치
+      // 승장 어셈블리가 앞으로(HALL_SHIFT) 이동한 만큼 클러치도 전방 연장 → 인터록 물림 유지
+      clutchGrp.position.set(-cx, 0.42, dt / 2 + HALL_SHIFT); // 정중앙 맞물림 위치
       const clutchBlk = M.paint(0x15181c);
 
       // 벌림형 클러치 블레이드 2개 (내측면 ±0.07 — 인터록 롤러 통과 간극 확보)
@@ -838,7 +844,8 @@
 
       const dw = S.DOOR_W / 2 + 0.02, dh = S.DOOR_H * 0.9, dt = 0.04;
       const hz = FRONT_INNER_Z + dt / 2;
-      const jambZ = FRONT_INNER_Z + S.WALL_T / 2 + 0.04;
+      // 삼방틀(JAMB)은 승강로 전면벽 개구부에 정렬 (승장문보다 로비측, ~200mm 지점)
+      const jambZ = FRONT_WALL_INNER_Z + S.WALL_T / 2 + 0.04;
       const cx = dw / 2 + 0.006, ox = dw * 1.5 - 0.01;
       const panMat = M.ss(0x868c94), jambMat = M.ss(0x989ea6);
       const sillMat = M.ss(0xc0c8d0);
@@ -1095,16 +1102,18 @@
         scene.add(ilSwGrp);
 
         // Hall Sill + Support: 층별 문턱
-        createBox(S.DOOR_W+0.25, 0.05, 0.10, sillMat, 0, fy - 0.025, FRONT_INNER_Z - 0.06, scene);
+        // 승장 문턱은 승장문 바로 앞(로비측)에 위치 — 카 문턱과 SILL_GAP 이격 (관통 방지)
+        const hallSillZ = FRONT_INNER_Z + 0.04;   // 코(−Z) ≈ 카 문턱 코 + 30mm
+        createBox(S.DOOR_W+0.25, 0.05, 0.10, sillMat, 0, fy - 0.025, hallSillZ, scene);
         // 경사 리브 브래킷 3개
         [-0.30, 0, 0.30].forEach(bx => {
-          const rib = createBox(0.012, 0.12, 0.10, M.ss(0x7a828a), bx, fy - 0.09, FRONT_INNER_Z - 0.06, scene);
+          const rib = createBox(0.012, 0.12, 0.10, M.ss(0x7a828a), bx, fy - 0.09, hallSillZ, scene);
           rib.rotation.x = -0.25;
         });
 
-        // Toe Guard: 실 직하 수직판
+        // Toe Guard: 실 직하 수직판 (승장 문턱 −Z 코 아래로 하강)
         createBox(S.DOOR_W+0.15, 0.40, 0.012, M.ss(0x868e96),
-          0, fy - 0.225, FRONT_INNER_Z - 0.04, scene);
+          0, fy - 0.225, hallSillZ - 0.05, scene);
       }
 
       // Fascia Plate (벽보호판): 층간 전면 수직판 (1↔2, 2↔3, 3↔4)
@@ -1247,7 +1256,7 @@
         // 메인시브·현수도르래 두 원의 상부 공통 외접선 법선각 — 로프가 두 시브 위를 감고 넘어감
         let tanA = Math.atan2(dy, dz) - Math.acos((Rm - Rd) / D);
         if (tanA < 0) tanA += Math.PI * 2;
-        const pts = [new THREE.Vector3(r.rx, cy, 0)]; // 카 히치 → 메인시브 전면 접점(Z=0) 수직 상승
+        const pts = [new THREE.Vector3(r.rx, cy, CAR_CTR_Z)]; // 카 히치 → 메인시브 전면 접점(Z=CAR_CTR_Z) 수직 상승
         const arc = (cz, cyc, R, a0, a1, n) => {
           for (let i = 0; i <= n; i++) {
             const a = a0 + (a1 - a0) * i / n;
@@ -1276,7 +1285,7 @@
       if (carGrp.userData.safetyGear && carGrp.userData.safetyGear.shaft) {
         const theta = carGrp.userData.safetyGear.shaft.rotation.x;
         clampY = carGrp.position.y - S.CAR_H / 2 - 0.16 + 0.22 * Math.sin(theta);
-        clampZ = -0.15 - 0.22 * Math.cos(theta);
+        clampZ = (CAR_CTR_Z - 0.15) - 0.22 * Math.cos(theta); // 카 중심 추종 (base -0.15)
       }
 
         const pts = [
