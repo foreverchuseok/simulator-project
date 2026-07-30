@@ -562,6 +562,7 @@
       <div class="stack">
         <button class="c-btn green" id="btn-open" title="도어 열림">◀▶</button>
         <button class="c-btn blue" id="btn-close" title="도어 닫힘">▶◀</button>
+        <button class="c-btn" id="btn-pax" title="탑승자 승·하차" style="font-size:19px;">🧍</button>
       </div>
       <div class="stack" id="fbtns">
         <div class="c-btn" data-f="3">4F</div>
@@ -618,6 +619,7 @@
   <!-- 라이브러리 로드 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
   <script src="js/config.js"></script>
   <script src="js/environment.js"></script>
@@ -687,10 +689,11 @@
     let targetSpeed = 60;
 
     let scene, camera, renderer, controls, clock;
-    let carGrp, cwtGrp, railGrp, mrGrp, wallGrp, bufferGrp, pitGrp;
+    let carGrp, cwtGrp, railGrp, mrGrp, wallGrp, bufferGrp, pitGrp, passengerGrp = null;
     let carDoorL, carDoorR, hatchDoors = [], ropeObjs = [];
     let mainSheaveGrp = null, governorWheelGrp = null, tensionSheaveGrp = null, sheaveSpeed = 0;
     let govRopeLine = null, govRopeData = null;
+    let govRopeSegs = null, govRopeGeom = null; // 조속기 실사 와이어로프 (카 연동측 2구간 · 공유 지오메트리)
     const DEBUG_SENSOR = true;
     const USE_PHOTO_BG_PREVIEW = false; // true: koelsa/koelsa2 좌우 원경(흐림) / false: 3D 배경
     const landingDevices = [];
@@ -706,6 +709,25 @@
       const mesh = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, 20), mat);
       mesh.position.set(px, py, pz); mesh.castShadow = true; mesh.receiveShadow = true;
       parent.add(mesh); return mesh;
+    }
+    /* 실사 와이어로프 지오메트리 — 3가닥 꼬임 단면(3-lobe)이 길이를 따라 회전한다.
+       ★단위 높이(1.0)로 1개만 만들어 공유하고 mesh.scale.y로 늘려 쓴다.
+       카가 움직일 때 길이만 바뀌므로 렌더 루프에서 지오메트리를 만들지 않는다(AGENTS.md). */
+    /* turns=100 은 실사용 구간 길이(≈8m)에서 꼬임 피치 ≈80mm — 로프 지름의 6~7배로
+       실제 와이어로프 스트랜드 피치와 맞다. radialSeg 는 3갈래를 표현해야 하므로
+       최소 18 은 되어야 하고(8이면 갈래가 뭉개져 매끈한 봉으로 보인다),
+       heightSeg 도 1회전당 10 분할은 필요하다. */
+    function makeRopeGeometry(radius, turns = 100, heightSeg = 1000, radialSeg = 18) {
+      const g = new THREE.CylinderGeometry(radius, radius, 1, radialSeg, heightSeg, true);
+      const pos = g.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+        const lobe = 1 + 0.26 * Math.cos(3 * (Math.atan2(z, x) - turns * Math.PI * 2 * y));
+        pos.setXYZ(i, x * lobe, y, z * lobe);
+      }
+      pos.needsUpdate = true;
+      g.computeVertexNormals();
+      return g;
     }
 
     /* ==========================================================================
@@ -728,6 +750,25 @@
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.2;
       renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+
+      // ── 환경맵 (금속 반사) — 절차적 스튜디오 그라데이션 → PMREM.
+      //    scene.environment 미설정 시 metalness 높은 재질(크롬 조속기 등)이 검게 렌더됨.
+      (function setupStudioEnv() {
+        const c = document.createElement('canvas'); c.width = 16; c.height = 128;
+        const g = c.getContext('2d');
+        const grad = g.createLinearGradient(0, 0, 0, 128);
+        grad.addColorStop(0.00, '#eaf3ff'); // 상부(천장/하늘) 밝게
+        grad.addColorStop(0.45, '#f5f7f9');
+        grad.addColorStop(0.55, '#cbd3db');
+        grad.addColorStop(1.00, '#2a2f36'); // 하부(바닥) 어둡게
+        g.fillStyle = grad; g.fillRect(0, 0, 16, 128);
+        const tex = new THREE.CanvasTexture(c);
+        tex.mapping = THREE.EquirectangularReflectionMapping;
+        const pmrem = new THREE.PMREMGenerator(renderer);
+        pmrem.compileEquirectangularShader();
+        scene.environment = pmrem.fromEquirectangular(tex).texture;
+        tex.dispose(); pmrem.dispose();
+      })();
 
       controls = new THREE.OrbitControls(camera, renderer.domElement);
       controls.enableDamping = true; controls.dampingFactor = 0.07;
@@ -761,6 +802,12 @@
         camera.position.set(0.55, FLOOR_Y[1] + 2.25, 0.30);
         controls.target.set(-0.02, FLOOR_Y[1] + 2.02, 1.05);
         document.getElementById('loading').style.display = 'none';
+      } else if (location.search.includes('govcam')) {
+        // 조속기 정면 근접 뷰 (실사 재현 검증용) — 정면은 +X 방향
+        controls.minDistance = 0.05;
+        camera.position.set(GOV_TENS_X + 0.60, Y0 + TOTAL_H + 0.80, GOV_TENS_Z + 0.68);
+        controls.target.set(GOV_TENS_X, Y0 + TOTAL_H + 0.60, GOV_TENS_Z - 0.03);
+        document.getElementById('loading').style.display = 'none';
       } else if (location.search.includes('mrcam=4')) {
         // 로프브레이크·현수도르래 근접 뷰
         camera.position.set(2.1, Y0 + TOTAL_H + 1.45, -0.15);
@@ -786,6 +833,7 @@
       buildLimitSwitches();       // 승강로 좌측 레일 안전용 리미트 스위치
       buildMachineRoom();       // 기계실 및 도르래
       buildCarCabin();          // 엘리베이터 카 내부
+      buildPassenger();         // 탑승자 (실사형 성인 남성, 기본 숨김)
       buildCarDoors();          // 유리 타공 카 도어
       buildHatchDoors();        // 승장 도어
       buildCounterWeight();     // 후면 균형추

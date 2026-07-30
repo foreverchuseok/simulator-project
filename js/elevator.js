@@ -296,79 +296,33 @@
       carGrp.add(platformGrp);
 
       /* ──────────────────────────────────────────────────────────────
-         C. 세이프티 기어 (Safety Gear) — PDF 12p
-         safetyGearGrp: 하우징 / Wedge / U-Spring / Lift Rod / Connecting Rod / 조속기 로프 연동 암
-      ────────────────────────────────────────────────────────────── */
-      /* ──────────────────────────────────────────────────────────────
-         B. 추락방지 비상정지장치 (Safety Gear) & 하부 가이드 슈 (이설 렌더링 복원)
+         C. 세이프티 기어 (Safety Gear) — device_china.mp4 27~43초 물림 장치 기반
+         assets/safety_gear.glb 로드 (트윈 폴리시드 웨지 + 정적 테이퍼 가이드 +
+         U-스프링 + 리프트 로드 + 수평 작동 샤프트 + 조속기 로프 클램프 + 하부 슈).
+         카-로컬 좌표로 제작되어 carGrp 원점에 부착. 스케일 함정 없음(1:1).
+         명명 노드: shaft / liftL / liftR / wedge{L,R}{0,1} / spring{L,R}{0,1} / clamp
       ────────────────────────────────────────────────────────────── */
       const safetyGearGrp = new THREE.Group();
-      const sgMat = M.paint(0xb8860b);
-      const wedgeMat = M.paint(0x4a3520);
-      const bShoeMat = M.paint(0x6b3a1f);
-      
-      const cShaftGrp = new THREE.Group();
-      cShaftGrp.position.set(0, -H/2 - 0.16, -0.15); // 수평 작동 샤프트 Z 위치
-      safetyGearGrp.add(cShaftGrp);
-      const cShaft = createCylinder(0.012, 0.012, S.CAR_BG - 0.10, silvMat, 0, 0, 0, cShaftGrp);
-      cShaft.rotation.z = Math.PI / 2;
-
-      // 조속기 로프 연동 암 및 클램프 (샤프트 우측 단부 부근)
-      createBox(0.175, 0.018, 0.26, silvMat, GOV_TENS_X - 0.0875, 0, -0.10, cShaftGrp);
-      const safetyClampMesh = createBox(0.025, 0.09, 0.025, silvMat, GOV_TENS_X, 0, -0.22, cShaftGrp);
-
-      const liftGrpL = new THREE.Group(); liftGrpL.position.set(0, 0, 0); safetyGearGrp.add(liftGrpL);
-      const liftGrpR = new THREE.Group(); liftGrpR.position.set(0, 0, 0); safetyGearGrp.add(liftGrpR);
-      const uSprings = [];
-
-      const sgUprightX = S.CAR_BG / 2 - 0.06;
-      [-sgUprightX, sgUprightX].forEach(sx => {
-        const xs = sx > 0 ? 1 : -1;
-        const rodX = sx + xs*0.015;
-        const sgY  = -H/2 - 0.16;
-        const liftGrp = sx < 0 ? liftGrpL : liftGrpR;
-
-        // 하우징
-        createBox(0.20, 0.022, 0.20, sgMat, sx, -H/2-0.055, 0.04, safetyGearGrp);
-        createBox(0.20, 0.022, 0.20, sgMat, sx, -H/2-0.265, 0.04, safetyGearGrp);
-        createBox(0.16, 0.188, 0.062, sgMat, sx, sgY, 0.04-0.069, safetyGearGrp);
-        createBox(0.16, 0.188, 0.062, sgMat, sx, sgY, 0.04+0.069, safetyGearGrp);
-
-        // 쐐기 및 리프트 구조물
-        createBox(0.030, 0.16, 0.024, wedgeMat, rodX, sgY, 0.04-0.030, liftGrp);
-        createBox(0.030, 0.16, 0.024, wedgeMat, rodX, sgY, 0.04+0.030, liftGrp);
-
-        [0.04-0.093, 0.04+0.093].forEach(zf => {
-          const uSpring = new THREE.Mesh(new THREE.TorusGeometry(0.070, 0.012, 8, 14, Math.PI), M.paint(0xc46a1e));
-          uSpring.position.set(sx, sgY + 0.06, zf);
-          safetyGearGrp.add(uSpring);
-          uSprings.push(uSpring);
-          createCylinder(0.010, 0.010, 0.13, M.paint(0xc46a1e), sx - 0.070, sgY - 0.005, zf, safetyGearGrp);
-          createCylinder(0.010, 0.010, 0.13, M.paint(0xc46a1e), sx + 0.070, sgY - 0.005, zf, safetyGearGrp);
-        });
-
-        // 샤프트 양단 쐐기 상승 크랭크 암
-        const crankArm = createBox(0.02, 0.02, 0.07, M.paint(0x4a3566), sx, 0, 0.035, cShaftGrp);
-        const linkRod = createCylinder(0.008, 0.008, 0.12, silvMat, rodX, sgY + 0.12, -0.08, liftGrp);
-        
-        // 하부 가이드 슈 (세이프티 하우징 하단)
-        const bottomShoeY = -H/2 - 0.32;
-        createBox(0.14, 0.08, 0.06, bShoeMat, sx, bottomShoeY, 0.04, safetyGearGrp);
-        createBox(0.024, 0.08, 0.06, bShoeMat, sx - xs*0.025, bottomShoeY, 0.04, safetyGearGrp);
-        createBox(0.018, 0.08, 0.01, bShoeMat, sx - xs*0.025, bottomShoeY, 0.04 - 0.032, safetyGearGrp);
-        createBox(0.018, 0.08, 0.01, bShoeMat, sx - xs*0.025, bottomShoeY, 0.04 + 0.032, safetyGearGrp);
-      });
-
       carGrp.add(safetyGearGrp);
+      carGrp.userData.safetyGear = null; // .glb 로드 완료 시 채워짐 (비동기)
 
-      // 외부 연동용
-      carGrp.userData.safetyGear = {
-        shaft: cShaftGrp,
-        liftL: liftGrpL,
-        liftR: liftGrpR,
-        uSprings: uSprings,
-        clamp: safetyClampMesh
-      };
+      new THREE.GLTFLoader().load('assets/safety_gear.glb', (gltf) => {
+        const g = gltf.scene;
+        g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+        safetyGearGrp.add(g);
+        const pick = n => g.getObjectByName(n);
+        carGrp.userData.safetyGear = {
+          shaft:   pick('shaft'),
+          liftL:   pick('liftL'),
+          liftR:   pick('liftR'),
+          springs: ['springL0', 'springL1', 'springR0', 'springR1'].map(pick).filter(Boolean),
+          wedges:  ['wedgeL0', 'wedgeL1', 'wedgeR0', 'wedgeR1'].map(pick).filter(Boolean),
+          clamp:   pick('clamp')
+        };
+        // 웨지 기준 Z 저장 (물림 시 핀 쪽으로 파고드는 그립 애니메이션·복귀용)
+        carGrp.userData.safetyGear.wedges.forEach(w => { w.userData.z0 = w.position.z; });
+        if (typeof refreshGovernorRope === 'function') refreshGovernorRope();
+      }, undefined, (err) => console.error('[safety_gear.glb] 로드 실패:', err));
 
       /* ──────────────────────────────────────────────────────────────
          가이드 슈/롤러 + 급유기 (PDF 13p) — 2롤러 + 슈 타입, 상단 오일통
@@ -528,6 +482,98 @@
       // 히치플레이트·크로스헤드·센서·거울 등 중심/후면 요소만 뒤로 이동한다.
       carGrp.position.z = CAR_CTR_Z;
       scene.add(carGrp);
+    }
+
+    /* ==========================================================================
+       탑승자 (실사형 일반 성인 남성, 30~40대·일반 체형)
+       프리미티브(원기둥·구·박스) 조합으로 인체 비율을 구성한다. carGrp의
+       자식이므로 카와 함께 승강한다. 기본 숨김 → 버튼으로 승/하차 토글.
+       ========================================================================== */
+    function buildPassenger() {
+      passengerGrp = new THREE.Group();
+      const fig = passengerGrp;
+
+      const matSkin  = new THREE.MeshStandardMaterial({ color: 0xd7a684, roughness: 0.72, metalness: 0.0 });
+      const matHair  = new THREE.MeshStandardMaterial({ color: 0x24190f, roughness: 0.85, metalness: 0.05 });
+      const matShirt = new THREE.MeshStandardMaterial({ color: 0x3f5c7a, roughness: 0.7,  metalness: 0.02 }); // 세미캐주얼 셔츠
+      const matPants = new THREE.MeshStandardMaterial({ color: 0x2c2f36, roughness: 0.82, metalness: 0.02 }); // 차콜 슬랙스
+      const matShoe  = new THREE.MeshStandardMaterial({ color: 0x17181c, roughness: 0.5,  metalness: 0.1 });
+      const matBelt  = new THREE.MeshStandardMaterial({ color: 0x1c140d, roughness: 0.6,  metalness: 0.1 });
+      const matEye   = new THREE.MeshStandardMaterial({ color: 0x201a15, roughness: 0.3,  metalness: 0.0 });
+      const matBrow  = new THREE.MeshStandardMaterial({ color: 0x2a1d12, roughness: 0.8,  metalness: 0.0 });
+      const matMouth = new THREE.MeshStandardMaterial({ color: 0x9c5b50, roughness: 0.6,  metalness: 0.0 });
+
+      function limb(rT, rB, len, mat, x, yc, z = 0) {
+        const m = new THREE.Mesh(new THREE.CylinderGeometry(rT, rB, len, 16), mat);
+        m.position.set(x, yc, z); m.castShadow = true; fig.add(m); return m;
+      }
+      function ball(r, mat, x, y, z = 0) {
+        const m = new THREE.Mesh(new THREE.SphereGeometry(r, 22, 16), mat);
+        m.position.set(x, y, z); m.castShadow = true; fig.add(m); return m;
+      }
+      function slab(w, h, d, mat, x, y, z = 0) {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+        m.position.set(x, y, z); m.castShadow = true; fig.add(m); return m;
+      }
+
+      // ── 다리·발 (양측 x=±0.10, +Z=도어 방향) ──
+      [-0.10, 0.10].forEach(x => {
+        slab(0.115, 0.07, 0.28, matShoe, x, 0.035, 0.055);       // 구두 (앞코 전방)
+        limb(0.052, 0.075, 0.42, matPants, x, 0.28, 0);          // 정강이
+        ball(0.075, matPants, x, 0.49);                          // 무릎
+        limb(0.078, 0.11, 0.40, matPants, x, 0.69, 0);           // 허벅지
+      });
+
+      // ── 골반·벨트 (front-back 납작) ──
+      limb(0.155, 0.185, 0.20, matPants, 0, 0.90).scale.z = 0.72;
+      const belt = limb(0.19, 0.19, 0.05, matBelt, 0, 1.005); belt.scale.z = 0.72;
+
+      // ── 몸통 (셔츠, 어깨>허리 테이퍼) ──
+      const torso = limb(0.20, 0.155, 0.46, matShirt, 0, 1.24);
+      torso.scale.set(1.05, 1, 0.66);
+      ball(0.106, matShirt, -0.185, 1.45); // 어깨
+      ball(0.106, matShirt,  0.185, 1.45);
+
+      // ── 팔 (양측, 몸통 바깥으로 하강) ──
+      [-1, 1].forEach(s => {
+        const x = s * 0.225;
+        limb(0.062, 0.05, 0.30, matShirt, x, 1.30);   // 상완 (소매)
+        ball(0.05, matShirt, x, 1.15);                // 팔꿈치
+        limb(0.05, 0.042, 0.28, matShirt, s * 0.235, 1.01); // 전완
+        ball(0.055, matSkin, s * 0.24, 0.85);         // 손
+      });
+
+      // ── 목·머리 ──
+      limb(0.053, 0.057, 0.12, matSkin, 0, 1.52);     // 목
+      const head = ball(0.107, matSkin, 0, 1.66); head.scale.set(1.0, 1.08, 1.02); // 약간 세로 타원(남성 두상)
+      // 머리카락 — 후방·상단 캡 (전방으로 밀지 않아 얼굴면 노출)
+      const hair = ball(0.115, matHair, 0, 1.705, -0.03); hair.scale.set(1.05, 0.98, 1.05);
+      ball(0.028, matSkin, -0.10, 1.655, -0.006); // 귀
+      ball(0.028, matSkin,  0.10, 1.655, -0.006);
+      const nose = ball(0.02, matSkin, 0, 1.636, 0.104); nose.scale.set(0.8, 1.15, 1.25); // 코 (돌출)
+      ball(0.013, matEye, -0.038, 1.672, 0.100);  // 눈 (작게)
+      ball(0.013, matEye,  0.038, 1.672, 0.100);
+      slab(0.030, 0.008, 0.02, matBrow, -0.038, 1.694, 0.099); // 눈썹
+      slab(0.030, 0.008, 0.02, matBrow,  0.038, 1.694, 0.099);
+      slab(0.042, 0.009, 0.015, matMouth, 0, 1.601, 0.102);    // 입
+
+      // 발끝(=얼굴)이 도어(+Z)를 향하도록 서 있음. 카 바닥면에 발을 올린다.
+      passengerGrp.position.set(0.22, -S.CAR_H / 2 + 0.07, 0.10);
+      passengerGrp.visible = false;
+      carGrp.add(passengerGrp);
+    }
+
+    // 탑승자 승/하차 토글 — 승차 시 발밑에서 서서히 일어서는 연출
+    function togglePassenger() {
+      if (!passengerGrp) return false;
+      const show = !passengerGrp.visible;
+      passengerGrp.visible = show;
+      if (show) {
+        gsap.killTweensOf(passengerGrp.scale);
+        passengerGrp.scale.set(1, 0.02, 1);
+        gsap.to(passengerGrp.scale, { y: 1, duration: 0.5, ease: 'back.out(1.5)' });
+      }
+      return show;
     }
 
     /* ==========================================================================
@@ -1276,9 +1322,14 @@
       });
     }
 
+    // 실사 와이어로프 2구간(조속기휠→클램프, 클램프→인장시브)의 위치·길이·기울기만 갱신한다.
+    // 메시·지오메트리는 environment.js에서 이미 만들어 두었다 (렌더 루프 생성 금지).
+    const _ropeUp = new THREE.Vector3(0, 1, 0);
+    const _ropeA = new THREE.Vector3(), _ropeB = new THREE.Vector3(), _ropeDir = new THREE.Vector3();
+
     function refreshGovernorRope() {
-      if (!govRopeLine || !govRopeData) return;
-      
+      if (!govRopeSegs || !govRopeData) return;
+
       let clampY = carGrp.position.y - S.CAR_H / 2 - 0.16;
       let clampZ = govRopeData.z; // 기본값 -0.37
 
@@ -1288,12 +1339,22 @@
         clampZ = (CAR_CTR_Z - 0.15) - 0.22 * Math.cos(theta); // 카 중심 추종 (base -0.15)
       }
 
-        const pts = [
-        new THREE.Vector3(govRopeData.x, govRopeData.topY, govRopeData.z),
-        new THREE.Vector3(govRopeData.x, clampY, clampZ),
-        new THREE.Vector3(govRopeData.x, govRopeData.botY, govRopeData.z)
+      const ends = [
+        [govRopeData.topY, govRopeData.z, clampY, clampZ],   // 상부 구간
+        [clampY, clampZ, govRopeData.botY, govRopeData.z]    // 하부 구간
       ];
-      govRopeLine.geometry.setFromPoints(pts);
+      ends.forEach(([y0, z0, y1, z1], i) => {
+        const seg = govRopeSegs[i];
+        _ropeA.set(govRopeData.x, y0, z0);
+        _ropeB.set(govRopeData.x, y1, z1);
+        _ropeDir.subVectors(_ropeB, _ropeA);
+        const len = _ropeDir.length();
+        if (len < 1e-5) { seg.visible = false; return; }
+        seg.visible = true;
+        seg.position.addVectors(_ropeA, _ropeB).multiplyScalar(0.5);
+        seg.quaternion.setFromUnitVectors(_ropeUp, _ropeDir.divideScalar(len));
+        seg.scale.set(1, len, 1);
+      });
     }
 
     /* ==========================================================================
@@ -1364,14 +1425,13 @@
       tl.to(gov.pendulums[0].rotation, { z: gov.geom.pendRot0[0], duration: 0.80, ease: 'power2.inOut' }, 0.55);
       tl.to(gov.pendulums[1].rotation, { z: gov.geom.pendRot0[1], duration: 0.80, ease: 'power2.inOut' }, 0.55);
       
-      // 세이프티 기어 복귀 애니메이션 (하부 수평 샤프트)
+      // 세이프티 기어 복귀 애니메이션 (웨지 하강·샤프트 복원·스프링 신장)
       const sg = carGrp.userData.safetyGear;
-      if (sg) {
+      if (sg && sg.shaft) {
         tl.to(sg.shaft.rotation, { x: 0, duration: 0.65, ease: 'power2.inOut' }, 0);
         tl.to([sg.liftL.position, sg.liftR.position], { y: 0, duration: 0.65, ease: 'power2.inOut' }, 0);
-        sg.uSprings.forEach(spr => {
-          tl.to(spr.scale, { z: 1.0, duration: 0.55, ease: 'power2.inOut' }, 0);
-        });
+        (sg.wedges || []).forEach(w => tl.to(w.position, { z: w.userData.z0 !== undefined ? w.userData.z0 : w.position.z, duration: 0.65, ease: 'power2.inOut' }, 0));
+        (sg.springs || []).forEach(spr => tl.to(spr.scale, { y: 1.0, duration: 0.55, ease: 'power2.inOut' }, 0));
       }
       tl.eventCallback("onUpdate", () => { refreshGovernorRope(); });
 

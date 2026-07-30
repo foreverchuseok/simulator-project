@@ -2862,19 +2862,24 @@
          로프 정렬: 홈반경 로컬 gR=0.10 × govGrp 스케일 1.5 = 월드 0.15 유지.
          가동부 핸들: mrGrp.userData.governor (elevator.js governorTrip/Reset) */
       const govYBase = pHeight + 0.04;
+      // [프리뷰] Blender .glb 조속기 외형 겹쳐보기 스위치. true면 기존 프리미티브 외형을
+      //   숨기고 models/gltf/overspeed_governor.glb 를 같은 자리에 얹는다(트립 애니메이션 미연결).
+      //   false면 기존 조속기(정교+애니메이션 연결)를 그대로 사용.
+      const USE_GLB_GOVERNOR = true;
       const govBodyGrp = new THREE.Group();
       govBodyGrp.position.set(0, govYBase, 0);
       govBodyGrp.rotation.y = Math.PI / 2; // 로컬 +X=월드 -Z, 로컬 +Z=월드 +X(카메라측)
 
       const govBlue   = M.paint(0x2a6cb0);
       const govBlueDk = M.paint(0x1e5690);
-      const silverMat = M.ss(0xb8bec6);
-      const leverMat  = M.ss(0xa8b0b8);
-      const springMat = M.ss(0xc8ced6);
+      const silverMat = new THREE.MeshStandardMaterial({ color: 0xccd2d9, metalness: 0.95, roughness: 0.24 }); // 크롬 핀·축
+      const chromeMat = new THREE.MeshStandardMaterial({ color: 0xe0e5eb, metalness: 1.0,  roughness: 0.11 }); // 폴리시드 크롬 (너트·스프링·원심추)
+      const leverMat  = new THREE.MeshStandardMaterial({ color: 0xc2c8ce, metalness: 0.88, roughness: 0.32 }); // 브러시드 알루미늄 레버
+      const springMat = chromeMat;
       const darkSteel = M.ss(0x3a4048);
       const holeDark  = M.paint(0x121518);
       const rimGold   = M.gold();
-      const swCaseMat = M.paint(0x4a5058);
+      const swCaseMat = new THREE.MeshStandardMaterial({ color: 0x2b2f35, metalness: 0.45, roughness: 0.55 }); // 다크 산업용 스위치 케이스
       const guardMat  = new THREE.MeshPhysicalMaterial({
         color: 0x3a82c4, metalness: 0.05, roughness: 0.25,
         transparent: true, opacity: 0.32, depthWrite: false, side: THREE.DoubleSide, clearcoat: 0.4
@@ -2898,12 +2903,12 @@
       const govAxle = createCylinder(0.012, 0.012, 0.140, silverMat, 0, gWY, 0.010, govBodyGrp);
       govAxle.rotation.x = Math.PI / 2;
       // 중앙 너트판 — 참조 CAD: 세로 판 + 상(축)·하 육각너트 + 소형 나사
-      createBox(0.050, 0.092, 0.008, M.ss(0x9aa4ae), 0, gWY - 0.023, 0.070, govBodyGrp);
-      const hexA = createCylinder(0.019, 0.019, 0.014, silverMat, 0, gWY, 0.078, govBodyGrp);
-      hexA.rotation.x = Math.PI / 2; hexA.geometry = new THREE.CylinderGeometry(0.019, 0.019, 0.014, 6);
-      const hexB = createCylinder(0.017, 0.017, 0.012, silverMat, 0, gWY - 0.046, 0.078, govBodyGrp);
-      hexB.rotation.x = Math.PI / 2; hexB.geometry = new THREE.CylinderGeometry(0.017, 0.017, 0.012, 6);
-      createCylinder(0.004, 0.004, 0.008, darkSteel, 0, gWY - 0.026, 0.076, govBodyGrp).rotation.x = Math.PI / 2;
+      createBox(0.058, 0.104, 0.010, M.ss(0x868e98), 0, gWY - 0.023, 0.070, govBodyGrp); // 마운트판
+      const hexA = createCylinder(0.022, 0.022, 0.019, chromeMat, 0, gWY, 0.082, govBodyGrp);
+      hexA.rotation.x = Math.PI / 2; hexA.geometry = new THREE.CylinderGeometry(0.022, 0.022, 0.019, 6);
+      const hexB = createCylinder(0.020, 0.020, 0.017, chromeMat, 0, gWY - 0.048, 0.082, govBodyGrp);
+      hexB.rotation.x = Math.PI / 2; hexB.geometry = new THREE.CylinderGeometry(0.020, 0.020, 0.017, 6);
+      createCylinder(0.005, 0.005, 0.010, darkSteel, 0, gWY - 0.024, 0.080, govBodyGrp).rotation.x = Math.PI / 2; // 소형 나사
 
       // ─── 130 조속기휠 (파란 스포크 + 노란 V홈) ───
       const govWheelGrpL = new THREE.Group();
@@ -2920,10 +2925,10 @@
       // 파란 내륜·스포크
       const blueRim = new THREE.Mesh(new THREE.TorusGeometry(0.078, 0.010, 8, 40), govBlue);
       govWheelGrpL.add(blueRim);
-      for (let i = 0; i < 6; i++) {
-        const ang = i * Math.PI / 3;
-        const spoke = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.009, 0.055, 8), govBlue);
-        spoke.position.set(Math.cos(ang) * 0.050, Math.sin(ang) * 0.050, 0);
+      for (let i = 0; i < 4; i++) {
+        const ang = i * Math.PI / 2 + Math.PI / 4; // X자 4-스포크 (참조 영상)
+        const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.017, 0.058, 0.010), govBlue);
+        spoke.position.set(Math.cos(ang) * 0.048, Math.sin(ang) * 0.048, -0.004);
         spoke.rotation.z = ang + Math.PI / 2;
         govWheelGrpL.add(spoke);
       }
@@ -2931,23 +2936,23 @@
       hub.rotation.x = Math.PI / 2;
       govWheelGrpL.add(hub);
 
-      // 원심추(진자) — 라운드 콤마형 플레이트 (참조 CAD 캠판 형상, 휠 전면)
-      const pendMat = M.ss(0x93a8bf);
+      // 원심추(뭉치) — 폴리시드 크롬 돔 (참조 영상 30~34초: 휠 전면에서 원심력으로 개방,
+      //   개방 시 스위치 롤러를 타격). 피벗 보스 + 넥 암 + 반구 돔.
       function buildGovPendulum(mountAng) {
         const pg = new THREE.Group();
-        pg.position.set(Math.cos(mountAng) * 0.050, Math.sin(mountAng) * 0.050, 0.031);
+        pg.position.set(Math.cos(mountAng) * 0.048, Math.sin(mountAng) * 0.048, 0.030);
         pg.rotation.z = mountAng - Math.PI / 2;
-        const ps = new THREE.Shape();
-        ps.absarc(0, 0, 0.015, Math.PI * 0.5, Math.PI * 1.5, false);      // 피벗측 반원
-        ps.quadraticCurveTo(0.018, -0.019, 0.0403, -0.0148);              // 하부 라운드 에지
-        ps.absarc(0.038, 0, 0.015, -Math.PI * 0.45, Math.PI * 0.45, false); // 로브(추) 반원
-        ps.quadraticCurveTo(0.018, 0.021, 0, 0.015);                      // 상부 라운드 에지
-        const pm = new THREE.Mesh(new THREE.ExtrudeGeometry(ps, {
-          depth: 0.008, bevelEnabled: true, bevelThickness: 0.001, bevelSize: 0.001, bevelSegments: 2
-        }), pendMat);
-        pm.position.z = -0.004;
-        pg.add(pm);
-        createCylinder(0.005, 0.005, 0.020, silverMat, 0, 0, 0, pg).rotation.x = Math.PI / 2;
+        // 피벗 보스
+        createCylinder(0.008, 0.008, 0.020, silverMat, 0, 0, 0.004, pg).rotation.x = Math.PI / 2;
+        // 추 암 (슬림)
+        createBox(0.038, 0.014, 0.012, chromeMat, 0.022, 0, 0.006, pg);
+        // 추 — 대형 폴리시드 크롬 돔 (참조: 휠 전면 반구). 납작하게 눌러 레버 간섭 방지,
+        //   레버가 돔 상부를 가리는 층위(참조와 동일)
+        const dome = new THREE.Mesh(new THREE.SphereGeometry(0.035, 30, 22), chromeMat);
+        dome.position.set(0.046, 0, 0.000);
+        dome.scale.set(1, 1, 0.42);
+        dome.castShadow = true;
+        pg.add(dome);
         govWheelGrpL.add(pg);
         return pg;
       }
@@ -2955,34 +2960,37 @@
       const govPendB = buildGovPendulum(-0.35 + Math.PI);
       const pendRot0 = [-0.35 - Math.PI / 2, -0.35 + Math.PI / 2];
 
-      // ─── 170 라체트 — 한방향(하강 캐치) 톱니 8T: 급경사 걸림면 + 볼록 원호 등면
-      //     하강 폭주 = wheel rotation.z 증가(CCW) → 걸림면(a0, 급경사)이 제동자 첨예부를 받아냄
+      // ─── 170 라체트 — 한방향(하강 캐치) 톱니 8T: 급경사 걸림면 + 뭉툭한 플랫 tip + 완만 등면
+      //     하강 폭주 = wheel rotation.z 증가(CCW) → 걸림면(a0, 급경사)이 제동자 tip을 받아냄
+      //     ※ 양방향 조속기 아님. tip은 바늘형 금지(실사 주물감).
       const govRatchetGrp = new THREE.Group();
       govRatchetGrp.position.set(0, gWY, 0.019);
       govBodyGrp.add(govRatchetGrp);
-      const ratOuter = 0.068, ratRoot = 0.054, nTeeth = 8;
+      const ratOuter = 0.068, ratRoot = 0.056, nTeeth = 8;
       const toothStep = (Math.PI * 2) / nTeeth;
-      const toothPhase = 0.545; // 트립 시 제동자 첨예부(휠로컬 ≈1.31rad)가 걸림면 직전에 오도록 정렬
+      const toothPhase = 0.545; // 트립 시 제동자 tip(휠로컬 ≈1.31rad)이 걸림면 직전에 오도록 정렬
       const ratchetMat = M.ss(0x4a525c); // 진자와 다른 어두운 강재
       const ratShape = new THREE.Shape();
       for (let i = 0; i < nTeeth; i++) {
-        const a0 = toothPhase + i * toothStep;  // 걸림면 (급경사, CW측 노출)
-        const aT = a0 + toothStep * 0.10;       // 이빨 끝 (라운드)
-        const aM = a0 + toothStep * 0.55;       // 등면 제어점
-        const a2 = a0 + toothStep;              // 골
+        const a0 = toothPhase + i * toothStep;  // 골 / 걸림면 시작
+        const aRise = a0 + toothStep * 0.10;
+        const aTip0 = a0 + toothStep * 0.14;    // 플랫 tip 시작
+        const aTip1 = a0 + toothStep * 0.26;    // 플랫 tip 끝 (뭉툭)
+        const aM = a0 + toothStep * 0.70;       // 등면 제어점
+        const a2 = a0 + toothStep;              // 다음 골
+        const rMid = ratRoot + (ratOuter - ratRoot) * 0.82;
         if (i === 0) ratShape.moveTo(Math.cos(a0) * ratRoot, Math.sin(a0) * ratRoot);
-        ratShape.lineTo(Math.cos(a0 + toothStep * 0.02) * ratOuter, Math.sin(a0 + toothStep * 0.02) * ratOuter);
+        ratShape.lineTo(Math.cos(aRise) * rMid, Math.sin(aRise) * rMid);
+        ratShape.lineTo(Math.cos(aTip0) * ratOuter, Math.sin(aTip0) * ratOuter);
+        ratShape.lineTo(Math.cos(aTip1) * (ratOuter * 0.988), Math.sin(aTip1) * (ratOuter * 0.988));
         ratShape.quadraticCurveTo(
-          Math.cos(aT) * ratOuter, Math.sin(aT) * ratOuter,
-          Math.cos(aT + toothStep * 0.08) * (ratOuter - 0.002), Math.sin(aT + toothStep * 0.08) * (ratOuter - 0.002));
-        ratShape.quadraticCurveTo(
-          Math.cos(aM) * (ratRoot + 0.009), Math.sin(aM) * (ratRoot + 0.009),
+          Math.cos(aM) * (ratRoot + 0.010), Math.sin(aM) * (ratRoot + 0.010),
           Math.cos(a2) * ratRoot, Math.sin(a2) * ratRoot);
       }
       ratShape.closePath();
       const ratMesh = new THREE.Mesh(
         new THREE.ExtrudeGeometry(ratShape, {
-          depth: 0.012, bevelEnabled: true, bevelThickness: 0.0008, bevelSize: 0.0008, bevelSegments: 1
+          depth: 0.012, bevelEnabled: true, bevelThickness: 0.0014, bevelSize: 0.0014, bevelSegments: 2
         }), ratchetMat);
       ratMesh.position.z = -0.006;
       govRatchetGrp.add(ratMesh);
@@ -3017,31 +3025,46 @@
       govTopArmGrp.position.set(0, gWY, 0.052);
       govTopArmGrp.rotation.z = armRot0;
       govBodyGrp.add(govTopArmGrp);
-      createCylinder(0.007, 0.007, 0.020, silverMat, 0, 0.078, -0.004, govTopArmGrp).rotation.x = Math.PI / 2;
-      const armHex = createCylinder(0.011, 0.011, 0.010, silverMat, 0, 0.078, 0.010, govTopArmGrp);
-      armHex.rotation.x = Math.PI / 2; armHex.geometry = new THREE.CylinderGeometry(0.011, 0.011, 0.010, 6);
-      // 주암·훅 — 각진 박스 (bevel/곡선 없음)
-      createBox(0.200, 0.016, 0.013, leverMat, 0.015, 0.090, 0, govTopArmGrp);
-      createBox(0.032, 0.024, 0.014, leverMat, -0.072, 0.084, 0, govTopArmGrp);
-      createBox(0.014, 0.038, 0.012, darkSteel, -0.096, 0.058, 0, govTopArmGrp); // 훅 수직부
-      createBox(0.026, 0.012, 0.012, darkSteel, -0.102, 0.040, 0, govTopArmGrp); // 훅 걸림턱
-      createBox(0.024, 0.018, 0.014, leverMat, 0.108, 0.094, 0, govTopArmGrp);
+      // 피벗 핀 — 참조: 레버 중앙의 납작한 크롬 디스크
+      const armPin = createCylinder(0.016, 0.016, 0.020, chromeMat, 0, 0.082, 0.007, govTopArmGrp);
+      armPin.rotation.x = Math.PI / 2;
+      createCylinder(0.007, 0.007, 0.022, silverMat, 0, 0.082, -0.004, govTopArmGrp).rotation.x = Math.PI / 2; // 피벗 축
+      // 주암 — 넓은 평판(브러시드 알루미늄), 피벗 부근이 가장 넓고 좌(훅)·우(스프링)로 테이퍼
+      const armShape = new THREE.Shape();
+      armShape.moveTo(-0.104, -0.009);
+      armShape.lineTo( 0.114, -0.005);
+      armShape.lineTo( 0.114,  0.019);
+      armShape.lineTo( 0.008,  0.031); // 피벗 부근 최대 폭
+      armShape.lineTo(-0.104,  0.019);
+      armShape.closePath();
+      const armPlate = new THREE.Mesh(new THREE.ExtrudeGeometry(armShape, {
+        depth: 0.016, bevelEnabled: true, bevelThickness: 0.0015, bevelSize: 0.0015, bevelSegments: 1
+      }), leverMat);
+      armPlate.position.set(0, 0.082, -0.008);
+      armPlate.castShadow = true;
+      govTopArmGrp.add(armPlate);
+      // 좌측 훅(캐처 조) — 아래로 꺾인 갈고리
+      createBox(0.020, 0.048, 0.016, leverMat, -0.100, 0.056, 0, govTopArmGrp); // 수직 드롭
+      createBox(0.042, 0.017, 0.016, leverMat, -0.113, 0.036, 0, govTopArmGrp); // 갈고리 걸림턱
+      createBox(0.014, 0.014, 0.017, darkSteel, -0.128, 0.043, 0, govTopArmGrp); // 조 팁
+      // 우측 클로(스프링 연결 브래킷) — 위로 솟음
+      createBox(0.024, 0.036, 0.016, leverMat, 0.112, 0.100, 0, govTopArmGrp);
 
       const govSprGrp = new THREE.Group();
       govSprGrp.position.set(0.125, 0.100, 0);
       govSprGrp.rotation.z = -Math.PI / 2 + Math.PI * 8 / 180; // 레버와 일자 (+8° 상향, 월드 ~28°)
       govTopArmGrp.add(govSprGrp);
-      createBox(0.028, 0.008, 0.024, darkSteel, 0, 0.002, 0, govSprGrp);
-      createCylinder(0.004, 0.004, 0.065, silverMat, 0, 0.036, 0, govSprGrp);
-      for (let i = 0; i < 6; i++) {
-        const coil = new THREE.Mesh(new THREE.TorusGeometry(0.013, 0.0034, 6, 14), springMat);
+      createBox(0.032, 0.012, 0.030, darkSteel, 0, 0.004, 0, govSprGrp);        // 하단 스프링 시트
+      createCylinder(0.005, 0.005, 0.092, silverMat, 0, 0.050, 0, govSprGrp);   // 내부 가이드 로드
+      for (let i = 0; i < 9; i++) {
+        const coil = new THREE.Mesh(new THREE.TorusGeometry(0.017, 0.0044, 8, 20), springMat);
         coil.rotation.x = Math.PI / 2;
-        coil.position.set(0, 0.014 + i * 0.0085, 0);
+        coil.position.set(0, 0.016 + i * 0.0098, 0);
         govSprGrp.add(coil);
       }
-      createCylinder(0.011, 0.011, 0.006, silverMat, 0, 0.066, 0, govSprGrp);
-      // 스프링 단부 브래킷 — 스프링 축(월드 ~28°)과 직교
-      const sprBrk = createBox(0.014, 0.030, 0.022, govBlueDk, 0.156, gWY + 0.173, 0.052, govBodyGrp);
+      createCylinder(0.014, 0.014, 0.008, silverMat, 0, 0.106, 0, govSprGrp);   // 상단 스프링 시트
+      // 스프링 단부 브래킷 — 늘어난 스프링 축 끝(월드 ~28°)에 정렬
+      const sprBrk = createBox(0.016, 0.034, 0.026, govBlueDk, 0.190, gWY + 0.196, 0.052, govBodyGrp);
       sprBrk.rotation.z = 0.49;
 
       const govTripGrp = new THREE.Group();
@@ -3053,28 +3076,31 @@
       createBox(0.30, 0.008, 0.008, govBlue, 0.02, 0.168, 0.074, govBodyGrp);
       createBox(0.30, 0.008, 0.008, govBlue, 0.02, 0.168, -0.018, govBodyGrp);
 
-      // ─── 과속스위치·복귀 — 불투명 본체·적색캡·명판 (투명 전체 덮개 없음) ───
+      // ─── 조속기 스위치 (과속 스위치) — 참조 영상: 다크 산업용 마이크로스위치 +
+      //     롤러 레버 + 황동 스트라이커. 휠 좌하단, 원심추(뭉치) 궤도 옆에 배치. ───
       const govSwitchGrp = new THREE.Group();
       govSwitchGrp.name = 'govOverspeedSwitch';
       govBodyGrp.add(govSwitchGrp);
-      createBox(0.042, 0.066, 0.036, swCaseMat, -0.195, 0.195, -0.010, govSwitchGrp);          // 본체 케이스
-      createBox(0.036, 0.013, 0.030, M.paint(0xc0392b), -0.195, 0.2335, -0.010, govSwitchGrp); // 상단 적색 캡
-      createBox(0.030, 0.010, 0.002, M.paint(0xe8eef4), -0.195, 0.195, 0.0085, govSwitchGrp);  // 명판
-      createBox(0.030, 0.040, 0.038, darkSteel, -0.195, 0.195, -0.046, govSwitchGrp);          // 후면판 마운트
+      const swX = -0.188, swY = 0.150;
+      createBox(0.030, 0.058, 0.030, swCaseMat, swX, swY, -0.006, govSwitchGrp);              // 본체 케이스(다크)
+      createBox(0.030, 0.010, 0.030, M.ss(0x8a9098), swX, swY + 0.034, -0.006, govSwitchGrp); // 상단 커버
+      createBox(0.022, 0.030, 0.002, M.paint(0xd8dde3), swX, swY - 0.004, 0.010, govSwitchGrp); // 명판
+      createBox(0.024, 0.052, 0.030, darkSteel, swX - 0.024, swY, -0.006, govSwitchGrp);       // 후면 마운트 브래킷
+      // 롤러 레버 — 스위치 상단 피벗에서 휠(추 궤도) 쪽으로 뻗음
       const govLeverGrp = new THREE.Group();
-      govLeverGrp.position.set(-0.170, 0.195, 0.012);
+      govLeverGrp.position.set(swX + 0.006, swY + 0.030, 0.012);
       govSwitchGrp.add(govLeverGrp);
-      createCylinder(0.006, 0.006, 0.012, darkSteel, 0, 0, 0, govLeverGrp).rotation.x = Math.PI / 2;
-      createBox(0.038, 0.009, 0.005, leverMat, 0.021, 0, 0.003, govLeverGrp);
-      const swRoller = createCylinder(0.0065, 0.0065, 0.007, darkSteel, 0.042, 0, 0.003, govLeverGrp);
+      createCylinder(0.006, 0.006, 0.014, silverMat, 0, 0, 0, govLeverGrp).rotation.x = Math.PI / 2; // 레버 피벗
+      createBox(0.044, 0.008, 0.006, leverMat, 0.024, 0.006, 0.003, govLeverGrp);              // 레버 암
+      const swRoller = createCylinder(0.008, 0.008, 0.009, M.paint(0xcaa24a), 0.048, 0.010, 0.003, govLeverGrp); // 황동 롤러(스트라이커)
       swRoller.rotation.x = Math.PI / 2;
-      createBox(0.020, 0.026, 0.020, darkSteel, -0.224, 0.190, -0.010, govSwitchGrp); // 솔레노이드
-      const govPin52 = createCylinder(0.0025, 0.0025, 0.030, silverMat, -0.195, 0.195, -0.010, govSwitchGrp);
+      createBox(0.018, 0.024, 0.020, darkSteel, swX - 0.030, swY - 0.004, -0.006, govSwitchGrp); // 솔레노이드/복귀부
+      const govPin52 = createCylinder(0.0028, 0.0028, 0.028, silverMat, swX, swY, -0.006, govSwitchGrp);
       govPin52.rotation.z = Math.PI / 2;
       const govResetBrkGrp = new THREE.Group();
-      govResetBrkGrp.position.set(-0.175, 0.195, -0.010);
+      govResetBrkGrp.position.set(swX + 0.018, swY, -0.006);
       govSwitchGrp.add(govResetBrkGrp);
-      createBox(0.006, 0.028, 0.006, leverMat, 0, 0, 0, govResetBrkGrp);
+      createBox(0.006, 0.026, 0.006, leverMat, 0, 0, 0, govResetBrkGrp);
       // 스위치는 본체·적색캡·명판만 — 투명 전체 덮개 없음 (사용자 지시)
 
       // 링크 더미 (구 API — 미사용, null-safe용 숨김 메시)
@@ -3082,6 +3108,25 @@
       govLink.visible = false;
 
       govGrp.add(govBodyGrp);
+
+      // ── [프리뷰] .glb 외형을 조속기 위치에 얹기 (USE_GLB_GOVERNOR) ──────────────
+      if (USE_GLB_GOVERNOR) {
+        const _hiddenGov = [...govBodyGrp.children];   // 기존 프리미티브 외형
+        _hiddenGov.forEach(o => { o.visible = false; });
+        new THREE.GLTFLoader().load('models/gltf/overspeed_governor.glb', (gltf) => {
+          const g = gltf.scene;
+          g.name = 'GovGlbPreview';
+          g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+          // glb 풀리 외경 0.30 → 기존 휠 월드경 0.324 정합 (govGrp 스케일 1.5 상쇄: 0.324/(1.5×0.30)=0.72)
+          g.scale.setScalar(0.72);
+          g.position.set(0, gWY - 0.036, 0.0);         // glb 풀리 중심을 휠 중심(gWY)에 정렬
+          govBodyGrp.add(g);
+          console.log('[gov glb] preview loaded — objects:', g.children.map(c => c.name));
+        }, undefined, (err) => {
+          console.error('[gov glb] 로드 실패 — 기존 외형 복원:', err);
+          _hiddenGov.forEach(o => { o.visible = true; });
+        });
+      }
 
       const govScale = govGrp.scale.x;
       const govWheelWorldY = govGrp.position.y + (govYBase + gWY) * govScale;
@@ -3243,21 +3288,27 @@
 
       // ── 4. 조속기 로프 루프(기계실 조속기 ↔ 카 세이프티 링크 ↔ 피트 인장시브) ──
       // 조속기 휠·인장시브 모두 회전축이 X방향이므로 로프 두 가닥은 Z = tensBaseZ ± 홈반경에 걸린다.
-      const gRopeMat = M.rope();
+      // ★얇은 THREE.Line(옛 과속조절기 선)을 전부 걷어내고 실사 와이어로프 메시로 교체.
+      //   조속기부터 피트 인장추까지 한 굵기로 이어진다 (사용자 지시).
+      const gRopeMat = M.ropeMesh();
       const govData = mrGrp.userData || {};
       const govWheelY = govData.govWheelY || (Y0 + TOTAL_H + 0.42);
-      const govWheelR = govData.govR || 0.14;
-      const ropeR = Math.max(govWheelR, 0.15); // 풀리 홈 반경 = 가닥 Z 오프셋
+      // 풀리 홈 반경 = 가닥 Z 오프셋.
+      // ★.glb 조속기 기준값이라야 한다: 블렌더 R_ROPE 0.150 × 로더 0.72 × govGrp 1.5 = 0.162.
+      //   userData.govR(0.15)은 구 프리미티브 조속기 치수라 .glb와 12mm 어긋나고,
+      //   그러면 로프가 시브 림 속에 묻혀 감기는 부분이 안 보인다. 베이스 관통 구멍
+      //   중심도 이 값이라야 맞는다 (구멍 역시 블렌더 R_ROPE 자리에 뚫려 있다).
+      const ropeR = 0.162;
       const tensShvY = tensionerY + 0.30;
+      const GOV_ROPE_R = 0.006;                // Ø12 — .glb 조속기 로프 굵기와 정합
+      if (!govRopeGeom) govRopeGeom = makeRopeGeometry(GOV_ROPE_R);
 
       // 귀환측(자유측) 로프 — 전면(Z+) 탄젠트, 카와 무관하게 고정
-      const returnPts = [
-        new THREE.Vector3(tensGovX, tensShvY, tensBaseZ + ropeR),
-        new THREE.Vector3(tensGovX, govWheelY, tensBaseZ + ropeR)
-      ];
-      pitGrp.add(new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints(returnPts), gRopeMat
-      ));
+      const retRope = new THREE.Mesh(govRopeGeom, gRopeMat);
+      retRope.position.set(tensGovX, (govWheelY + tensShvY) / 2, tensBaseZ + ropeR);
+      retRope.scale.y = govWheelY - tensShvY;
+      retRope.castShadow = true;
+      pitGrp.add(retRope);
 
       // 조속기 휠 상부 반원 + 인장시브 하부 반원 — 로프가 풀리 홈에 감기는 표현
       const wrapArc = (cy, sign) => {
@@ -3269,15 +3320,20 @@
         }
         return pts;
       };
-      pitGrp.add(new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints(wrapArc(govWheelY, 1)), gRopeMat));
-      pitGrp.add(new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints(wrapArc(tensShvY, -1)), gRopeMat));
+      const wrapTube = (pts) => {
+        const m = new THREE.Mesh(new THREE.TubeGeometry(
+          new THREE.CatmullRomCurve3(pts), 32, GOV_ROPE_R, 8, false), gRopeMat);
+        m.castShadow = true;
+        return m;
+      };
+      pitGrp.add(wrapTube(wrapArc(govWheelY, 1)));
+      pitGrp.add(wrapTube(wrapArc(tensShvY, -1)));
 
-      // 카 연동측(작동) 로프 — 후면(Z-) 탄젠트, 카상부 safetyClamp를 관통
-      // 카 이동 시 refreshGovernorRope()가 매 프레임 갱신
-      govRopeLine = new THREE.Line(new THREE.BufferGeometry(), gRopeMat);
-      pitGrp.add(govRopeLine);
+      // 카 연동측(작동) 로프 — 후면(Z-) 탄젠트, 카상부 safetyClamp를 관통.
+      // 클램프에서 꺾이므로 상·하 2구간. 메시는 여기서 한 번만 만들고
+      // refreshGovernorRope()는 위치·길이·기울기만 갱신한다.
+      govRopeSegs = [new THREE.Mesh(govRopeGeom, gRopeMat), new THREE.Mesh(govRopeGeom, gRopeMat)];
+      govRopeSegs.forEach(m => { m.castShadow = true; pitGrp.add(m); });
       govRopeData = { x: tensGovX, z: tensBaseZ - ropeR, topY: govWheelY, botY: tensShvY };
       refreshGovernorRope();
 

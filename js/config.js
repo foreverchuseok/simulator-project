@@ -62,6 +62,8 @@ const M = {
   glass: () => new THREE.MeshPhysicalMaterial({ color: 0x90c8e8, transmission: 0.9, opacity: 1, transparent: true, roughness: 0.1, ior: 1.5, side: THREE.DoubleSide }),
   // 발광체 (버튼, 층표시기)
   emit: (c, i = 1.0) => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: i }),
-  // 와이어 로프
-  rope: () => new THREE.LineBasicMaterial({ color: 0x222222, linewidth: 2 })
+  // 와이어 로프 (선) — 주 로프용. 조속기 로프는 아래 ropeMesh() 실사 메시를 쓴다
+  rope: () => new THREE.LineBasicMaterial({ color: 0x222222, linewidth: 2 }),
+  // 와이어 로프 (실사 메시) — 아연도금 강선
+  ropeMesh: () => new THREE.MeshStandardMaterial({ color: 0x6e747c, metalness: 0.85, roughness: 0.42 })
 };

@@ -8,6 +8,9 @@ Screen_Recording_*.mp4
 # Claude / Antigravity → Cursor 핸드오프용 임시 계획서
 PLAN.md
 
+# 개인 PC·터미널·도구 설정 메모 (프로젝트 업무 무관, 로컬 전용)
+MISC-SETTINGS-MEMO.md
+
 # AI·개발용 임시 스크린샷·PDF 추출·캡처 스크립트
 .shot-*.png
 .rv-*.png
