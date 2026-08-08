@@ -646,21 +646,21 @@
       //    승장 인터록 적층 롤러(월드 x≈0.015~0.045)를 사이에 두고 맞물림
       // ──────────────────────────────────────────────────────────────
       const clutchGrp = new THREE.Group();
-      // 승장 어셈블리가 앞으로(HALL_SHIFT) 이동한 만큼 클러치도 전방 연장 → 인터록 물림 유지
-      clutchGrp.position.set(-cx, 0.42, dt / 2 + HALL_SHIFT); // 정중앙 맞물림 위치
+      // 승장 어셈블리가 앞으로(HALL_SHIFT) 이동한 만큼 클러치도 전방 연장 → 인터록 적층 롤러 물림
+      // Z: 승장 롤러 월드 ≈ FRONT_INNER_Z-0.025 에 블레이드 중심이 오도록 +0.004 보정
+      clutchGrp.position.set(-cx, 0.42, dt / 2 + HALL_SHIFT + 0.004);
       const clutchBlk = M.paint(0x15181c);
 
-      // 벌림형 클러치 블레이드 2개 (내측면 ±0.07 — 인터록 롤러 통과 간극 확보)
-      // z 깊이: 승장 헤더 판(FRONT_INNER_Z-0.008)과 간섭 없이 인터록 롤러만 물도록 얕게
-      [-0.085, 0.085].forEach(vx => {
-        createBox(0.030, 0.62, 0.014, clutchBlk, vx, 0, 0.006, clutchGrp);
-        // 링크 피벗 볼트
+      // 벌림형 클러치 블레이드 2개 — 승장 적층 롤러(월드 x≈0.02)를 사이에 두고 물림
+      // 간격 ±0.078: 롤러 직경(~0.06) + 여유, 헤더 판과 간섭 없이 얕은 Z
+      [-0.078, 0.078].forEach(vx => {
+        createBox(0.028, 0.62, 0.014, clutchBlk, vx, 0, 0.006, clutchGrp);
         [0.25, -0.21].forEach(py => {
           const pb = createCylinder(0.010, 0.010, 0.010, M.ss(0xb8bec6), vx, py, 0.010, clutchGrp);
           pb.rotation.x = Math.PI / 2;
         });
       });
-      // 중앙 피벗 플레이트 + 평행 링크 암 2 + 캠 롤러 (영상: 평행사변형 벌림 기구)
+      // 중앙 피벗 플레이트 + 평행 링크 암 2 + 캠 롤러
       createBox(0.055, 0.32, 0.010, clutchBlk, 0.015, 0.02, 0.010, clutchGrp);
       [0.23, -0.19].forEach(ly => {
         const arm = createBox(0.185, 0.020, 0.008, M.ss(0x9aa2aa), 0, ly, 0.008, clutchGrp);
@@ -849,7 +849,7 @@
       });
     }
 
-    /* 도어 개폐 ↔ 오퍼레이터 벨트·풀리 회전 연동 (ui.js gsap onUpdate에서 호출) */
+    /* 도어 개폐 ↔ 오퍼레이터 벨트·풀리·승장 연동로프·도어추 연동 (ui.js gsap onUpdate) */
     function spinDoorDrive(h) {
       const dd = carGrp && carGrp.userData.doorDrive;
       if (!dd) return;
@@ -860,7 +860,14 @@
       dd.pulley.rotation.z -= dx / dd.rBig;
       dd.idler.rotation.z -= dx / dd.rIdl;
       dd.motorPul.rotation.z -= dx / dd.rMot;
-      if (h && h.relPulley) h.relPulley.rotation.z -= dx / 0.085; // 승장 연동 로프 풀리
+      if (h && h.relPulley) h.relPulley.rotation.z -= dx / 0.085; // 좌단 연동 풀리
+      if (h && h.relEndPulley) h.relEndPulley.rotation.z += dx / 0.055; // 우단 종단 풀리 (반대)
+      // 도어추: 개도율에 따라 상승(스프링 인장) — 폐문력 표현
+      if (h && h.doorWeight && h.doorWeight.userData.baseY != null) {
+        const span = carDoorR.userData.ox - carDoorR.userData.cx;
+        const openAmt = span ? (x - carDoorR.userData.cx) / span : 0;
+        h.doorWeight.position.y = h.doorWeight.userData.baseY + openAmt * 0.09;
+      }
     }
 
     /**
@@ -1006,93 +1013,140 @@
         // 2. 각형 행거 레일 (도어 행거 롤러가 타는 레일 — 클러치 블레이드보다 승강로 쪽)
         createBox(S.DOOR_W + 0.30, 0.030, 0.020, hdSteel, 0, railY, hz - 0.066, scene);
 
-        // 3. 좌측단 연동 로프 풀리 — 스포크 은색 디스크 + 볼트 서클 (t128.2, 개폐 회전 연동)
-        const relGrp = new THREE.Group();
-        relGrp.position.set(-(S.DOOR_W / 2 + 0.03), hdY + 0.02, mechZ);
-        scene.add(relGrp);
-        const relDisc = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.018, 24), hdSil);
-        relDisc.rotation.x = Math.PI / 2;
-        relGrp.add(relDisc);
-        const relRim = new THREE.Mesh(new THREE.TorusGeometry(0.082, 0.006, 8, 24), hdSteel);
-        relGrp.add(relRim);
-        for (let bi = 0; bi < 6; bi++) {
-          const ba = bi * Math.PI / 3;
-          const rb2 = createCylinder(0.006, 0.006, 0.010, hdSteel,
-            Math.cos(ba) * 0.050, Math.sin(ba) * 0.050, -0.012, relGrp);
-          rb2.rotation.x = Math.PI / 2;
+        // 3. 연동로프 풀리 — 좌단(구동) → 횡단 → 우단(종단 아이들러)에서 끝남 (현장 해설)
+        const cabX0 = -(S.DOOR_W / 2 + 0.03), cabX1 = S.DOOR_W / 2 + 0.12;
+        const ropeY = hdY + 0.02;
+        const ropeR = 0.085;
+        function makeRelPulley(r) {
+          const g = new THREE.Group();
+          const disc = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.018, 24), hdSil);
+          disc.rotation.x = Math.PI / 2;
+          g.add(disc);
+          const rim = new THREE.Mesh(new THREE.TorusGeometry(r - 0.003, 0.006, 8, 24), hdSteel);
+          g.add(rim);
+          for (let bi = 0; bi < 6; bi++) {
+            const ba = bi * Math.PI / 3;
+            const rb2 = createCylinder(0.006, 0.006, 0.010, hdSteel,
+              Math.cos(ba) * r * 0.58, Math.sin(ba) * r * 0.58, -0.012, g);
+            rb2.rotation.x = Math.PI / 2;
+          }
+          const hub = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.20, r * 0.20, 0.030, 12), hdDark);
+          hub.rotation.x = Math.PI / 2;
+          g.add(hub);
+          return g;
         }
-        const relHub = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.017, 0.030, 12), hdDark);
-        relHub.rotation.x = Math.PI / 2;
-        relGrp.add(relHub);
+        const relGrp = makeRelPulley(ropeR);
+        relGrp.position.set(cabX0, ropeY, mechZ);
+        scene.add(relGrp);
         hatchDoors[i].relPulley = relGrp;
+        // 우단 종단 롤러 — 연동로프가 여기서 끝남
+        const relEndGrp = makeRelPulley(0.055);
+        relEndGrp.position.set(cabX1, ropeY, mechZ);
+        scene.add(relEndGrp);
+        hatchDoors[i].relEndPulley = relEndGrp;
+        createBox(0.034, 0.12, 0.014, hdBlk, cabX1 + 0.028, ropeY, mechZ - 0.012, scene);
 
-        // 4. 릴레이팅 케이블 상·하행 + 중앙 턴버클 (t126.6) + 우측단 앵커
-        const cabX0 = -(S.DOOR_W / 2 + 0.03), cabX1 = S.DOOR_W / 2 + 0.14;
-        [0.085, -0.085].forEach(cy => {
-          const cab = createCylinder(0.0022, 0.0022, cabX1 - cabX0, M.paint(0xb8bec6),
-            (cabX0 + cabX1) / 2, hdY + 0.02 + cy, mechZ, scene);
+        // 4. 릴레이팅 케이블: 좌 풀리 감김 → 상·하행 횡단 → 우 풀리에서 종단
+        const ropeMat = M.paint(0xb8bec6);
+        [ropeR, -ropeR].forEach(cy => {
+          const span = cabX1 - cabX0 - 0.02;
+          const cab = createCylinder(0.0022, 0.0022, span, ropeMat,
+            (cabX0 + cabX1) / 2, ropeY + cy, mechZ, scene);
           cab.rotation.z = Math.PI / 2;
         });
-        // 턴버클 (상행 중앙): 은색 로드 + 클램프 2 + U절곡 와이어
-        const tbY = hdY + 0.105;
+        // 좌 풀리 반원 감김(상·하 연결) + 우 풀리 종단 루프
+        [-1, 1].forEach(sgn => {
+          const wrap = createCylinder(0.0020, 0.0020, ropeR * 1.15, ropeMat,
+            cabX0 - ropeR * 0.55, ropeY, mechZ, scene);
+          wrap.rotation.z = Math.PI / 2;
+          wrap.rotation.y = sgn * 0.55;
+        });
+        createCylinder(0.0020, 0.0020, 0.07, ropeMat, cabX1 + 0.01, ropeY, mechZ, scene)
+          .rotation.z = Math.PI / 2;
+        // 턴버클 (상행 중앙)
+        const tbY = ropeY + ropeR;
         const tbRod = createCylinder(0.005, 0.005, 0.11, hdSil, 0.05, tbY, mechZ, scene);
         tbRod.rotation.z = Math.PI / 2;
         [-0.045, 0.045].forEach(tx => {
           createBox(0.022, 0.018, 0.016, hdDark, 0.05 + tx, tbY, mechZ, scene);
         });
-        // 우측단 케이블 앵커 브라켓
-        createBox(0.030, 0.11, 0.014, hdBlk, cabX1, hdY + 0.02, mechZ, scene);
+
+        // 4b. 도어추(웨이트) + 폐문 스프링 — 헤더 우측 하단 (자동 폐문력)
+        const wtGrp = new THREE.Group();
+        wtGrp.position.set(cabX1 - 0.02, fy + dh + 0.02, mechZ + 0.008);
+        createCylinder(0.003, 0.003, 0.18, ropeMat, 0, 0.10, 0, wtGrp); // 현수 로프
+        for (let si = 0; si < 5; si++) {
+          const sc = new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.0035, 6, 12), hdSteel);
+          sc.rotation.x = Math.PI / 2;
+          sc.position.set(0, 0.16 + si * 0.012, 0);
+          wtGrp.add(sc);
+        }
+        createBox(0.055, 0.09, 0.040, hdBlk, 0, 0, 0, wtGrp);       // 웨이트 블록
+        createBox(0.048, 0.012, 0.034, hdSteel, 0, -0.052, 0, wtGrp);
+        wtGrp.userData.baseY = wtGrp.position.y;
+        scene.add(wtGrp);
+        hatchDoors[i].doorWeight = wtGrp;
+
+        // 4c. 삼각키 비상해정 — 로비측 키홀·레버 (시각만, 애니메이션 최소)
+        const triKeyGrp = new THREE.Group();
+        triKeyGrp.position.set(-S.DOOR_W / 2 + 0.08, fy + dh + 0.18, jambZ + 0.028);
+        createBox(0.055, 0.070, 0.014, hdBlk, 0, 0, 0, triKeyGrp);
+        const keyHole = createCylinder(0.010, 0.010, 0.016, hdDark, 0, 0.008, 0.008, triKeyGrp);
+        keyHole.rotation.x = Math.PI / 2;
+        // 삼각 슬롯 표시
+        createBox(0.016, 0.004, 0.004, hdSil, 0, 0.008, 0.016, triKeyGrp);
+        createBox(0.004, 0.014, 0.004, hdSil, 0, 0.002, 0.016, triKeyGrp);
+        createBox(0.028, 0.006, 0.008, hdSteel, 0.022, -0.018, 0.006, triKeyGrp); // 연동 레버
+        scene.add(triKeyGrp);
+        hatchDoors[i].triKey = triKeyGrp;
 
         // ─── 승장 도어 행거 + 인터록 (각 패널 자식 — 개폐 연동) ───
         [hl, hr].forEach((door, idx) => {
           const hHgGrp = new THREE.Group();
           const railLy = dh / 2 + 0.085; // 도어 로컬 레일 중심 (railY - dy)
 
-          // 1. 흑색 행거판 (패널 상부 중앙 — 판 상단 위로 롤러 상반부 노출, 영상 t128.2)
+          // 1. 흑색 행거판 (패널 상부 중앙)
           createBox(0.40, 0.17, 0.014, hdBlk, 0, dh / 2 + 0.065, -0.080, hHgGrp);
           [[-0.16, 0.03], [-0.16, 0.115], [0.16, 0.03], [0.16, 0.115]].forEach(([bx, by]) => {
             const hb2 = createCylinder(0.010, 0.010, 0.010, M.ss(0xb8bec6), bx, dh / 2 + by, -0.068, hHgGrp);
             hb2.rotation.x = Math.PI / 2;
           });
 
-          // 2. 대형 행거 롤러 2 (레일 상면 주행 — 은륜 + 흑색 타이어)
+          // 2. 가이드 롤러 4곳 (레일 상·하) — 덮개판으로 대부분 가림 (실사처럼 조금만 노출)
           [-0.14, 0.14].forEach(rx => {
+            // 상면 주행 롤러 (소형)
             const rolG = new THREE.Group();
-            rolG.position.set(rx, railLy + 0.015 + 0.055, -0.066);
-            const rol = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.020, 18), M.ss(0x9aa2aa));
+            rolG.position.set(rx, railLy + 0.048, -0.066);
+            const rol = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.038, 0.016, 16), M.ss(0x9aa2aa));
             rol.rotation.x = Math.PI / 2;
             rolG.add(rol);
-            const tire = new THREE.Mesh(new THREE.TorusGeometry(0.052, 0.008, 8, 18), M.paint(0x14161a));
+            const tire = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.006, 8, 16), M.paint(0x14161a));
             rolG.add(tire);
             hHgGrp.add(rolG);
-            const axB = createCylinder(0.008, 0.008, 0.010, M.ss(0x5a6068), rx, railLy + 0.070, -0.050, hHgGrp);
-            axB.rotation.x = Math.PI / 2;
-          });
-
-          // 3. 편심 업스러스트 롤러 2 (레일 하면 — 이탈 방지, 편심 육각 볼트)
-          [-0.185, 0.185].forEach(rx => {
-            const uRol = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.016, 12), M.paint(0x14161a));
+            // 하면 업스러스트 소형 롤러
+            const uRol = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.014, 12), M.paint(0x14161a));
             uRol.rotation.x = Math.PI / 2;
-            uRol.position.set(rx, railLy - 0.033, -0.066);
+            uRol.position.set(rx, railLy - 0.030, -0.066);
             hHgGrp.add(uRol);
-            const ecc = createCylinder(0.007, 0.007, 0.010, hdSil, rx, railLy - 0.033, -0.052, hHgGrp);
-            ecc.rotation.x = Math.PI / 2;
+            // 가림 덮개 (승강로측) — 롤러 상·하 대부분 숨김, 하단/틈만 노출
+            createBox(0.095, 0.11, 0.010, hdBlk, rx, railLy + 0.010, -0.052, hHgGrp);
+            createBox(0.078, 0.022, 0.008, hdSteel, rx, railLy + 0.062, -0.048, hHgGrp); // 상단 슬롯 립
           });
 
           // 4. 릴레이팅 케이블 클램프 (행거판 상단 — 좌우 도어가 상·하행에 교차 체결)
           createBox(0.055, 0.030, 0.020, hdDark, idx === 0 ? 0.10 : -0.10,
-            (hdY + 0.02 + (idx === 0 ? 0.085 : -0.085)) - dy, -0.062, hHgGrp);
+            (ropeY + (idx === 0 ? ropeR : -ropeR)) - dy, -0.062, hHgGrp);
 
-          // 5. 도어 인터록 (우측 패널 hr) — 후크 록 레버 + 적층 롤러 + 스프링 리프 접점
-          //    (t125·t128.2·t135.4: 클러치 블레이드가 적층 롤러를 물고 레버를 젖혀 해정)
+          // 5. 도어 인터록 (우측 패널 hr) — 후크 록 + 적층 롤러 + 돼지발(이중) 보조접점
+          //    카 베인(클러치)이 적층 롤러를 물고 레버를 젖혀 해정
           if (idx === 1) {
-            const ilX = 0.02 - cx; // 닫힘 기준 월드 X≈+0.02 — 클러치 블레이드(±0.085) 사이
+            const ilX = 0.02 - cx; // 닫힘 기준 월드 X≈+0.02 — 클러치 블레이드 사이
 
-            // 인터록 베이스 브라켓 (흑색 판 — 헤더 판 바로 앞)
+            // 인터록 베이스 브라켓
             createBox(0.13, 0.17, 0.012, hdBlk, ilX + 0.035, dh / 2 + 0.10, -0.030, hHgGrp);
-            // 상단 고정 롤러 (레버 피벗 축 겸용 — 클러치 블레이드 맞물림 평면)
+            // 상단 고정 롤러 (적층 상단 — 클러치 맞물림)
             addBearingRoller(hHgGrp, ilX, dh / 2 + 0.115, -0.045, 0.030);
-            // 수직 조정 스터드 + 코일 스프링 (t125 중앙)
+            // 수직 조정 스터드 + 코일 스프링
             createCylinder(0.004, 0.004, 0.095, hdSil, ilX + 0.090, dh / 2 + 0.185, -0.040, hHgGrp);
             for (let si = 0; si < 4; si++) {
               const sc = new THREE.Mesh(new THREE.TorusGeometry(0.011, 0.0035, 6, 12), hdSteel);
@@ -1101,33 +1155,31 @@
               hHgGrp.add(sc);
             }
 
-            // ── 가동 록 레버: 하부 롤러 + 후크 암 + 접점 브리지 (피벗: 상단 롤러 축) ──
+            // ── 가동 록 레버: 하부 롤러 + 후크 암 + 접점 브리지 ──
             const hookGrp = new THREE.Group();
             hookGrp.position.set(ilX, dh / 2 + 0.115, -0.062);
-            // 레버 몸체
             createBox(0.052, 0.115, 0.012, hdDark, 0.014, -0.052, 0, hookGrp);
-            // 하부 롤러 (레버 스윙단 — 클러치 물림 짝)
+            // 하부 적층 롤러 (클러치 물림 짝)
             addBearingRoller(hookGrp, 0.012, -0.070, 0.017, 0.030);
             // 후크 암 → -x로 뻗어 키퍼 핀을 감쌈
             const hkArm = createBox(0.155, 0.026, 0.012, hdDark, -0.078, -0.036, 0, hookGrp);
             hkArm.rotation.z = 0.12;
-            createBox(0.026, 0.058, 0.012, hdDark, -0.150, -0.068, 0, hookGrp); // 후크 하강부
-            createBox(0.034, 0.018, 0.012, hdDark, -0.146, -0.094, 0, hookGrp); // 팁 상향 갈고리
-            // 스프링 리프 접점 브리지 (은색 경사판 + 육각 단자 볼트 2 — t135.4)
+            createBox(0.026, 0.058, 0.012, hdDark, -0.150, -0.068, 0, hookGrp);
+            createBox(0.034, 0.018, 0.012, hdDark, -0.146, -0.094, 0, hookGrp);
+            // 접점 브리지 (메인)
             const brg = createBox(0.080, 0.045, 0.010, hdSil, 0.022, 0.052, 0, hookGrp);
             brg.rotation.z = -0.15;
             [0, 0.036].forEach(bxx => {
               createCylinder(0.008, 0.008, 0.022, hdSil, 0.004 + bxx, 0.082, 0, hookGrp);
             });
             hHgGrp.add(hookGrp);
-            hatchDoors[i].hook = hookGrp; // ui.js: 개방 시 해정 회전(z −0.28) / 폐문 시 복귀
+            hatchDoors[i].hook = hookGrp;
           }
 
           door.add(hHgGrp);
         });
 
-        // ─── 인터록 고정부 (헤더측) — 키퍼 핀 + 스프링 리프 접점 하우징 ───
-        // 키퍼: 후크가 감아 거는 수평 핀 (도어 닫힘 시 후크 포켓 안쪽)
+        // ─── 인터록 고정부 (헤더측) — 키퍼 핀 + 돼지발(이중) 접점 + 보조접점 ───
         const keepGrp = new THREE.Group();
         keepGrp.position.set(-0.095, fy + dh + 0.085, FRONT_INNER_Z - 0.042);
         createBox(0.045, 0.095, 0.012, hdBlk, 0, 0.045, -0.004, keepGrp);
@@ -1135,17 +1187,28 @@
         keepPin.rotation.x = Math.PI / 2;
         scene.add(keepGrp);
 
-        // 접점 하우징: 록 레버 접점 브리지가 삽입되는 흑색 박스 + 은색 리프 단자
+        // 돼지발 이중 접점 하우징 (메인 2열 리프)
         const ilSwGrp = new THREE.Group();
         ilSwGrp.position.set(0.042, fy + dh + 0.225, FRONT_INNER_Z - 0.042);
-        const swBox = createBox(0.075, 0.055, 0.045, M.paint(0x1a1a1a), 0, 0, 0, ilSwGrp);
-        swBox.userData = { type: 'interlock' }; // 로직용 태그
-        [-0.016, 0.016].forEach(sx => {
-          const leaf = createBox(0.005, 0.045, 0.024, hdSil, sx, -0.045, 0, ilSwGrp);
-          leaf.rotation.z = sx > 0 ? -0.10 : 0.10; // 스프링 리프 벌어짐
+        const swBox = createBox(0.090, 0.055, 0.048, M.paint(0x1a1a1a), 0, 0, 0, ilSwGrp);
+        swBox.userData = { type: 'interlock' };
+        // 이중 리프(돼지발) — 좌·우 쌍
+        [-0.022, 0.022].forEach(sx => {
+          [-0.012, 0.012].forEach(sz => {
+            const leaf = createBox(0.005, 0.048, 0.014, hdSil, sx, -0.048, sz, ilSwGrp);
+            leaf.rotation.z = sx > 0 ? -0.10 : 0.10;
+            leaf.userData = { type: 'interlockLeaf' };
+          });
         });
-        createBox(0.045, 0.012, 0.030, hdSteel, 0, 0.033, 0, ilSwGrp); // 단자 커버
+        createBox(0.055, 0.012, 0.036, hdSteel, 0, 0.033, 0, ilSwGrp);
+        // 보조접점 박스 (옆)
+        const auxBox = createBox(0.040, 0.038, 0.032, M.paint(0x22272d), 0.070, -0.010, 0, ilSwGrp);
+        auxBox.userData = { type: 'interlockAux' };
+        [-0.008, 0.008].forEach(sx => {
+          createBox(0.004, 0.028, 0.012, hdSil, 0.070 + sx, -0.040, 0, ilSwGrp);
+        });
         scene.add(ilSwGrp);
+        hatchDoors[i].ilSwitch = ilSwGrp;
 
         // Hall Sill + Support: 층별 문턱
         // 승장 문턱은 승장문 바로 앞(로비측)에 위치 — 카 문턱과 SILL_GAP 이격 (관통 방지)
@@ -1366,9 +1429,12 @@
 
     function govHandles() { return (mrGrp && mrGrp.userData && mrGrp.userData.governor) || null; }
 
-    /* 과속 트립 (CAD 시퀀스)
-       ① 진자 원심 개방 → ② 스위치 레버 제낌 → ③ 휠 관성 감속
-       ④ 상단암 하향(훅→라체트 걸림) + 스프링 압축 → ⑤ 라체트·휠 동반 견인 후 정지 */
+    /* 과속 트립 — 2단계 (16:10 육성 지시: "떡판이 로프를 홈에 눌러 잡아준다")
+       ① 진자 원심 개방과 휠 관성 주행을 시작
+       ② 낙하: 쇄기 물림 + 캐치 암(+CCW) + 스위치 플런저 타격 = 같은 시각
+       ③ 파지: 물린 발톱을 휠이 끌고 가며 레버를 반대(-CW)로 돌린다 →
+              레버 우단에서 내려온 떡판(캐치슈)이 로프를 시브 홈에 눌러 잡는다.
+              이때 휠·라체트가 함께 끌리다 멈춘다 = 로프 정지. */
     function governorTrip(spinDir, onLocked) {
       const gov = govHandles(); if (!gov || governorPhase !== 'rest') return null;
       governorPhase = 'tripping';
@@ -1377,7 +1443,6 @@
       const arm = gov.topArm || gov.catcherArm;
       const W = wheel.rotation.z;
       const coast = Math.PI * 2 * 1.15;
-      // 톱니 정렬 — 관성 주행 후 toothStep 격자 스냅
       let rem = (-(W + spinDir * coast)) % g.toothStep;
       if (spinDir > 0 && rem < 0) rem += g.toothStep;
       if (spinDir < 0 && rem > 0) rem -= g.toothStep;
@@ -1385,27 +1450,39 @@
       const drag = spinDir * Math.abs(pose.ratchet);
       const armTrip = g.armRot0 + pose.topArm;
       const sprTrip = pose.spring;
+      const plungerHit = (g.plungerX0 || 0) + Math.abs(pose.switchLever || 0.010);
 
       const tl = gsap.timeline();
-      tl.to(gov.pendulums[0].rotation, { z: g.pendRot0[0] + pose.pendulum, duration: 0.35, ease: 'power2.out' }, 0);
-      tl.to(gov.pendulums[1].rotation, { z: g.pendRot0[1] + pose.pendulum, duration: 0.35, ease: 'power2.out' }, 0);
-      tl.to(gov.switchLever.rotation,
-        { z: -spinDir * Math.abs(pose.switchLever), duration: 0.12, ease: 'back.out(2.5)' }, 0.28);
-      tl.to(wheel.rotation, { z: Wstop, duration: 0.60, ease: 'power2.out' }, 0);
-      // 훅 걸림 — 제동자 진입 + 상단암 하향 + 스프링 압축
-      tl.to(gov.pawl.rotation, { z: g.pawlRot0 + (pose.pawl || 0), duration: 0.14, ease: 'power4.in' }, 0.46);
-      tl.to(arm.rotation, { z: armTrip, duration: 0.18, ease: 'power4.in' }, 0.48);
-      if (gov.spring) tl.to(gov.spring.scale, { y: sprTrip, duration: 0.18, ease: 'power2.in' }, 0.48);
-      tl.add(() => { if (onLocked) onLocked(); }, 0.58);
-      // 걸린 채 짧게 끌림
+      // 진자 개방 — 물림 시각에 맞춰 끝남
+      const lockT = 0.38;
+      tl.to(gov.pendulums[0].rotation, { z: g.pendRot0[0] + pose.pendulum, duration: lockT, ease: 'power2.out' }, 0);
+      tl.to(gov.pendulums[1].rotation, { z: g.pendRot0[1] + pose.pendulum, duration: lockT, ease: 'power2.out' }, 0);
+      tl.to(wheel.rotation, { z: Wstop, duration: 0.55, ease: 'power2.out' }, 0);
+      // ★동시 물림: 쇄기(캐치 일체)·암·스프링·스위치
+      tl.to(gov.pawl.rotation, { z: g.pawlRot0 + (pose.pawl || 0), duration: 0.14, ease: 'power4.in' }, lockT);
+      tl.to(arm.rotation, { z: armTrip, duration: 0.14, ease: 'power4.in' }, lockT);
+      if (gov.spring) tl.to(gov.spring.scale, { y: sprTrip, duration: 0.14, ease: 'power2.in' }, lockT);
+      if (gov.switchLever) tl.to(gov.switchLever.position, { x: plungerHit, duration: 0.14, ease: 'back.out(2.0)' }, lockT);
+      // ③ 파지 — 휠이 물린 발톱을 끌고 가며 레버를 반대로 돌린다 → 떡판이 로프를 문다
+      //    ★gripT 를 물림 완료(lockT+0.14) 뒤로 충분히 떼어 놓아야 스위치 타격이 보인다.
+      //      붙여 놓으면 플런저가 눌리자마자 되돌아가 한 프레임도 안 남는다.
+      const grip = gov.pose.grip;
       const rat0 = gov.ratchet.rotation.z;
-      tl.to(gov.ratchet.rotation, { z: rat0 + drag, duration: 0.40, ease: 'power3.out' }, 0.58);
-      tl.to(wheel.rotation, { z: Wstop + drag, duration: 0.40, ease: 'power3.out' }, 0.58);
+      const gripT = lockT + 0.24;
+      tl.add(() => { if (onLocked) onLocked(); }, gripT + 0.10);  // 로프 파지 → 카 급정지
+      tl.to(gov.ratchet.rotation, { z: rat0 + drag, duration: 0.40, ease: 'power3.out' }, gripT);
+      tl.to(wheel.rotation, { z: Wstop + drag, duration: 0.40, ease: 'power3.out' }, gripT);
+      if (grip) {
+        tl.to(arm.rotation, { z: g.armRot0 + grip.topArm, duration: 0.40, ease: 'power3.out' }, gripT);
+        if (gov.spring) tl.to(gov.spring.scale, { y: grip.spring, duration: 0.40, ease: 'power2.out' }, gripT);
+        if (gov.switchLever) tl.to(gov.switchLever.position,
+          { x: (g.plungerX0 || 0) + grip.switchLever, duration: 0.40, ease: 'power2.out' }, gripT);
+      }
       tl.add(() => { governorPhase = 'tripped'; });
       return tl;
     }
 
-    /* 복귀: 암·스프링 대기각 → 라체트·휠 역회전 → 진자 복귀 → 스위치 솔레노이드 복귀 */
+    /* 복귀: 암·스프링 대기각 → 라체트·휠 역회전 → 진자 복귀 → 스위치 플런저 복귀 */
     function governorReset(onDone) {
       const gov = govHandles(); if (!gov || governorPhase !== 'tripped') return null;
       governorPhase = 'resetting';
@@ -1414,10 +1491,12 @@
       const ratRot = gov.ratchet.rotation.z;
       const w1 = wheel.rotation.z - ratRot;
       const w2 = w1 - govSpinDir * 0.55;
+      const plunger0 = (gov.geom && gov.geom.plungerX0 != null) ? gov.geom.plungerX0 : 0;
 
       const tl = gsap.timeline();
       tl.to(arm.rotation, { z: gov.geom.armRot0, duration: 0.55, ease: 'power2.inOut' }, 0);
       if (gov.spring) tl.to(gov.spring.scale, { y: gov.geom.sprScale0 || 1, duration: 0.55, ease: 'power2.inOut' }, 0);
+      if (gov.switchLever) tl.to(gov.switchLever.position, { x: plunger0, duration: 0.35, ease: 'power2.inOut' }, 0.05);
       tl.to(gov.pawl.rotation, { z: gov.geom.pawlRot0, duration: 0.50, ease: 'power2.inOut' }, 0.15);
       tl.to(gov.ratchet.rotation, { z: 0, duration: 0.55, ease: 'power2.inOut' }, 0);
       tl.to(wheel.rotation, { z: w1, duration: 0.55, ease: 'power2.inOut' }, 0);
@@ -1435,11 +1514,6 @@
       }
       tl.eventCallback("onUpdate", () => { refreshGovernorRope(); });
 
-      tl.to(gov.resetPin.position, { x: '+=0.018', duration: 0.22, ease: 'power3.out' }, 1.35);
-      tl.to(gov.resetBracket.position, { x: '+=0.018', duration: 0.22, ease: 'power3.out' }, 1.37);
-      tl.to(gov.switchLever.rotation, { z: 0, duration: 0.28, ease: 'power2.inOut' }, 1.45);
-      tl.to(gov.resetPin.position, { x: '-=0.018', duration: 0.28, ease: 'power2.in' }, 1.80);
-      tl.to(gov.resetBracket.position, { x: '-=0.018', duration: 0.28, ease: 'power2.in' }, 1.80);
       tl.add(() => { governorPhase = 'rest'; if (onDone) onDone(); });
       return tl;
     }

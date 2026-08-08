@@ -1,237 +1,163 @@
-# Blender → Three.js 실사 부품 워크플로
+# Blender → GLB → Three.js 작업 절차
 
-> **작성일:** 2026-07-26  
-> **대상:** Claude Code · Google Antigravity · Cursor (Grok 4.5) 공통 참조  
-> **목적:** 승강기 부품을 Blender로 실사 모델링 → `.glb` 내보내기 → Three.js에서 기존 물리·애니메이션은 유지한 채 외형만 교체
+이 문서는 Blender 부품 제작과 앱 연결에 필요한 절차만 설명한다.
+AI 공통 규칙과 `PLAN.md` 운영 방식은 루트 `AGENTS.md`를 따른다.
 
----
+## 현재 환경과 경로
 
-## 1. 왜 Blender인가
+- Blender: 5.2 LTS.
+- 모델링 스크립트: `blender/scripts/*.py`.
+- 앱이 로드하는 신규 GLB 표준 경로: `models/gltf/*.glb`.
+- 조속기 형상 원본: `blender/scripts/overspeed_governor.py`.
+- 조속기 최종 모델: `models/gltf/overspeed_governor.glb`.
+- 조속기 렌더 검증: `blender/scripts/render_governor.py`.
+- 세이프티기어는 예외적으로 기존 경로 `assets/safety_gear.glb`를 사용한다.
 
-| 구분 | 설명 |
-|------|------|
-| **Blender** | 무료 3D 제작 프로그램 (현재 PC에 설치됨, 예: 3.2 LTS) |
-| **스크립트 언어** | **Python** (`bpy` API) — 모델링·내보내기를 코드로 자동화 가능 |
-| **목표 포맷** | **`.glb`** (glTF 2.0 바이너리, 단일 파일) |
-| **Three.js** | 이미 `GLTFLoader` 사용 중 (`index.html` → Three.js r128) |
+앱이 읽는 최종 형식은 glTF Binary 단일 파일인 `.glb`다.
+현재 프로젝트는 `.blend` 파일을 필수 원본으로 사용하지 않고 Python `bpy` 스크립트를 형상 원본으로 사용한다.
 
-### 파일 포맷 (이름 정리)
+## 표준 작업 순서
 
-| 확장자 | 의미 | 이 프로젝트에서 |
-|--------|------|-----------------|
-| **`.blend`** | Blender 작업용 원본 파일 | `blender/` 아래에 보관 (편집용) |
-| **`.glb`** | glTF **바이너리** (메시+텍스처 한 파일) | **내보내기·로드 표준** ✅ |
-| **`.gltf`** | glTF **JSON** (+ `.bin`/이미지 여러 파일) | 가능하나 관리가 번거로워 **비권장** |
-
-> 앱에서 읽는 건 **`.glb`** 이다. (기존 예: `assets/safety_gear.glb`)
-
----
-
-## 2. 도구 역할 분담 (Blender 작업 전용)
-
-| 도구 | 잘하는 것 | Blender 작업 시 규칙 |
-|------|-----------|----------------------|
-| **Claude Code** | 이미지·스크린샷·PDF·로컬 영상 직접 분석 + **Python(`bpy`) 스크립트 작성** | 부품 사진/캡처를 보고 **Blender용 Python 코드를 직접 작성·수정**해도 됨 |
-| **Google Antigravity (`agy`)** | YouTube·메커니즘 **영상 분석** | 코딩은 약함 → **반드시 `PLAN.md` 작성** → Cursor가 코딩 |
-| **Cursor (Grok 4.5)** | Three.js 연동·좌표·`GLTFLoader`·물리 유지 | `PLAN.md`가 있으면 **계획서만** 구현. 일반 요청은 바로 코딩 |
-
-### Antigravity 고정 규칙 (중요)
-
-Antigravity로 Blender/부품 영상·메커니즘을 분석할 때는:
-
-```
-Plan 모드로 분석해줘. 코드는 수정하지 말고.
-분석 결과를 PLAN.md 파일로 저장해줘.
-파일명, 함수명, 줄번호를 알면 명시하고, 모르면 추정 근거를 적어줘.
-Blender Python(bpy) / .glb 내보내기 / Three.js GLTFLoader 연동 단계를 포함할 것.
+```text
+실사·도면·표시된 스크린샷 분석
+  → Python 상수와 build_*() 수정
+  → Blender 헤드리스 실행
+  → models/gltf/*.glb 내보내기
+  → 필요하면 헤드리스 렌더 확인
+  → Live Server 하드 리프레시
+  → Three.js 위치·피벗·애니메이션 확인
 ```
 
-→ Cursor에서: `"PLAN.md 보고 코드 작성해줘. 계획서에 없는 내용은 추가하지 마."`
+### 1. 형상 원본 수정
 
-### Claude Code 사용 예
+- 부품 치수, 위치, 각도는 Python 상단 상수 블록에 모은다.
+- 기하 함수 안에 같은 수치를 반복해서 넣지 않는다.
+- 가동 부품은 개별 GLB 노드로 내보내고 원점을 실제 회전·이동 피벗에 둔다.
+- 실사와 시뮬 화면의 관찰 방향이 반대일 수 있으므로 전면·후면·좌우를 먼저 확인한다.
+- 사용자가 표시한 색, 원, 선은 수정 대상과 목표 실루엣을 구분하는 근거로 사용한다.
 
-```
-이 부품 사진(또는 영상 프레임)을 보고
-Blender Python(bpy)으로 모델링하는 스크립트를 작성해줘.
-최종 출력은 .glb로 내보내게 해줘.
-```
+### 2. 좌표 변환
 
----
+Three.js 프로젝트 좌표는 Y-up이고 Blender는 Z-up이다.
+조속기 스크립트는 다음 변환 함수를 사용한다.
 
-## 3. 표준 워크플로 (6단계)
-
-```
-① Blender 설치·실행
-   → 부품별로 모델링 (예: 과속조절기, 로프브레이크, 안전기 …)
-        ↓
-② File → Export → glTF 2.0 (.glb)
-   → Format: glTF Binary (.glb)
-        ↓
-③ 내보낸 .glb 를 프로젝트에 복사
-   → models/gltf/<부품이름>.glb
-        ↓
-④ Three.js에서 로드
-   → new THREE.GLTFLoader().load('models/gltf/<부품이름>.glb', ...)
-        ↓
-⑤ 기존 물리·애니메이션 로직은 그대로 유지
-   → position / rotation / FSM / 센서 / GSAP 등 동작 코드는 수정 최소화
-   → 교체 대상은 “외형 메시”만
-        ↓
-⑥ 완성 = 실사 외형 + 기존 물리 움직임
+```python
+def T(x, y, z):
+    return (x, -z, y)
 ```
 
-### 단계별 상세
+즉, Three.js `(x, y, z)`를 Blender `(x, -z, y)`로 옮긴다.
+수동으로 축을 다시 바꾸거나 로더에서 중복 회전시키지 않는다.
 
-#### ① Blender에서 모델링
+### 3. GLB 내보내기
 
-- 부품 **1개 = 1개 `.blend` + 1개 `.glb`** 를 권장 (관리 쉬움)
-- 스케일: 프로젝트 `const S` (`js/config.js`) 치수와 맞출 것. **`S` 값은 임의 변경 금지** (AGENTS.md)
-- 원점·축: 프로젝트 좌표와 맞춤  
-  - X: 좌(-) / 우(+)  
-  - Y: 아래 / 위(+)  
-  - Z: 전면(+) / 후면(-)  
-  ※ Blender 기본 축(Z-up)과 Three.js(Y-up)가 다를 수 있음 → 내보내기 옵션 또는 로드 시 `rotation`으로 보정
+프로젝트 루트의 PowerShell에서 실행한다.
 
-#### ② `.glb` 내보내기 (Blender)
-
-1. `File` → `Export` → `glTF 2.0 (.glb/.gltf)`
-2. **Format:** `glTF Binary (.glb)`
-3. 필요한 경우: Selected Objects only / Apply Modifiers / Include materials
-4. 저장 위치 예: `blender/export/과속조절기.glb` (임시) 후 ③으로 복사
-
-#### ③ 프로젝트 폴더에 배치
-
-| 경로 | 용도 |
-|------|------|
-| **`models/gltf/`** | **앞으로 실사 `.glb` 표준 보관 위치** ✅ |
-| `assets/` | 기존 파일 (예: `safety_gear.glb`) — 이미 쓰는 에셋은 유지 가능 |
-| `blender/` | `.blend` 원본, 참고 이미지, Python 스크립트 (작업용) |
-
-파일명 예:
-
-```
-models/gltf/overspeed_governor.glb   # 과속조절기
-models/gltf/rope_brake.glb           # 로프브레이크
-models/gltf/safety_gear.glb          # 안전기 (신규 실사본)
+```powershell
+& 'C:\Program Files\Blender Foundation\Blender 5.2\blender.exe' `
+  -b -P blender\scripts\overspeed_governor.py
 ```
 
-영문 파일명 권장 (경로·로더 호환).
+성공 조건:
 
-#### ④ Three.js 로드 예시
+- Blender 프로세스가 종료 코드 0으로 끝난다.
+- `models/gltf/overspeed_governor.glb`가 갱신된다.
+- 출력 오브젝트 목록에 필요한 가동 노드가 포함된다.
 
-이미 `index.html`에 `GLTFLoader`가 로드되어 있다.
+### 4. 헤드리스 렌더 확인
 
-```js
-new THREE.GLTFLoader().load('models/gltf/overspeed_governor.glb', (gltf) => {
-  const part = gltf.scene;
-  // 스케일·위치·회전만 조정 (물리 로직은 기존 Group에 붙이기)
-  part.scale.set(1, 1, 1);
-  existingGroup.add(part);
-}, undefined, (err) => console.error('[glb] 로드 실패:', err));
+형상·간극을 브라우저보다 먼저 확인해야 할 때 실행한다.
+
+```powershell
+& 'C:\Program Files\Blender Foundation\Blender 5.2\blender.exe' `
+  -b -P blender\scripts\render_governor.py
 ```
 
-기존 참고 구현: `js/elevator.js` 의 `assets/safety_gear.glb` 로드 블록.
+루트에 생성되는 `.shot-gov-blender-*.png`는 로컬 검증용이며 Git에 올리지 않는다.
+정면만 보지 말고 사선, 측면, 상단에서 겹침과 피벗을 확인한다.
 
-#### ⑤ 물리·애니메이션 유지 원칙
+### 5. Three.js 연결
 
-- **유지:** `elevatorState`, FSM(`IDLE`/`MOVING`/…), GSAP, 센서 `userData`, 카·균형추 이동
-- **교체:** `createBox`/`createCylinder`로 만든 **단순 메시 외형** → `.glb` 장면으로 대체
-- **금지:** 요청 없이 `const S` 변경, Three.js 버전 변경, 관련 없는 리팩터
+조속기는 `js/environment.js`의 `buildMachineRoom()`에서 로드한다.
 
-#### ⑥ 확인
-
-1. Live Server → `index.html`
-2. 부품 위치·스케일·회전 확인
-3. 운행·도어·센서 동작이 이전과 같은지 확인
-4. 필요 시 Cursor에서 `position` / `rotation` / `scale`만 미세 조정
-
----
-
-## 4. 폴더 구조 (권장)
-
-```
-simmul/
-├── blender/                    ← Blender 작업·이 문서
-│   ├── BLENDER-WORKFLOW.md     ← 본 문서 (Claude / Antigravity / Cursor 공통)
-│   ├── scripts/                ← bpy Python 스크립트 (있으면)
-│   ├── source/                 ← .blend 원본 (있으면)
-│   └── refs/                   ← 참고 사진·캡처 (있으면)
-├── models/
-│   └── gltf/                   ← 내보낸 .glb 최종본 (Three.js 로드)
-├── assets/                     ← 기존 .glb 등 (하위 호환)
-├── js/
-│   ├── elevator.js
-│   ├── environment.js
-│   └── ...
-└── AGENTS.md
+```text
+overspeed_governor.glb
+  → GLTFLoader
+  → 이름으로 노드 검색
+  → 빈 THREE.Group 래퍼에 mount()
+  → mrGrp.userData.governor에 참조 저장
 ```
 
----
+빈 래퍼 그룹은 애니메이션 피벗이다.
+GLB 노드 이름, 원점 또는 래퍼 계층을 바꾸면 `js/elevator.js`의 동작이 깨질 수 있다.
 
-## 5. Claude Code / Antigravity / Cursor 호출 문장 (복사용)
+### 6. Live Server 검증
 
-### Claude Code — 이미지·도면 → Blender Python
+브라우저에서 하드 리프레시한 뒤 다음을 확인한다.
 
+1. 모델이 로드되고 콘솔에 GLB 오류가 없는가.
+2. 위치·회전·크기가 기계실 프레임과 맞는가.
+3. 가동 부품 원점이 실제 피벗과 맞는가.
+4. 대기 상태에서 부품끼리 미리 닿거나 관통하지 않는가.
+5. 과속 트립과 복귀 시 움직임 방향·간극이 맞는가.
+6. 조속기 로프와 휠 홈의 정렬이 유지되는가.
+
+## 조속기 노드 계약
+
+현재 GLB의 주요 노드는 다음과 같다.
+
+| 노드 | 역할 | Three.js 동작 |
+|---|---|---|
+| `Pulley` | 노란 조속기 휠 | 회전 |
+| `PendA`, `PendB` | 원심 진자 | 트립 시 개방 |
+| `Catch` | 캐치 레버·슈 | 낙하·파지 회전 |
+| `Spring` | 복귀 스프링 | 캐치 동작 연동 |
+| `Plunger` | 과속스위치 액추에이터 | 눌림·복귀 |
+| `BaseFrame` | 베이스와 고정 형상 | 정적 |
+| `Cover` | 반투명 보호 덮개 | 정적 |
+
+노드 이름은 `js/environment.js`의 `mount()` 검색 키와 연결된다.
+삭제하거나 바꾸려면 Python, GLB, `environment.js`, `elevator.js` 계약을 함께 수정해야 한다.
+
+## 조속기 동작 데이터
+
+```text
+overspeed_governor.py
+  → 노드 형상·피벗
+environment.js
+  → 래퍼 그룹·pose·geom·userData.governor
+elevator.js
+  → governorTrip() / governorReset()
+ui.js
+  → 과속 시나리오와 카메라 연출
 ```
-이 부품 이미지(또는 PDF 캡처)를 분석해서
-Blender Python(bpy) 스크립트로 모델링해줘.
-축·스케일은 프로젝트 AGENTS.md / const S 기준으로 맞추고,
-최종로 .glb 내보내기까지 스크립트에 포함해줘.
-코드는 blender/scripts/ 아래에 저장해줘.
-```
 
-### Antigravity — 영상 → PLAN.md (코딩은 Cursor)
+특히 다음 값은 양쪽 동기 여부를 확인한다.
 
-```
-이 동영상(또는 YouTube)의 승강기 부품 메커니즘을 분석해줘. 코드는 수정하지 말고.
-분석 결과를 PLAN.md 파일로 저장해줘.
-Blender 모델링 포인트 / .glb 내보내기 / Three.js GLTFLoader 연동 /
-기존 물리 유지 범위를 파일명·함수명·줄번호와 함께 적어줘.
-```
+- Python과 JavaScript의 `LEV_TILT`.
+- 스프링 축과 `SPRING_TILT`.
+- 휠 중심과 로프 홈 반경.
+- `Plunger` 이동축과 `pose.switchLever`.
+- `Catch` 대기·트립·파지 pose.
 
-### Cursor — PLAN.md 구현 또는 직접 연동
+같은 숫자를 두 파일에서 각각 임의로 바꾸지 말고 가능한 한 한쪽 값에서 파생한다.
 
-```
-PLAN.md 보고 코드 작성해줘.
-계획서에 없는 내용은 추가하지 마.
-.glb는 models/gltf/ 경로로 로드하고, 기존 물리·애니메이션은 유지해.
-```
+## 형상 수정 체크리스트
 
-```
-models/gltf/에 있는 .glb를 Three.js에 연결해줘.
-기존 createBox 외형만 교체하고 움직임 로직은 건드리지 마.
-```
+- [ ] 실사 관찰 방향과 시뮬 카메라 방향을 구분했다.
+- [ ] 수정 대상 외 부품을 건드리지 않았다.
+- [ ] 치수·각도를 상수 블록에 두었다.
+- [ ] 가동 노드 이름과 피벗을 유지했다.
+- [ ] GLB를 다시 내보냈다.
+- [ ] 정면·사선 렌더에서 겹침을 확인했다.
+- [ ] Live Server에서 하드 리프레시했다.
+- [ ] 대기·트립·복귀 상태를 확인했다.
+- [ ] JS/Python 공유 값이 어긋나지 않았다.
 
----
+## 금지 사항
 
-## 6. 체크리스트 (부품 1개 완성 시)
-
-- [ ] Blender에서 부품 모델링 완료
-- [ ] `.glb` (Binary)로 내보내기 완료
-- [ ] `models/gltf/<name>.glb` 에 복사
-- [ ] `GLTFLoader().load('models/gltf/<name>.glb', …)` 연결
-- [ ] Live Server에서 위치·스케일·회전 OK
-- [ ] 운행·도어·센서 등 **기존 동작** 이상 없음
-- [ ] (선택) `.blend` 원본을 `blender/source/` 에 보관
-
----
-
-## 7. 기존 프로젝트와의 관계
-
-| 항목 | 현재 상태 |
-|------|-----------|
-| Loader | `THREE.GLTFLoader` (`index.html`) |
-| 기존 예시 | `assets/safety_gear.glb` ← `js/elevator.js` |
-| 신규 표준 경로 | **`models/gltf/*.glb`** |
-| 기하 헬퍼 | `createBox()` / `createCylinder()` — 실사 교체 전까지 병행 가능 |
-
-실사 `.glb`가 준비된 부품부터 하나씩 `createBox` 메시를 대체하면 된다.
-
----
-
-## 8. 주의사항
-
-- Blender·`.blend`·대용량 텍스처는 GitHub에 올릴지 팀 규칙을 따를 것 (용량 큼). **앱 실행에 필요한 건 `.glb`만**이면 된다.
-- `PLAN.md`는 `.gitignore` 대상 — 작업 후 삭제 또는 덮어쓰기 (AGENTS.md).
-- `const S` 임의 변경 금지.
-- renderLoop 안에서 Geometry·Mesh·Material **생성 금지** (로드는 초기화 시 1회).
+- GLB만 직접 편집하고 Python 형상 원본을 갱신하지 않는다.
+- `const S`를 Blender 형상에 맞추기 위해 임의 변경하지 않는다.
+- 요청 없이 Three.js, GLTFLoader, GSAP 또는 Blender 버전을 바꾸지 않는다.
+- 가동 노드를 하나의 정적 메시로 합치지 않는다.
+- 렌더가 예뻐 보인다는 이유로 실제 충돌 간극이나 로프 경로를 무시하지 않는다.

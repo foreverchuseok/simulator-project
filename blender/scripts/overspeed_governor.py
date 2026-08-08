@@ -1,59 +1,85 @@
 # -*- coding: utf-8 -*-
 # =============================================================================
-#  승강기 과속조절기 (Overspeed Governor) — Blender Python(bpy) 실사 모델링 v2.1
+#  승강기 과속조절기 (Overspeed Governor) — Blender bpy 실사 모델링 v3.4
 # -----------------------------------------------------------------------------
-#  참조: device_china.mp4 0~40초 (森赫电梯 限速器 3D 애니메이션 프레임 분석)
-#  사용법: Blender > Scripting 탭 > New > 전체 붙여넣기 > ▶ Run Script
-#  결과  : 6개 개별 오브젝트 + models/gltf/overspeed_governor.glb 내보내기
+#  [v3.4 · 2026-08-01 16:10 육성 지시 — "레버·떡판·스프링이 한 직선(일자)"]
+#   화면녹화 161010.mp4 + device_china.mp4 29초 CG 정지컷 대조. 지시 3가지:
+#   ① "스프링을 눕혀라" — 레버는 수평인데 스프링만 52° 치솟아 있어 "말이 안 된다".
+#      → LEV_TILT(17°) 로 레버를 눕히고 SPR_TILT = 90°-LEV_TILT 로 스프링이
+#        레버 축선을 그대로 이어받게 했다. 둘이 한 직선이 된다.
+#   ② "떡판(캐치슈)이 없다" — v3.3 이 "CAD에 없다"며 지운 그 부품이다.
+#      실제로는 레버 우단에서 시브 오른쪽을 따라 내려오는 한 덩어리 레그이고,
+#      그 끝(슈)이 로프를 홈에 눌러 잡아 로프를 멈춘다. → build_catch 에 복원.
+#   ③ "스위치 치는 좌측 팔이 엄청 길다" — 좌단을 -0.118 → LEV_L(-0.105),
+#      스위치 바로 위에서 끝낸다. 레버가 눕은 만큼 스위치도 같이 내려온다.
 #
-#  v2 변경(실사화):
-#   - 도르래: 노란 림 밴드 + 네이비 곡선 스포크 6개(사이가 뚫림) + 로프 홈
-#   - 레버암: 영상 윤곽 그대로 2D 폴리곤 압출(후크 노치·확폭 헤드) + 피벗 핀
-#   - 캠: 뾰족 캠 플레이트 2매 + 흰 롤러 + 다크 원형추 (반투명 커버 너머 보임)
-#   - 커버: 좌상단 불투명 파란 오각판(스위치 커버) + 하부 반투명 파란 박스(α0.34)
-#   - 중앙: 회색 마운트판 + 수직 육각볼트 2개(블랙 코어) + 소형 나사
-#   - 로프: 3-스트랜드 꼬임 헬릭스 × 좌우 2줄 + 홈 위 로프 링
+#   ★트립은 2단계다 (elevator.js governorTrip):
+#     1단계 낙하  arm +0.12 → 좌단이 내려가 플런저를 치고 발톱이 캠 이빨에 물림
+#     2단계 파지  arm -0.05 → 물린 발톱을 휠이 끌고 가며 레버를 반대로 돌려
+#                 우측 떡판이 로프를 홈에 눌러 파지 → 로프·휠 정지
+#     그래서 떡판은 피벗 아래·우측(dx>0, dy<0)에 있어야 CW 회전에서 안으로 물린다.
+# -----------------------------------------------------------------------------
+#  [v3.3 · 2026-08-01 — CAD 렌더 비교 기반 전면 비율 재작업]
+#   render_governor.py 로 Blender 헤드리스 렌더 → CAD 캡처와 눈 비교 후 수정.
+#   · 베이스 축소: 폭 0.48→0.34 (CAD: 베이스 ≈ 휠 지름 ×1.4, 휠이 화면 주인공)
+#   · 유리 커버: 전면 대형 판 → 휠 하반부만 감싸는 낮은 U가드 (0.27×0.10)
+#   · 휠 림: 플랜지·전면 밴드 전부 노랑 = 한 덩어리 굵은 노란 테두리 (동심원 3개 금지)
+#   · 캐치: 얇은 일자 가로암 + 좌단 ㄱ자 훅. 우측 하강 레그·슈 제거 (CAD에 없음)
+#     ↑ ★이게 오독이었다. 사용자가 15:25 에 말한 "일자 링크"는 레버·슈·스프링이
+#       한 직선이라는 뜻이었는데 슈를 지워 버렸다 → v3.4 에서 떡판으로 복원.
+#   · SPR_TILT 0.66 으로 통일 (이전 1.03 은 env SPRING_TILT -0.66 과 불일치 — 앵커 어긋남)
+#   · 우측 지주를 베이스 우단(x 0.145) 위로 내리고 앵커 팔로 스프링 축선 연결
+#   · 스위치 커버(일체형)는 휠 좌측 (SW_X, SW_Y), 플런저가 상단에서 위로 —
+#     트립 시 캐치 좌단(y≈0.255)이 하강하며 플런저 팁(0.253)을 누른다.
+#   · 과속스위치 본체 = 금색(아연도금) 금속 박스 + SW_TILT(15°) 기울임.
+#     ↑ ★파란색 오독 수정: 실사에서 길게 올라온 파란 것은 조속기 보호덮개와
+#       스위치를 무는 브래킷이지 스위치 본체가 아니다. 파란(반투명 MAT_GLASS)은
+#       Cover / swShell 쪽에만 두고, 본체 박스는 MAT_GOLD 로 칠한다.
+# -----------------------------------------------------------------------------
+#  참조 = 사용자 지정 스크린샷 「스크린샷 2026-07-21 003217.png」
+#         (= device_china.mp4 30초 부근 CG 정지컷) + 육성 지시 4편.
 #
-#  v2.1 (라체트·쐐기 실사 보정):
-#   - 라체트: 바늘형 지그재그 → 뭉툭한 플랫 tip + 급경사 걸림면 + 완만 등면 (한방향/다운만)
-#   - 레버 후크: tip 뭉툭화 (실사 폴 이빨 — 양방향 조속기 아님)
-#   - bevel 강화로 주물감
+#  [육성 지시 반영]
+#   11:24 · 캐치 좌단이 "너무 길다" → 좌단을 x -0.095 에서 끝냄.
+#         · 과속스위치는 롤러 브래킷 없이 좌단이 플런저를 직접 툭 침.
+#           (당시 "수직(90°)" 지시는 이후 실사 대조로 철회 — SW_TILT 로 눕힌다)
+#   11:41 · 진자 개방 → 캐치 낙하 → 날 물림 → 로프 파지 → 카 안전기.
+#   13:06 · "뒤판 없애라", "동그란 장식 없애라", "이 디자인 그대로".
+#   15:25 · 캐치 레버·슈·스프링은 일자 링크 / 스위치·파란커버는 하나로 합쳐 축소
+#         · 진자·쇄기·스위치 타격은 동시 (elevator.js governorTrip).
 #
-#  v2.2 (실물 사진 기준 좌측 스위치부·스프링 각도 보정):
-#   - 스위치 신설: v2.1엔 스위치 자체가 없었다 → 소형 다크 케이스 + 롤러 레버 추가.
-#     롤러는 원심추(뭉치) 궤도 바로 바깥(r≈0.122)에 두어 과속 시 타격되게 함.
-#   - 스위치 박스 축소: 좌측 파란 오각판 0.118×0.188 → 0.050×0.079 (마운트판 크기).
-#     스위치를 가리지 않도록 뒤쪽(+Y)으로 이동.
-#   - 링크판 신설: 본체 좌측 외면 세로 브라켓(상·하 꺾임 탭 + 중앙 구멍) + 링크 로드.
-#   - 스프링: 수직 42° → 70°(수평 위 20°, 레버와 일자), 전장 0.195 → 0.117로 단축.
-#     기존엔 z 0.341까지 솟아 실물보다 과하게 높았다.
-#   ※ 원심추 → 스위치 타격 애니메이션 연동은 미포함 (별도 지시 예정)
+#  ★치수는 스크린샷 픽셀 실측으로 잡았다 (원본 1573x971, 휠 중심 (857,480) px,
+#    노란 링 외경 426px). 로프 홈 반경만 0.100 으로 고정(월드 0.15 정렬 불변 조건)하고
+#    나머지를 그 비율(4100 px/local-unit)로 환산했다. 주요 실측값:
+#      마운트판  x -0.018..0.018, y 0.194..0.235      육각너트 상 (0.001,0.219) r0.0123
+#      하단 육각 (0.000,0.180) r0.0113                작은 십자나사 (0.012,0.199)
+#      캐치 피벗 (0.000,0.260) 디스크 r0.013          캐치 좌단 x -0.095
+#      쐐기(발톱) 끝 (-0.087,0.242)  → 휠중심 기준 r 0.0887 (대기, 날 위에 떠 있음)
+#      진자 돔1 (-0.053,0.281) r0.021 / 돔2 (0.036,0.177) r0.017
+#      우측 레그 핀 (0.109,0.257)                     스프링 시트 (0.117,0.305)
+#      스프링 축 = 수직에서 +x 로 약 59°              오각 커버 x -0.202..-0.103
 #
-#  v2.3 (트립 기구 재현 — 참조 영상 00:29~00:41 + 사용자 육성 설명):
-#   동작: 정격 1.3배 과속 → 진자 2개가 원심력으로 벌어짐 → 뭉치가 스위치를 침 →
-#         쐐기가 회전날 이빨에 물림(하강 방향만) → 휠 정지 → 로프 파지.
-#   - Pendulum 신설: 진자 2개(피벗 보스 + 암 + 대형 납작 원판 뭉치), 180° 대칭.
-#     v2 엔 이 부품이 없었고 대신 정체불명의 검은 구슬 2개가 떠 있었다 → 삭제.
-#   - Pawl 신설: 좌하단 쐐기판(큰 원형 구멍 + 피벗 핀 + 황동 링크 핀).
-#   - 회전날: 8개 작은 톱니 → 6개 큰 톱니, 골 반경 0.070 → 0.050 (참조의 큰 로브).
-#   - 노란 림: 둥근 단면 토러스(고무호스처럼 보임) → 평평한 밴드 2줄 + V홈.
-#     add_ring() 헬퍼 신설 (실린더 불리언 차집합).
-#   - ★add_cyl 기본 셰이딩을 평면으로. shade_smooth가 짧은 실린더의 캡까지 뭉개
-#     핀·볼트·원판이 전부 구슬처럼 보이던 문제의 근본 원인이었다.
+#  [육성 지시 반영]
+#   11:24 · 캐치 좌단이 "너무 길다" → 좌단을 x -0.095 에서 끝냄(실측치).
+#         · 과속스위치는 롤러 브래킷 없이 좌단이 플런저를 직접 툭 침.
+#           (당시 "수직(90°)" 지시는 이후 실사 대조로 철회 — SW_TILT 로 눕힌다)
+#   11:41 · 진자 개방 → 캐치 낙하 → 날 물림 → 로프 파지 → 카 안전기.
+#   13:06 · "뒤판 없애라", "동그란 장식 없애라", "이 디자인 그대로", 스위치는 스위치 커버에.
 #
-#  v2.4 (뒷면 구조 — 사용자가 뒤에서 찍은 캡처 + 육성 설명):
-#   - ★진자를 휠 **앞뒤 양면**에 배치. 두 진자가 서로 반대로 벌어지며 균형을 잡으므로
-#     전/후면 대칭 한 쌍이 정상이다. v2.3 은 전면에만 있어 뒤가 텅 비어 보였다.
-#   - 휠 스포크 6개 → 3개.
-#   - 보조 회전날(ratchet2) 삭제 — 조속기 구조가 아니고 뒤에서 별판이 겹쳐 보였다.
+#  [아키텍처 — 이중 소스 축척 불일치 재발 방지]
+#   · 이 .glb 가 조속기의 유일한 시각 소스. js/environment.js §7 은 프리미티브를
+#     만들지 않고 빈 래퍼 그룹(피벗)에 .glb 노드를 끼운다 (로더 스케일 1.0, 오프셋 0).
+#   · three (x, y, z) = Blender (x, -z, y)  ← T() 헬퍼
+#   · 가동부는 개별 오브젝트, 원점(origin)을 피벗에 두고 대기 자세를 구움 → 래퍼 rot 0 = 대기.
+#       Pulley  원점 (0, 0.225, 0)      휠 스핀 (rotation.z)
+#       PendA/B 원점 = 진자 피벗 볼트    원심 개방 (rotation.z +0.45)
+#       Catch   원점 = 레버 피벗 핀      트립 ①낙하 +0.12 → ②파지 -0.05 (떡판 일체)
+#       Spring  원점 = 하단 시트, ★수직으로 구움 — env 래퍼가 -SPR_TILT 만큼 눕힌다
+#       Plunger 원점 = 하단, 수직으로 구움 — env 마운트(-90°)가 눌림축(-Y) 변환
+#   · 로프는 굽지 않는다 (environment.js 가 전 구간 런타임 메시로 그림).
 #
-#  v2.5 (로프 이중 표시 제거):
-#   - BaseFrame 에 구워 넣었던 로프(좌우 2줄 + 시브 홈 링) 삭제. environment.js 가 전 구간을
-#     실사 로프 메시로 그리면서 같은 자리에 로프가 두 겹이 됐고, .glb 쪽은 35cm 토막이라
-#     잘린 호스처럼 보였다. 로프는 승강로 길이에 맞춰 런타임에 그리는 게 맞다.
-#  ● 오브젝트: Pulley / Cam / Pendulum / Pawl / LeverArm / Spring / Cover / Switch / BaseFrame
-#  ● 좌표계: Blender Z-up 모델링, 전면=-Y → glTF(export_yup)로 Three.js Y-up 자동 변환
-#  ● 스케일: 도르래 외경 ≈ 0.30m (Three.js 로드부 scale 0.72 정합 유지)
+#  실행(헤드리스, 30초 내외):
+#    & 'C:\Program Files\Blender Foundation\Blender 5.2\blender.exe' -b -P blender\scripts\overspeed_governor.py
 # =============================================================================
 
 import bpy
@@ -62,9 +88,12 @@ import os
 
 OUTPUT_PATH = r"C:\Users\goodm\Desktop\simmul\models\gltf\overspeed_governor.glb"
 
-# =============================================================================
-#  0. 씬 초기화 (재질 생성 전에 — orphan 퍼지로 새 재질이 지워지지 않게)
-# =============================================================================
+
+def T(x, y, z):
+    """three.js(govBodyGrp 로컬, Y-up/Z-front) → Blender(Z-up/-Y-front)."""
+    return (x, -z, y)
+
+
 def reset_scene():
     bpy.ops.object.select_all(action='SELECT')
     bpy.ops.object.delete(use_global=False)
@@ -76,9 +105,12 @@ def reset_scene():
 reset_scene()
 
 # =============================================================================
-#  1. 재질 (영상 색감 기준)
+#  1. 재질
+#     ★씬 조명이 세다(Hemi 2.0 + Sun 2.5 + ACES exposure 1.2). 참조 스크린샷의
+#       진한 감청색을 화면에서 얻으려면 베이스 컬러를 평소보다 훨씬 어둡게 잡아야 한다.
+#       이전 리비전이 "하늘색 플라스틱"으로 보인 원인이 이것이다.
 # =============================================================================
-def make_material(name, rgb, metallic=0.0, roughness=0.6, alpha=1.0):
+def make_material(name, rgb, metallic=0.0, roughness=0.6, alpha=1.0, coat=0.0):
     mat = bpy.data.materials.new(name)
     mat.use_nodes = True
     bsdf = mat.node_tree.nodes.get("Principled BSDF")
@@ -91,8 +123,13 @@ def make_material(name, rgb, metallic=0.0, roughness=0.6, alpha=1.0):
     s("Metallic", metallic)
     s("Roughness", roughness)
     s("Alpha", alpha)
-    mat.diffuse_color = (rgb[0], rgb[1], rgb[2], alpha)
+    
+    # Clearcoat / Coat support across Blender versions
+    for coat_key in ("Coat Weight", "Clearcoat", "Coat"):
+        if bsdf and coat_key in bsdf.inputs:
+            bsdf.inputs[coat_key].default_value = coat
 
+    mat.diffuse_color = (rgb[0], rgb[1], rgb[2], alpha)
     if alpha < 1.0:
         for attr, value in (("blend_method", 'BLEND'), ("shadow_method", 'HASHED')):
             try:
@@ -102,18 +139,21 @@ def make_material(name, rgb, metallic=0.0, roughness=0.6, alpha=1.0):
         mat.use_backface_culling = False
     return mat
 
-MAT_YELLOW = make_material("Gov_Yellow",   (0.95, 0.69, 0.02), metallic=0.20, roughness=0.42)  # 림 밴드
-MAT_NAVY   = make_material("Gov_Navy",     (0.035, 0.095, 0.27), metallic=0.15, roughness=0.50) # 휠 스포크·림 네이비
-MAT_BLUE   = make_material("Gov_Blue",     (0.045, 0.17, 0.47), metallic=0.10, roughness=0.48)  # 베이스·스위치 커버 파랑
-MAT_GLASS  = make_material("Gov_BlueGlass",(0.30, 0.50, 0.78), metallic=0.05, roughness=0.22, alpha=0.34) # 반투명 커버
-MAT_LEVER  = make_material("Gov_Lever",    (0.86, 0.88, 0.91), metallic=1.00, roughness=0.16)   # 폴리시드 레버
-MAT_CHROME = make_material("Gov_Chrome",   (0.82, 0.84, 0.88), metallic=1.00, roughness=0.12)   # 스프링·핀
-MAT_STEEL  = make_material("Gov_Steel",    (0.60, 0.63, 0.67), metallic=0.85, roughness=0.35)   # 마운트판·볼트
-MAT_CAM    = make_material("Gov_Cam",      (0.30, 0.345, 0.42), metallic=0.60, roughness=0.40)   # 내부 캠 플레이트
-MAT_WHITE  = make_material("Gov_Roller",   (0.88, 0.89, 0.90), metallic=0.30, roughness=0.30)   # 흰 롤러
-MAT_DARK   = make_material("Gov_Dark",     (0.10, 0.11, 0.13), metallic=0.40, roughness=0.55)   # 원형추·볼트 코어
-MAT_ROPE   = make_material("Gov_Rope",     (0.42, 0.44, 0.48), metallic=0.75, roughness=0.40)   # 와이어 로프(아연도금)
-MAT_BRASS  = make_material("Gov_Brass",    (0.72, 0.55, 0.18), metallic=0.90, roughness=0.30)   # 스위치 롤러·링크(옐로우 크로메이트)
+# device_china.mp4 정지컷 기반 고품질 실사 CG 재질 정의
+MAT_BLUE    = make_material("Gov_Blue",     (0.015, 0.055, 0.220), metallic=0.15, roughness=0.32, coat=0.30)  # 로얄 메탈릭 파우더 블루
+MAT_BLUE_DK = make_material("Gov_BlueDk",   (0.008, 0.032, 0.140), metallic=0.15, roughness=0.35, coat=0.25)
+MAT_SPOKE   = make_material("Gov_Spoke",    (0.020, 0.075, 0.270), metallic=0.18, roughness=0.30)  # 휠 스포크 디럭스 블루
+MAT_YELLOW  = make_material("Gov_Yellow",   (0.920, 0.600, 0.015), metallic=0.12, roughness=0.24, coat=0.20)  # 광택 안전 옐로우 도장
+MAT_STEEL   = make_material("Gov_Steel",    (0.760, 0.780, 0.820), metallic=0.98, roughness=0.14)  # 헤어라인 폴리시드 스테인리스
+MAT_CHROME  = make_material("Gov_Chrome",   (0.850, 0.865, 0.890), metallic=1.00, roughness=0.03)  # 거울 크롬
+MAT_GREY    = make_material("Gov_Grey",     (0.350, 0.375, 0.410), metallic=0.75, roughness=0.25)  # 아노다이징 알루미늄
+MAT_CAM     = make_material("Gov_Cam",      (0.080, 0.095, 0.125), metallic=0.60, roughness=0.35)  # 날(캠)·스위치 케이스
+MAT_DARK    = make_material("Gov_Dark",     (0.040, 0.045, 0.055), metallic=0.50, roughness=0.45)  # 너트 코어·돔 링
+MAT_DOME    = make_material("Gov_Dome",     (0.880, 0.895, 0.920), metallic=1.00, roughness=0.05)  # 진자 고광택 크롬 돔
+MAT_GLASS   = make_material("Gov_Glass",    (0.080, 0.220, 0.580), metallic=0.02, roughness=0.05, alpha=0.32) # 반투명 파란 유리가드
+MAT_LABEL   = make_material("Gov_Label",    (0.700, 0.725, 0.750), metallic=0.00, roughness=0.40)
+MAT_YCAP    = make_material("Gov_YCap",     (0.520, 0.420, 0.060), metallic=0.35, roughness=0.30)
+MAT_GOLD    = make_material("Gov_Gold",     (0.520, 0.400, 0.115), metallic=0.95, roughness=0.22, coat=0.15) # ★과속스위치 본체 — 아연도금(황동빛) 금속
 
 # =============================================================================
 #  2. 헬퍼
@@ -128,30 +168,32 @@ def _finish(mat, smooth=True):
     return o
 
 def add_box(dims, loc, mat, rot=(0, 0, 0)):
+    """dims 는 Blender 축 (x, 깊이=z_three, 높이=y_three)."""
     bpy.ops.mesh.primitive_cube_add(size=1, location=loc, rotation=rot)
     bpy.context.active_object.scale = dims
     return _finish(mat, smooth=False)
 
 def add_cyl(radius, depth, loc, mat, rot=(0, 0, 0), verts=32, smooth=False):
-    """★기본이 평면 셰이딩(smooth=False)이다.
-       shade_smooth를 걸면 짧은 실린더의 평평한 캡 노멀까지 뭉개져 핀·볼트·원판이
-       전부 '구슬'처럼 보인다 — v2 에서 검은 구슬 2개로 오해받은 원인이 이것이다.
-       각도 기반 shade_auto_smooth는 모디파이어라 join_group()의 join에서 날아가므로 못 쓴다."""
+    """★기본 평면 셰이딩 — shade_smooth 는 짧은 실린더 캡 노멀을 뭉개 '구슬'로 만든다."""
     bpy.ops.mesh.primitive_cylinder_add(vertices=verts, radius=radius, depth=depth,
                                         location=loc, rotation=rot)
     return _finish(mat, smooth)
 
-def add_torus(major, minor, loc, mat, rot=(0, 0, 0), mseg=64, nseg=16, flat=1.0):
+def add_torus(major, minor, loc, mat, rot=(0, 0, 0), mseg=72, nseg=14):
     bpy.ops.mesh.primitive_torus_add(major_radius=major, minor_radius=minor,
                                      major_segments=mseg, minor_segments=nseg,
                                      location=loc, rotation=rot)
-    if flat != 1.0:  # 축방향 눌러 '밴드' 단면
-        bpy.context.active_object.scale = (1.0, flat, 1.0) if abs(rot[0]) > 1 else (1.0, 1.0, flat)
-    return _finish(MAT_YELLOW if mat is None else mat, smooth=True)
+    return _finish(mat, smooth=True)
 
-def add_ring(r_out, r_in, depth, loc, mat, rot=(0, 0, 0), verts=64):
-    """납작한 링(밴드). 실린더에서 안쪽 실린더를 불리언으로 빼낸다.
-       바깥면이 평평해서 실제 시브 림처럼 보인다 — 둥근 단면 토러스는 고무호스처럼 보인다."""
+def add_sphere(radius, loc, mat, squash_z=1.0):
+    """squash_z: three-z 방향(=Blender Y) 납작 비율 — 진자 돔용."""
+    bpy.ops.mesh.primitive_uv_sphere_add(radius=radius, location=loc, segments=30, ring_count=18)
+    if squash_z != 1.0:
+        bpy.context.active_object.scale = (1.0, squash_z, 1.0)
+    return _finish(mat, smooth=True)
+
+def add_ring(r_out, r_in, depth, loc, mat, rot=(0, 0, 0), verts=96):
+    """납작 링(밴드) — 실린더 불리언 차집합."""
     bpy.ops.mesh.primitive_cylinder_add(vertices=verts, radius=r_out, depth=depth,
                                         location=loc, rotation=rot)
     outer = bpy.context.active_object
@@ -171,13 +213,9 @@ def add_ring(r_out, r_in, depth, loc, mat, rot=(0, 0, 0), verts=64):
     bpy.context.view_layer.objects.active = outer
     return _finish(mat, smooth=False)
 
-def add_ball(radius, loc, mat):
-    bpy.ops.mesh.primitive_uv_sphere_add(radius=radius, location=loc, segments=20, ring_count=14)
-    return _finish(mat, smooth=True)
-
 def add_plate(pts, depth, mat, loc=(0, 0, 0), rot=(0, 0, 0), bevel_w=0.0012, name="plate"):
-    """XZ 평면 2D 윤곽(pts)을 Y두께(depth)로 압출한 판. 실사 부품의 핵심 헬퍼.
-       Triangulate(오목 폴리곤 안전) → Solidify → Bevel 순서로 적용."""
+    """three x-y 평면 2D 윤곽(pts) → z_three 두께(depth) 압출.
+       loc 은 Blender 좌표 — z_three 위치는 loc[1] = -z_three."""
     mesh = bpy.data.meshes.new(name)
     verts = [(p[0], 0.0, p[1]) for p in pts]
     mesh.from_pydata(verts, [], [list(range(len(verts)))])
@@ -189,7 +227,7 @@ def add_plate(pts, depth, mat, loc=(0, 0, 0), rot=(0, 0, 0), bevel_w=0.0012, nam
     obj.modifiers.new("tri", 'TRIANGULATE')
     sol = obj.modifiers.new("sol", 'SOLIDIFY'); sol.thickness = depth; sol.offset = 0
     if bevel_w > 0:
-        bev = obj.modifiers.new("bev", 'BEVEL'); bev.width = bevel_w; bev.segments = 1
+        bev = obj.modifiers.new("bev", 'BEVEL'); bev.width = bevel_w; bev.segments = 2
     for md in list(obj.modifiers):
         bpy.ops.object.modifier_apply(modifier=md.name)
     obj.location = loc
@@ -199,14 +237,15 @@ def add_plate(pts, depth, mat, loc=(0, 0, 0), rot=(0, 0, 0), bevel_w=0.0012, nam
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
     return obj
 
-def add_helix(loc, rot, mat, coil_r=0.020, wire=0.0045, turns=7, length=0.11, name="helix"):
+def add_helix(loc, mat, coil_r=0.020, wire=0.0050, turns=9, length=0.098, name="helix"):
+    """수직(+Z_b = three +Y) 코일. ★반드시 수직으로 굽는다 — env 래퍼가 기울인다."""
     cdata = bpy.data.curves.new(name + "_curve", type='CURVE')
     cdata.dimensions = '3D'
     cdata.bevel_depth = wire
-    cdata.bevel_resolution = 4
+    cdata.bevel_resolution = 5
     cdata.resolution_u = 8
     sp = cdata.splines.new('POLY')
-    ppt = 14
+    ppt = 16
     N = int(turns * ppt)
     sp.points.add(N - 1)
     for i in range(N):
@@ -221,8 +260,18 @@ def add_helix(loc, rot, mat, coil_r=0.020, wire=0.0045, turns=7, length=0.11, na
     bpy.ops.object.convert(target='MESH')
     o = bpy.context.active_object
     o.location = loc
-    o.rotation_euler = rot
     return _finish(mat, smooth=True)
+
+def boolean_cut(target, cutter):
+    bpy.ops.object.select_all(action='DESELECT')
+    target.select_set(True)
+    bpy.context.view_layer.objects.active = target
+    md = target.modifiers.new("cut", 'BOOLEAN')
+    md.operation = 'DIFFERENCE'
+    md.object = cutter
+    bpy.ops.object.modifier_apply(modifier=md.name)
+    bpy.data.objects.remove(cutter, do_unlink=True)
+    return target
 
 def join_group(objs, name, origin=None):
     objs = [o for o in objs if o is not None]
@@ -241,15 +290,201 @@ def join_group(objs, name, origin=None):
     return j
 
 # =============================================================================
-#  3. 부품 생성  (전면 = -Y, 위 = +Z, 휠 축 = Y)
+#  3. 설계 상수 (three 좌표 = environment.js govBodyGrp 로컬)
 # =============================================================================
-PC = (0.0, 0.0, 0.05)        # 휠(도르래) 중심
-R_ROPE = 0.150               # 로프 홈 반경 (외경 0.30)
-AXROT = (math.pi / 2, 0, 0)  # 실린더/토러스 축을 Y로
+GWY    = 0.225     # 휠 중심 높이
+G_R    = 0.100     # ★로프 홈 반경 (×govGrp 1.5 = 월드 0.15) — 불변
+RIM_RO = 0.108     # 홈 플랜지 중심 반경
+Y_OUT, Y_IN = 0.104, 0.082      # 노란 전면 밴드
+CAM_OUT, CAM_ROOT = 0.078, 0.050  # 날(캠) 톱니
+AX = (math.pi / 2, 0, 0)        # 실린더/토러스 축을 three-z(휠 축)로
 
-# ── 3-1. Pulley : 노란 림 밴드 + 네이비 곡선 스포크 6 + 허브 ─────────────────
-def spoke_pts(r0=0.034, r1=0.120, w0=0.017, w1=0.011, curve=0.013, n=7):
-    """+Z로 뻗는 스포크의 2D 윤곽 — 옆으로 살짝 휜 곡선 스포크 (영상 참조)."""
+CATCH_PIV = (0.000, 0.268, 0.048)   # 캐치 피벗 (휠 축 위) — 레버를 눕히느라 6mm 올림
+LEV_TILT  = math.radians(17)        # ★레버 기울기(우측 상향) — 레버·떡판·스프링이 한 직선
+LEV_L, LEV_R = -0.105, 0.118        # 레버 좌단(스위치 바로 위)·우단(스프링 시트)
+SPR_TILT  = math.pi / 2 - LEV_TILT  # 1.2740 — 스프링이 레버 축선을 그대로 이어받는다
+SPR_BASE  = (CATCH_PIV[0] + 0.112 * math.cos(LEV_TILT),   # (0.1071, 0.3008)
+             CATCH_PIV[1] + 0.112 * math.sin(LEV_TILT), 0.048)
+SPR_REACH = 0.114                   # 스프링 하단 시트 → 끝단 볼(=고정 앵커) 거리
+SHOE_X    = 0.108                   # 떡판 작동면(안쪽) — 로프 표면(0.106) 앞 2mm
+                                    #   파지 시 레버가 -0.05rad 돌면 4.2mm 파고들어 로프를 문다
+SHOE_Y0, SHOE_Y1 = 0.146, 0.222     # 떡판이 로프를 훑는 구간 (시브 3시 접점 → 아래)
+# ── 과속스위치 ────────────────────────────────────────────────────────────
+#   · 실사: 스위치 본체는 금색(아연도금) 금속 박스이고, 베이스에 대해 비스듬히
+#     눕는다. 길게 올라온 파란색은 스위치를 무는 브래킷/보호덮개(= 이 모델의
+#     MAT_GLASS 반투명 파란 커버·swShell)이지 스위치 본체가 아니다.
+#   · 본체 박스 / 액추에이터(회색 탭) 길이는 build_plunger 에서 ×2.2 연장
+BASE_L    = -0.175
+SW_X, SW_Y, SW_Z = -0.139, 0.220, 0.050   # ★캐치 쪽으로 7mm 당김 — 액추에이터 암을 실사처럼
+                                          #   짧게(17mm) 만들기 위한 최소 이동. 더 당기면 박스
+                                          #   우측면이 캐치 좌단(x -0.1075)과 부딪친다.
+SW_W, SW_H, SW_D = 0.032, 0.106, 0.028    # 금색 본체
+SW_TILT   = math.radians(15)              # ★기울기 — 상단이 휠 쪽(+x)으로 눕는다 (실사)
+Z_HIT     = 0.062
+# 액추에이터(ACT_*)는 SWP() 정의 뒤에서 잡는다 — 뿌리를 기울인 박스면에 붙이기 때문.
+PEND_PIV_R = 0.030
+PEND_ANG_A = math.radians(134)
+PEND_MASS  = 0.070
+
+def LEVP(rx, ry):
+    """캐치 레버 로컬(수평 기준, 원점=피벗) → govBodyGrp 로컬. 기울기 LEV_TILT 적용."""
+    c, s = math.cos(LEV_TILT), math.sin(LEV_TILT)
+    return (CATCH_PIV[0] + rx * c - ry * s, CATCH_PIV[1] + rx * s + ry * c)
+
+
+# 과속스위치 기울기 — 박스 중심을 피벗으로 시계방향(상단이 +x 로 눕는다).
+#   SW_ROT 은 add_box/add_cyl 용 Blender 오일러, SWP() 는 add_plate 용 점 사상.
+#   ★박스·라벨·쉘·측판·볼트·Plunger 가 모두 이 한 쌍을 써야 따로 놀지 않는다.
+SW_ROT = (0, SW_TILT, 0)
+
+def SWP(x, y):
+    """스위치 로컬(수직 기준) 점 → 기울인 govBodyGrp 로컬 점."""
+    c, s = math.cos(SW_TILT), math.sin(SW_TILT)
+    dx, dy = x - SW_X, y - SW_Y
+    return (SW_X + dx * c + dy * s, SW_Y - dx * s + dy * c)
+
+
+# ── 액추에이터(플런저 레버) — 실사형 ──────────────────────────────────────
+#   실사(스크린샷 2026-08-03 212805): 길고 얇은 바늘이 아니라 **짧고 두툼한 암**이고,
+#   뿌리에 원판(부채꼴)이 있으며 끝에 좌우로 튀어나온 손잡이가 있다 (끝 옆 흰 롤러는 없음).
+#   · 암은 기울인 박스 우측면과 90°(= 그 면의 법선)로 나간다. 면이 SW_TILT 만큼
+#     눕었으니 암도 그만큼 아래를 향한다.
+#   · **뿌리 원판(SECT_R)의 중심을 박스 우측면 위에 둔다** → 원판의 절반이 박스 안으로
+#     들어가 가려지고 밖에는 반원 섹터만 보인다 (실사 그대로).
+#   · **밖으로 보이는 암 = ACT_LEN - SECT_R ≈ 17mm.** 박스를 캐치 쪽으로 7mm 당겨
+#     (SW_X -0.146 → -0.139) 얻었다. 박스를 원위치에 두면 면→타격점 수직거리가
+#     36.7mm 라 무엇을 해도 바늘처럼 길어진다 — 길이만 줄이면 캐치를 못 친다.
+#   ★타격점(ACT_TIP)은 캐치 기하가 정한다. 캐치 좌단 하면은 대기 시 x -0.100~-0.092 에서
+#     y 0.2227~0.2232, 트립(+0.12rad) 시 x -0.094~-0.086 에서 y 0.2111~0.2125 —
+#     두 자세가 모두 덮는 x 는 -0.094~-0.092 뿐이라 여기서 벗어날 수 없다.
+#   ★ACT_TIP 은 암 **윗면의 끝 모서리**(= 캐치가 때리는 면)다. 축선 끝이 아니다 —
+#     뭉툭한 끝을 만들면서 축선을 그대로 쓰면 윗면이 위로 튀어나와 대기 간극을 먹는다.
+#   검산(앱 계측, govBodyGrp 로컬): 대기 간극 ≈5mm / 트립 시 ≈6.7mm 눌림
+ACT_DIR   = (math.cos(SW_TILT), -math.sin(SW_TILT))   # 박스 우측면의 법선 (면과 90°)
+ACT_NRM   = (-ACT_DIR[1], ACT_DIR[0])                 # 그 법선 (암 높이 방향)
+ACT_TIP   = (-0.0930, 0.2180)     # ★타격점 = 암 윗면 끝 모서리 (캐치 하면 5mm 아래)
+ACT_HT    = 0.005                 # 끝 반높이 (뭉툭 — 뾰족한 삼각 금지)
+ACT_HR    = 0.006                 # 뿌리 반높이
+ACT_THK   = 0.010                 # 암 두께(z) — 얇은 칼날 금지
+SECT_R    = 0.013                 # 뿌리 부채꼴 반경 (절반은 박스 안으로 숨는다)
+_ACT_AXT  = (ACT_TIP[0] - ACT_NRM[0] * ACT_HT,        # 축선의 끝
+             ACT_TIP[1] - ACT_NRM[1] * ACT_HT)
+_ACT_FACE = SWP(SW_X + SW_W / 2 - 0.001, SW_Y)        # 박스 우측면 위의 한 점
+ACT_LEN   = ((_ACT_AXT[0] - _ACT_FACE[0]) * ACT_DIR[0] +
+             (_ACT_AXT[1] - _ACT_FACE[1]) * ACT_DIR[1])  # 면 → 축선 끝 수직거리
+ACT_ROOT  = (_ACT_AXT[0] - ACT_DIR[0] * ACT_LEN,      # 부채꼴 중심 (면 위 보장)
+             _ACT_AXT[1] - ACT_DIR[1] * ACT_LEN)
+PLG_BASE  = (ACT_ROOT[0], ACT_ROOT[1], SW_Z)          # Plunger 노드 원점(피벗)
+
+
+Z_WHEEL_F = 0.026    # 휠 전면 최전방 (노란 밴드 앞면)
+Z_CAM     = 0.012    # 날(캠) 평면 중심
+Z_PEND    = 0.032    # 진자 평면 중심
+Z_GLASS   = 0.042    # 반투명 커버 전면
+Z_LEVER   = 0.048    # 캐치 레버 평면 중심
+                     # (스위치 z 층은 SW_Z / SW_D 로 잡는다 — 구 Z_COVER 폐지)
+
+# =============================================================================
+#  4-1. BaseFrame — 베이스·측판·베어링·마운트판·스위치·오각커버·로프그립
+# =============================================================================
+def build_base():
+    p = []
+    # 하부 플랜지 + 앵커 볼트 — CAD 비율: 베이스 폭 ≈ 휠 지름 ×1.4 (이전 0.48은 과대)
+    #   ★좌측만 BASE_L 까지 넓힌다 (PLAN.md: 스위치가 설 자리 확보). 우단 0.150 은 불변.
+    bw = 0.150 - BASE_L                    # 본체 폭
+    bcx = (BASE_L + 0.150) / 2             # 본체 중심 x
+    p.append(add_box((bw + 0.040, 0.170, 0.020), T(bcx, 0.010, 0), MAT_BLUE_DK))
+    for bx, bz in ((BASE_L - 0.005, 0.065), (0.150, 0.065),
+                   (BASE_L - 0.005, -0.065), (0.150, -0.065)):
+        p.append(add_cyl(0.0065, 0.012, T(bx, 0.026, bz), MAT_CHROME, verts=16))
+    # 베이스 본체 + 상판 (로프 관통구 2개)
+    body = add_box((bw, 0.140, 0.068), T(bcx, 0.055, 0), MAT_BLUE)
+    top = add_box((bw + 0.016, 0.150, 0.010), T(bcx, 0.0945, 0), MAT_BLUE)
+    for hx in (-G_R, G_R):
+        for tgt in (body, top):
+            bpy.ops.mesh.primitive_cylinder_add(vertices=24, radius=0.013, depth=0.40,
+                                                location=T(hx, 0.06, 0))
+            boolean_cut(tgt, bpy.context.active_object)
+    p += [body, top]
+    for hx in (-G_R, G_R):
+        p.append(add_ring(0.019, 0.013, 0.006, T(hx, 0.101, 0), MAT_DARK, verts=32))
+    # 후면 베어링 페데스탈 + 축 (뒤판 없음 — 13:06 지시)
+    p.append(add_box((0.060, 0.045, 0.100), T(0, 0.150, -0.062), MAT_BLUE_DK))
+    p.append(add_cyl(0.020, 0.026, T(0, GWY, -0.048), MAT_GREY, rot=AX, verts=28))
+    p.append(add_cyl(0.009, 0.100, T(0, GWY, -0.006), MAT_CHROME, rot=AX, verts=20))
+    # 우측 가는 지주 + 스프링 상단 앵커 (스프링 축선 위 — SPR_TILT 와 항상 일치)
+    #   스프링이 누우면 앵커도 오른쪽으로 멀어진다. 앵커 팔 길이를 그때그때 계산한다.
+    ax_ = SPR_BASE[0] + math.sin(SPR_TILT) * SPR_REACH
+    ay_ = SPR_BASE[1] + math.cos(SPR_TILT) * SPR_REACH
+    p.append(add_box((0.013, 0.026, 0.270), T(0.145, 0.230, -0.004), MAT_BLUE))   # 지주 — 베이스 우단 위
+    arm_w = (ax_ - 0.145) + 0.020
+    p.append(add_box((arm_w, 0.022, 0.012), T((ax_ + 0.145) / 2, ay_ - 0.004, 0.014), MAT_BLUE_DK))
+    #   앵커 블록은 스프링 끝단 볼을 품는다 — 레버가 돌 때 몇 mm 움직여도 안 드러난다.
+    p.append(add_box((0.040, 0.030, 0.014), T(ax_, ay_, Z_LEVER), MAT_CAM, rot=(0, SPR_TILT, 0)))
+    # 캐치 피벗 지지 암 (레버와 같이 눕혀 레버 뒤에 숨긴다)
+    p.append(add_box((0.125, 0.012, 0.014), T(*LEVP(0.052, -0.012), 0.030), MAT_CAM,
+                     rot=(0, -LEV_TILT, 0)))
+    # 로프 그립(떡판)은 베이스가 아니라 Catch 노드에 붙어 있다 — 여기엔 관통구 링만.
+    # ── 중앙 마운트판 + 육각너트 (실측 치수) ──
+    mp = [(-0.018, 0.194), (0.014, 0.194), (0.018, 0.198), (0.018, 0.231),
+          (0.014, 0.235), (-0.014, 0.235), (-0.018, 0.231)]
+    p.append(add_plate(mp, 0.011, MAT_GREY, loc=(0, -0.046, 0), bevel_w=0.0022, name="mountPlate"))
+    p.append(add_cyl(0.0123, 0.014, T(0.001, 0.219, 0.058), MAT_CHROME, rot=AX, verts=6))
+    p.append(add_cyl(0.0062, 0.020, T(0.001, 0.219, 0.062), MAT_DARK, rot=AX, verts=20))
+    p.append(add_cyl(0.0113, 0.013, T(0.000, 0.180, 0.050), MAT_CHROME, rot=AX, verts=6))
+    p.append(add_cyl(0.0057, 0.019, T(0.000, 0.180, 0.054), MAT_DARK, rot=AX, verts=20))
+    p.append(add_cyl(0.0044, 0.006, T(0.012, 0.199, 0.055), MAT_CHROME, rot=AX, verts=16))  # 십자나사
+    # ── 과속스위치 — 금색(아연도금) 본체를 SW_TILT 만큼 눕힌다 ─────────────
+    #   실사에서 파란 것은 스위치가 아니라 이 아래의 브래킷/덮개다. 본체는 금속색.
+    p.append(add_box((SW_W, SW_D, SW_H), T(SW_X, SW_Y, SW_Z), MAT_GOLD, rot=SW_ROT))
+    swF = SW_Z + SW_D / 2
+    p.append(add_box((0.018, 0.002, 0.036), T(*SWP(SW_X, SW_Y + 0.004), swF + 0.002),
+                     MAT_LABEL, rot=SW_ROT))                                    # 흰 얼굴
+    # 스위치를 무는 브래킷 — 본체와 같이 눕는다.
+    #   ★박스를 감싸지 않고 뒤(z 0.026~0.036)에 대는 판이다. 실사에서도 파란 것은
+    #     스위치 뒤 브래킷이고 박스는 그 앞에 노출돼 있다. 예전처럼 박스를 통째로
+    #     감싸면 반투명 파랑이 금색 위에 겹쳐 올리브색으로 죽는다.
+    sw_bot = SW_Y - SW_H / 2
+    sw_top = SW_Y + SW_H / 2
+    sw_shell = [SWP(SW_X - 0.018, sw_bot + 0.004),
+                SWP(SW_X + 0.018, sw_bot + 0.004),
+                SWP(SW_X + 0.020, SW_Y + 0.010),
+                SWP(SW_X + 0.006, sw_top + 0.006),
+                SWP(SW_X - 0.018, sw_top)]
+    p.append(add_plate(sw_shell, 0.010, MAT_GLASS,
+                       loc=(0, -(SW_Z - SW_D / 2 - 0.005), 0),
+                       bevel_w=0.0008, name="swShell"))
+    # 측판 마운트
+    p.append(add_box((0.005, SW_D + 0.004, SW_H - 0.008),
+                     T(*SWP(SW_X - SW_W / 2 - 0.004, SW_Y), SW_Z), MAT_GREY, rot=SW_ROT))
+    for by in (SW_Y - SW_H * 0.28, SW_Y + SW_H * 0.28):
+        p.append(add_cyl(0.0030, 0.012, T(*SWP(SW_X - SW_W / 2 - 0.008, by), SW_Z),
+                         MAT_CHROME, rot=(0, math.pi / 2 + SW_TILT, 0), verts=12))
+    return join_group(p, "BaseFrame")
+
+# =============================================================================
+#  4-2. Cover — 반투명 파란 U가드 (CAD: 휠 하반부만 감싼다 — 낮게)
+# =============================================================================
+def build_cover():
+    p = []
+    # 전면판: 베이스 상단(0.10)부터 휠 중심 바로 아래(0.20)까지
+    #   ★우측판은 0.145 — 떡판 슈(x ≤ 0.137)가 지나갈 자리를 비워 둔다.
+    #   ★좌측판은 넓어진 베이스에 맞춰 COV_L 로 나가고, 과속스위치를 무는 면이 된다.
+    #     앞판은 y 0.20 까지만: 트립 때 캐치 좌단이 y 0.205 까지 내려와 앞판을 뚫는다.
+    #     좌측판(x -0.176~-0.168)은 레버 좌단(x ≥ -0.103) 과 절대 안 겹치므로 높여도 안전.
+    COV_L = -0.172
+    p.append(add_box((0.145 - COV_L, 0.008, 0.100), T((COV_L + 0.145) / 2, 0.150, Z_GLASS), MAT_GLASS))
+    p.append(add_box((0.008, 0.122, 0.152), T(COV_L, 0.176, 0.026), MAT_GLASS))
+    p.append(add_box((0.008, 0.070, 0.100), T(0.145, 0.150, 0.004), MAT_GLASS))
+    # 코너 나사
+    for sx, sy in ((-0.162, 0.190), (0.135, 0.190), (-0.162, 0.112), (0.135, 0.112)):
+        p.append(add_sphere(0.0036, T(sx, sy, Z_GLASS + 0.006), MAT_CHROME))
+    return join_group(p, "Cover")
+
+# =============================================================================
+#  4-3. Pulley — 로프 홈 + 노란 전면 밴드 + 파란 곡선 스포크 6 + 날(캠)
+# =============================================================================
+def spoke_pts(r0=0.026, r1=0.078, w0=0.020, w1=0.013, curve=0.013, n=8):
     left, right = [], []
     for i in range(n):
         t = i / (n - 1)
@@ -260,325 +495,197 @@ def spoke_pts(r0=0.034, r1=0.120, w0=0.017, w1=0.011, curve=0.013, n=7):
         right.append((off + w, r))
     return left + right[::-1]
 
-def build_pulley():
-    parts = []
-    # 노란 림 — 평평한 밴드 2줄(전·후 플랜지) + 그 사이 로프 V홈.
-    #   v2 의 둥근 단면 토러스(minor 0.0155)는 고무 호스처럼 보여서 폐기했다.
-    parts.append(add_ring(0.155, 0.138, 0.012, (PC[0], PC[1] - 0.012, PC[2]), MAT_YELLOW, rot=AXROT))
-    parts.append(add_ring(0.155, 0.138, 0.012, (PC[0], PC[1] + 0.012, PC[2]), MAT_YELLOW, rot=AXROT))
-    parts.append(add_ring(0.148, 0.138, 0.013, PC, MAT_YELLOW, rot=AXROT))   # 홈 바닥
-    # 홈 경계 가는 선 (참조 영상의 어두운 라인 2줄)
-    parts.append(add_torus(0.1505, 0.0018, (PC[0], PC[1] - 0.0063, PC[2]), MAT_NAVY, rot=AXROT, mseg=72))
-    parts.append(add_torus(0.1505, 0.0018, (PC[0], PC[1] + 0.0063, PC[2]), MAT_NAVY, rot=AXROT, mseg=72))
-    # 림 내측 네이비 링 (스포크 접합)
-    parts.append(add_ring(0.138, 0.114, 0.030, PC, MAT_NAVY, rot=AXROT))
-    # 곡선 스포크 3개 (사용자 지시: 6개 → 3개)
-    sp = spoke_pts()
-    for k in range(3):
-        parts.append(add_plate(sp, 0.016, MAT_NAVY, loc=PC, rot=(0, k * 2 * math.pi / 3, 0),
-                               bevel_w=0.0010, name="spoke"))
-    # 허브 (네이비) + 크롬 축
-    parts.append(add_cyl(0.030, 0.052, PC, MAT_NAVY, rot=AXROT, verts=28))
-    parts.append(add_cyl(0.0125, 0.096, PC, MAT_CHROME, rot=AXROT, verts=20))
-    return join_group(parts, "Pulley", origin=PC)
-
-# ── 3-2. Cam : 한방향(다운 걸림) 라체트 — 실사처럼 뭉툭한 이빨 + 흰 롤러·볼베어링
-#     ※ 양방향 조속기 아님. 급경사 걸림면(하강 캐치) + 완만한 등면(반대방향 미끄러짐).
-#     예전 v2 지그재그는 tip이 바늘처럼 너무 날카로워 실사(주물 폴·라체트)와 어긋남.
-def ratchet_pts(n=6, r_out=0.108, r_root=0.050, phase=0.18):
-    """한방향 라체트 윤곽 — 걸림면은 가파르되 이빨 끝은 플랫(뭉툭), 등면은 완만."""
+def cam_pts(n=6, r_out=CAM_OUT, r_root=CAM_ROOT, phase=0.30):
+    """한방향 날 — 급경사 걸림면 + 뭉툭한 플랫 팁 + 완만한 등면."""
     pts = []
     step = 2.0 * math.pi / n
     for i in range(n):
         a0 = phase + i * step
-        # 골
         pts.append((math.cos(a0) * r_root, math.sin(a0) * r_root))
-        # 걸림면(급경사) — tip까지 바늘처럼 가지 않고 두께를 유지한 채 상승
-        a_rise = a0 + step * 0.10
-        r_mid = r_root + (r_out - r_root) * 0.82
-        pts.append((math.cos(a_rise) * r_mid, math.sin(a_rise) * r_mid))
-        # 이빨 끝 — 실사 주물감의 뭉툭한 플랫 팁 (날카로운 점 제거)
-        a_tip0 = a0 + step * 0.14
-        a_tip1 = a0 + step * 0.26
-        pts.append((math.cos(a_tip0) * r_out, math.sin(a_tip0) * r_out))
-        pts.append((math.cos(a_tip1) * (r_out * 0.988), math.sin(a_tip1) * (r_out * 0.988)))
-        # 완만한 등면 — 반대 회전 시 폴이 미끄러지도록
-        a_back = a0 + step * 0.70
-        pts.append((math.cos(a_back) * (r_root + 0.014), math.sin(a_back) * (r_root + 0.014)))
+        a1 = a0 + step * 0.12
+        pts.append((math.cos(a1) * (r_root + (r_out - r_root) * 0.85),
+                    math.sin(a1) * (r_root + (r_out - r_root) * 0.85)))
+        a2 = a0 + step * 0.20
+        pts.append((math.cos(a2) * r_out, math.sin(a2) * r_out))
+        a3 = a0 + step * 0.36
+        pts.append((math.cos(a3) * (r_out * 0.97), math.sin(a3) * (r_out * 0.97)))
+        a4 = a0 + step * 0.72
+        pts.append((math.cos(a4) * (r_root + 0.010), math.sin(a4) * (r_root + 0.010)))
     return pts
 
-def build_cam():
-    parts = []
-    # 메인 라체트 캠 — 휠 스포크 앞(y=-0.020)에 단독 배치해 다른 부품과 겹치지 않게 분리
-    parts.append(add_plate(ratchet_pts(), 0.013, MAT_CAM, loc=(PC[0], PC[1] - 0.020, PC[2]),
-                           bevel_w=0.0022, name="ratchet"))
-    # 캠 허브 (중심 보스)
-    parts.append(add_cyl(0.030, 0.020, (PC[0], PC[1] - 0.020, PC[2]), MAT_STEEL, rot=AXROT, verts=24))
-    # ※ 뒤에 위상 어긋나게 겹쳐뒀던 보조 회전날(ratchet2)은 삭제했다 — 실제 조속기
-    #    구조가 아니고, 뒤에서 보면 별판이 두 장 겹쳐 보여 형상만 어지럽혔다 (사용자 지시).
-    # ※ v2 의 흰 롤러·검은 볼 2개도 삭제했다. 참조 영상에서 그 자리에 있던 건
-    #    베어링이 아니라 진자에 달린 원판형 뭉치였고, 지금은 build_pendulum()이 만든다.
-    return join_group(parts, "Cam", origin=PC)
+def build_pulley():
+    p = []
+    C = (0, GWY)
+    # 로프 홈 — ★CAD: 바깥 테두리 전체가 노랑 (플랜지·전면 밴드 모두 노랑 = 한 덩어리 림)
+    for fz in (-0.014, 0.014):
+        p.append(add_torus(RIM_RO, 0.0055, T(C[0], C[1], fz), MAT_YELLOW, rot=AX))
+    p.append(add_ring(0.098, 0.090, 0.026, T(C[0], C[1], 0), MAT_DARK, rot=AX))   # 홈 바닥(어둡게 — 로프 자리)
+    # 노란 전면 밴드 — 림과 이어져 하나의 굵은 노란 테두리로 보인다
+    p.append(add_ring(Y_OUT, Y_IN, 0.013, T(C[0], C[1], 0.0195), MAT_YELLOW, rot=AX))
+    p.append(add_torus(0.093, 0.0011, T(C[0], C[1], Z_WHEEL_F), MAT_DARK, rot=AX, mseg=110))
+    # 파란 휠 바디 링 + 곡선 스포크 6 + 허브
+    p.append(add_ring(0.082, 0.068, 0.030, T(C[0], C[1], 0.004), MAT_SPOKE, rot=AX))
+    sp = spoke_pts()
+    for k in range(6):
+        p.append(add_plate(sp, 0.016, MAT_SPOKE, loc=(0, -0.004, GWY),
+                           rot=(0, k * 2 * math.pi / 6, 0), bevel_w=0.0010, name="spoke"))
+    p.append(add_cyl(0.028, 0.034, T(C[0], C[1], 0.002), MAT_SPOKE, rot=AX, verts=28))
+    p.append(add_cyl(0.015, 0.010, T(C[0], C[1], 0.021), MAT_CHROME, rot=AX, verts=24))
+    # ── 날(캠) — 휠과 함께 돈다. 트립 시 캐치 쐐기가 이 이빨 골에 물린다 ──
+    p.append(add_plate(cam_pts(), 0.011, MAT_CAM, loc=(0, -Z_CAM, GWY),
+                       bevel_w=0.0014, name="camStar"))
+    return join_group(p, "Pulley", origin=T(0, GWY, 0))
 
-# ── 3-2b. Pendulum : 진자 2개 (원판형 뭉치) — 참조 영상 00:31~00:36 ──────────
-#   정격속도 1.3배에서 원심력으로 바깥으로 벌어지며 스위치를 때린다.
-#   v2 에는 이 부품이 아예 없었고, 그 자리에 작은 검은 구슬 2개가 떠 있었다.
-PEND_ANG = math.radians(110)   # 첫 번째 진자 방위 (나머지 하나는 180° 반대)
-PEND_PIVOT_R = 0.048           # 피벗 반경
-PEND_MASS_R = 0.104            # 뭉치 중심 반경
-PEND_DISC = 0.031              # 뭉치(원판) 반경
+# =============================================================================
+#  4-4. PendA / PendB — 크롬 돔 진자 + 다크 링 + 일자 링크 (원점 = 피벗 볼트)
+#      캐노니컬: +X = 접선, +Y = 반경 바깥. 트립 rotation.z +0.45 → 돔이 바깥으로.
+# =============================================================================
+def build_pendulum(name, pivot_ang):
+    F = pivot_ang - math.pi / 2
+    piv = (math.cos(pivot_ang) * PEND_PIV_R, GWY + math.sin(pivot_ang) * PEND_PIV_R)
+    arm_len = PEND_MASS - PEND_PIV_R      # 0.040
 
-def build_pendulum():
-    """★진자는 휠 **앞뒤 양면**에 같은 부품이 붙는다 (사용자 지적).
-       두 진자가 서로 반대로 벌어지며 균형을 잡으므로 전/후면이 대칭 한 쌍이다.
-       v2.3 은 전면에만 있어서 뒤에서 보면 휠 속이 텅 비어 보였다."""
-    parts = []
-    for side in (-1, +1):          # -1 = 전면(-Y), +1 = 후면(+Y)
-        for k in (0, 1):
-            a = PEND_ANG + k * math.pi
-            ca, sa = math.cos(a), math.sin(a)
-            px, pz = ca * PEND_PIVOT_R, sa * PEND_PIVOT_R
-            cx, cz = ca * PEND_MASS_R, sa * PEND_MASS_R
-            # 피벗 보스
-            # ※ smooth=False 필수 — 짧은 실린더에 shade_smooth가 걸리면 캡 노멀이 뭉개져
-            #   납작한 원판이 구슬처럼 보인다 (v2 의 '검은 구슬'이 이래서 생겼다).
-            parts.append(add_cyl(0.011, 0.030, (px, PC[1] + side * 0.028, PC[2] + pz),
-                                 MAT_STEEL, rot=AXROT, verts=20, smooth=False))
-            # 암 — 피벗에서 뭉치까지 (rot_y = -a 라야 로컬 +X가 방위 a를 향한다)
-            alen = PEND_MASS_R - PEND_PIVOT_R
-            parts.append(add_box((alen, 0.015, 0.020),
-                                 ((px + cx) / 2, PC[1] + side * 0.034, PC[2] + (pz + cz) / 2),
-                                 MAT_LEVER, rot=(0, -a, 0)))
-            # 뭉치 — 대형 납작 원판
-            parts.append(add_cyl(PEND_DISC, 0.018, (cx, PC[1] + side * 0.038, PC[2] + cz),
-                                 MAT_LEVER, rot=AXROT, verts=40, smooth=False))
-            parts.append(add_cyl(0.006, 0.022, (cx, PC[1] + side * 0.044, PC[2] + cz),
-                                 MAT_CHROME, rot=AXROT, verts=14, smooth=False))   # 중앙 리벳
-    return join_group(parts, "Pendulum", origin=PC)
+    def W(cx, cy):
+        return (piv[0] + cx * math.cos(F) - cy * math.sin(F),
+                piv[1] + cx * math.sin(F) + cy * math.cos(F))
 
-# ── 3-2c. Pawl : 쐐기 — 회전날 이빨에 물려 휠을 잡는다 (하강 방향만) ──────────
-#   참조 영상 좌하단: 큰 원형 구멍이 뚫린 납작한 쐐기판 + 황동 링크 핀.
-#   로컬 +X가 쐐기 끝(tip). rot_y 160° 로 좌하단 바깥(방위 200°)을 향하게 세운다.
-PAWL_POS = (-0.076, -0.040, 0.002)   # 휠중심(z=0.05) 기준 좌하단 — 방위 ≈212°, r≈0.090
-PAWL_ROT = (0, math.radians(160), 0)
-PAWL = [(-0.034, -0.016), (0.024, -0.020), (0.044, -0.004), (0.030, 0.014), (-0.030, 0.015)]
+    p = []
+    p.append(add_cyl(0.0070, 0.013, T(piv[0], piv[1], Z_PEND - 0.008), MAT_CHROME, rot=AX, verts=18))
+    # 암 판
+    arm = [(-0.013, -0.011), (arm_len + 0.006, -0.010), (arm_len + 0.011, 0.010),
+           (0.020, 0.016), (-0.013, 0.010)]
+    p.append(add_plate([W(a[0], a[1]) for a in arm], 0.009, MAT_GREY,
+                       loc=(0, -(Z_PEND - 0.006), 0), bevel_w=0.0010, name="pendArm"))
+    for cx, cy in ((0.008, 0.001), (0.024, 0.004)):
+        wx, wy = W(cx, cy)
+        p.append(add_sphere(0.0036, T(wx, wy, Z_PEND), MAT_CHROME))
+    # 크롬 돔 (납작) + 다크 베이스 링 — 유리(z 0.042)보다 앞으로 나가지 않게
+    dx, dy = W(arm_len, 0.006)
+    p.append(add_sphere(0.020, T(dx, dy, Z_PEND - 0.001), MAT_DOME, squash_z=0.42))
+    p.append(add_torus(0.0175, 0.0044, T(dx, dy, Z_PEND - 0.006), MAT_DARK, rot=AX, mseg=48))
+    # 일자 링크 바 — 캐노니컬 -Y(중심 관통, 반대편 피벗 방향)
+    bar = [(-0.006, -0.070), (0.005, -0.070), (0.005, 0.001), (-0.006, 0.001)]
+    p.append(add_plate([W(b[0], b[1]) for b in bar], 0.006, MAT_GREY,
+                       loc=(0, -(Z_PEND - 0.011), 0), bevel_w=0.0006, name="pendLink"))
+    return join_group(p, name, origin=T(piv[0], piv[1], Z_PEND - 0.008))
 
-def build_pawl():
-    parts = []
-    parts.append(add_plate(PAWL, 0.014, MAT_LEVER, loc=PAWL_POS, rot=PAWL_ROT,
-                           bevel_w=0.0016, name="pawl"))
-    # 판 가운데 큰 원형 구멍 (참조의 검은 원)
-    parts.append(add_cyl(0.013, 0.015, (-0.069, PAWL_POS[1], 0.006), MAT_DARK,
-                         rot=AXROT, verts=24, smooth=False))
-    # 피벗 핀 (안쪽 끝)
-    parts.append(add_cyl(0.006, 0.026, (-0.047, PAWL_POS[1], -0.009), MAT_CHROME,
-                         rot=AXROT, verts=14, smooth=False))
-    # 황동 링크 핀 — 레버 훅으로 이어지는 연결부 (참조 좌상단 황동 소품)
-    parts.append(add_cyl(0.0042, 0.026, (-0.101, PAWL_POS[1] - 0.008, 0.024), MAT_BRASS,
-                         rot=(0, 0, math.radians(38)), verts=12, smooth=False))
-    parts.append(add_ball(0.0060, (-0.108, PAWL_POS[1] - 0.008, 0.036), MAT_BRASS))
-    return join_group(parts, "Pawl", origin=PAWL_POS)
+# =============================================================================
+#  4-5. Catch — 폴리시드 캐치 레버 + 떡판(캐치슈) 레그 (원점 = 중앙 피벗 핀)
+#      좌단: 절판(절곡) 갈고리 + 얇은 캠 발톱. 우단: 스프링 시트 + 떡판 레그.
+#      ★레버 전체를 LEV_TILT 만큼 눕혀 굽는다 — 스프링(SPR_TILT)과 한 직선이 된다.
+# =============================================================================
+def build_catch():
+    P = CATCH_PIV
+    _c, _s = math.cos(LEV_TILT), math.sin(LEV_TILT)
 
-# ── 3-3. LeverArm : 영상 윤곽 압출 — 후크(쐐기) 끝은 실사처럼 뭉툭한 한방향 이빨
-# 좌하단 후크(노치)에서 우상단 확폭 헤드까지 — XZ 평면 폴리곤 (CCW)
-# 후크 tip: 급경사 걸림면(다운) + 짧은 플랫 끝 — 바늘처럼 뾰족하지 않음 (실사 파란 메모)
-LEVER = [(-0.148, 0.090), (-0.142, 0.078), (-0.132, 0.074), (-0.120, 0.084),  # 뭉툭한 한방향 후크
-         (0.000, 0.100), (0.096, 0.124), (0.128, 0.140),       # 하변 (우상향 상승)
-         (0.154, 0.170), (0.140, 0.196), (0.108, 0.176),       # 다이아몬드 헤드
-         (0.000, 0.140), (-0.096, 0.120), (-0.148, 0.112)]     # 상변 복귀
-LEVER_PIV = (0.030, -0.064, 0.122)                             # 피벗 핀 위치
+    def A(rx, ry):
+        """레버 로컬(수평 기준) → govBodyGrp 로컬. LEV_TILT 기울기를 메시에 굽는다."""
+        return (P[0] + rx * _c - ry * _s, P[1] + rx * _s + ry * _c)
 
-def build_lever():
-    parts = []
-    parts.append(add_plate(LEVER, 0.0064, MAT_LEVER, loc=(0, -0.062, 0), bevel_w=0.0011, name="leverPlate"))
-    # 피벗 핀 (대형 크롬 디스크)
-    parts.append(add_cyl(0.0165, 0.016, LEVER_PIV, MAT_CHROME, rot=AXROT, verts=24))
-    # 헤드 핀 (우상단)
-    parts.append(add_cyl(0.0095, 0.015, (0.131, -0.064, 0.180), MAT_CHROME, rot=AXROT, verts=18))
-    # 우측 수직 링크 판 + 하단 핀 (영상: 헤드 우측에서 아래로 내려가는 슬림 링크)
-    parts.append(add_plate([(-0.012, -0.050), (0.012, -0.050), (0.012, 0.052), (-0.012, 0.052)],
-                           0.0055, MAT_LEVER, loc=(0.152, -0.048, 0.120), bevel_w=0.0009, name="sideLink"))
-    parts.append(add_cyl(0.0085, 0.014, (0.152, -0.052, 0.072), MAT_CHROME, rot=AXROT, verts=16))
-    return join_group(parts, "LeverArm", origin=LEVER_PIV)
+    p = []
+    # ── 레버판 끝: 검은색 칠한 빈 노치(갈고리 안쪽)를 채움 ──────────────────
+    #   V자/텅 빈 훅 구멍 금지 → 아래로만 살짝 내린 통짜 끝.
+    tip = [(LEV_L + 0.020,  0.011),   # 몸통 상단
+           (LEV_L - 0.002,  0.011),   # 좌상
+           (LEV_L - 0.004,  0.002),   # 좌외 살짝 라운드감
+           (LEV_L - 0.004, -0.014),   # 좌하 (채운 통짜)
+           (LEV_L + 0.004, -0.016),   # 하단 (검은 영역 채움)
+           (LEV_L + 0.020, -0.007)]   # 몸통 하변
+    plate = tip + [(LEV_R, -0.013), (LEV_R, 0.014)]
+    p.append(add_plate([A(q[0], q[1]) for q in plate], 0.011, MAT_STEEL,
+                       loc=(0, -Z_LEVER, 0), bevel_w=0.0016, name="catchPlate"))
 
-# ── 3-4. Spring : 우상단 대각 코일 (내부 로드 + 상단 스터브) ─────────────────
-SPR_BASE = (0.146, -0.052, 0.176)
-SPR_ANG = math.radians(70)                     # 수직에서 +X쪽으로 70° (=수평 위 20°) — 레버와 일자
-SPR_DIR = (math.sin(SPR_ANG), 0, math.cos(SPR_ANG))
+    # 중앙 피벗 핀
+    p.append(add_cyl(0.0130, 0.013, T(P[0], P[1], Z_LEVER + 0.013), MAT_CHROME, rot=AX, verts=28))
+    p.append(add_cyl(0.0065, 0.026, T(P[0], P[1], Z_LEVER - 0.004), MAT_CHROME, rot=AX, verts=16))
+    # 우단 스프링 시트 헤드 + 핀
+    p.append(add_cyl(0.0095, 0.011, T(*A(0.112, 0.002), Z_LEVER + 0.011), MAT_CHROME, rot=AX, verts=20))
+    p.append(add_cyl(0.015, 0.009, T(SPR_BASE[0], SPR_BASE[1] - 0.003, SPR_BASE[2]),
+                     MAT_GREY, rot=(0, SPR_TILT, 0), verts=20))
 
-def along(base, d, t):
-    return (base[0] + d[0] * t, base[1] + d[1] * t, base[2] + d[2] * t)
+    # ── 떡판(캐치슈) 레그
+    leg = [(0.094, 0.300), (0.122, 0.312), (0.137, 0.268),
+           (0.134, 0.230), (0.114, 0.226), (0.110, 0.266)]
+    p.append(add_plate(leg, 0.014, MAT_STEEL, loc=(0, -Z_LEVER, 0),
+                       bevel_w=0.0012, name="shoeLeg"))
+    for rx, ry in ((0.118, 0.290), (0.126, 0.250)):
+        p.append(add_sphere(0.0036, T(rx, ry, Z_LEVER + 0.008), MAT_CHROME))
+    p.append(add_box((0.018, 0.048, 0.024), T(0.128, 0.228, 0.024), MAT_STEEL))
+    shoe_h = SHOE_Y1 - SHOE_Y0
+    shoe_y = (SHOE_Y0 + SHOE_Y1) / 2
+    p.append(add_box((0.020, 0.015, shoe_h), T(SHOE_X + 0.016, shoe_y, 0.0), MAT_STEEL))
+    p.append(add_box((0.006, 0.014, shoe_h - 0.004),
+                     T(SHOE_X + 0.003, shoe_y, 0.0), MAT_DARK))
+    return join_group(p, "Catch", origin=T(P[0], P[1], P[2]))
 
+# =============================================================================
+#  4-6. Spring — ★수직으로 굽는다 (env 래퍼 rotation.z = -SPR_TILT 가 기울임)
+# =============================================================================
 def build_spring():
-    parts = []
-    parts.append(add_helix(SPR_BASE, (0, SPR_ANG, 0), MAT_CHROME,
-                           coil_r=0.0235, wire=0.0058, turns=7, length=0.082, name="coil"))
-    # 내부 가이드 로드 (양단 돌출)
-    parts.append(add_cyl(0.006, 0.122, along(SPR_BASE, SPR_DIR, 0.048), MAT_CHROME,
-                         rot=(0, SPR_ANG, 0), verts=14))
-    # 상단 스터브 + 육각 팁 (영상 우상단 크롬 축)
-    parts.append(add_cyl(0.009, 0.026, along(SPR_BASE, SPR_DIR, 0.100), MAT_CHROME,
-                         rot=(0, SPR_ANG, 0), verts=16))
-    # 끝단 원형 캡 (돔) — 각진 큐브 대신 자연스러운 마감
-    parts.append(add_cyl(0.0098, 0.010, along(SPR_BASE, SPR_DIR, 0.112), MAT_CHROME,
-                         rot=(0, SPR_ANG, 0), verts=20))
-    parts.append(add_ball(0.0098, along(SPR_BASE, SPR_DIR, 0.117), MAT_CHROME))
-    # 하단 시트 (레버 헤드 접속)
-    parts.append(add_cyl(0.017, 0.010, along(SPR_BASE, SPR_DIR, -0.004), MAT_STEEL,
-                         rot=(0, SPR_ANG, 0), verts=18))
-    return join_group(parts, "Spring", origin=SPR_BASE)
-
-# ── 3-5. Cover : 좌측 소형 스위치 마운트판 + 하부 반투명 파란 박스 ───────────
-# 구 v2.1은 오각판이 스위치 박스 대용으로 너무 컸다(폭 0.118 × 높이 0.188).
-# 실물엔 커다란 박스가 아니라 소형 스위치 한 개가 붙으므로 판은 마운트판 크기로 축소하고,
-# 스위치 본체는 build_switch()가 따로 만든다.
-SW_COVER = [(-0.026, -0.039), (0.024, -0.039), (0.024, 0.024), (0.003, 0.040), (-0.026, 0.030)]
-
-def build_cover():
-    parts = []
-    # 스위치 마운트판 (불투명 파랑) — 스위치 뒤쪽(+Y)에 두어 스위치를 가리지 않는다
-    parts.append(add_plate(SW_COVER, 0.014, MAT_BLUE, loc=(-0.186, -0.010, 0.055),
-                           rot=(0, math.radians(12), 0), bevel_w=0.0018, name="switchCover"))
-    parts.append(add_ball(0.0042, (-0.170, -0.020, 0.090), MAT_CHROME))
-    parts.append(add_ball(0.0042, (-0.202, -0.020, 0.022), MAT_CHROME))
-    # 하부 반투명 커버 (휠 중간 높이부터 베이스까지 전폭)
-    parts.append(add_box((0.365, 0.026, 0.195), (0.008, -0.072, -0.048), MAT_GLASS))
-    # 커버 모서리 나사 4개
-    for sx, sz in ((-0.165, 0.038), (0.165, 0.038), (-0.165, -0.130), (0.165, -0.130)):
-        parts.append(add_ball(0.005, (sx + 0.008, -0.087, sz), MAT_CHROME))
-    return join_group(parts, "Cover")
-
-# ── 3-5b. Switch : 과속 스위치 본체 + 롤러 레버 + 좌측 외면 링크판 ───────────
-#   실물 사진(스크린샷 2026-07-27 003308) 기준. v2.1에는 스위치 자체가 없었다.
-#   - 스위치: 좌측 하단의 소형 다크 케이스 (구 오각판처럼 큰 박스가 아님)
-#   - 롤러 레버: 휠 쪽으로 뻗어 원심추(뭉치) 궤도(r≈0.107)에 물림 → 과속 시 타격
-#   - 링크판: 본체 좌측 외면에 붙는 세로 브라켓(사진 파란 표시부). 상·하 꺾임 탭 + 중앙 구멍.
-SW_POS = (-0.170, -0.042, 0.055)   # 스위치 케이스 중심
-SW_PIVOT = (-0.157, -0.060, 0.089) # 롤러 레버 피벗
-
-def build_switch():
-    parts = []
-    # 본체 케이스 + 상단 커버 + 명판
-    parts.append(add_box((0.034, 0.030, 0.052), SW_POS, MAT_DARK))
-    parts.append(add_box((0.034, 0.030, 0.010), (SW_POS[0], SW_POS[1], 0.086), MAT_STEEL))
-    parts.append(add_box((0.020, 0.002, 0.028), (SW_POS[0], -0.058, SW_POS[2]), MAT_WHITE))
-    # 후면 마운트 브래킷 (마운트판에 물리는 쪽)
-    parts.append(add_box((0.014, 0.026, 0.036), (-0.194, SW_POS[1], SW_POS[2]), MAT_STEEL))
-    # 롤러 레버 — 피벗에서 휠 쪽(+X)으로 살짝 상향
-    parts.append(add_cyl(0.005, 0.014, SW_PIVOT, MAT_CHROME, rot=AXROT, verts=14))
-    parts.append(add_box((0.046, 0.007, 0.006), (-0.136, -0.060, 0.092), MAT_LEVER,
-                         rot=(0, -math.radians(9), 0)))
-    # 롤러 — 원심추가 때리는 지점 (휠 중심에서 r≈0.122, 추 궤도 바로 바깥)
-    parts.append(add_cyl(0.009, 0.011, (-0.113, -0.060, 0.096), MAT_BRASS, rot=AXROT, verts=18))
-    # 링크판 (좌측 외면 세로 브라켓) — 사진 파란 표시부
-    parts.append(add_box((0.008, 0.020, 0.126), (-0.203, -0.032, 0.038), MAT_BRASS))
-    parts.append(add_box((0.018, 0.020, 0.009), (-0.210, -0.032, 0.097), MAT_BRASS))  # 상단 꺾임 탭
-    parts.append(add_box((0.018, 0.020, 0.009), (-0.210, -0.032, -0.021), MAT_BRASS)) # 하단 꺾임 탭
-    parts.append(add_cyl(0.0045, 0.012, (-0.203, -0.032, 0.040), MAT_DARK,
-                         rot=(0, math.pi / 2, 0), verts=14))                          # 중앙 구멍
-    for bz in (0.042, -0.010):                                                        # 고정 볼트 2개 (측판에 물림)
-        parts.append(add_cyl(0.004, 0.014, (-0.200, -0.032, bz), MAT_CHROME,
-                             rot=(0, math.pi / 2, 0), verts=12))
-    # 링크 로드 — 링크판 ↔ 스위치 레버 연결 (얘가 스위치를 친다)
-    parts.append(add_cyl(0.0035, 0.048, (-0.180, -0.050, 0.106), MAT_CHROME,
-                         rot=(0, math.pi / 2, 0), verts=12))
-    return join_group(parts, "Switch", origin=SW_POS)
-
-# ── 3-6. BaseFrame : 파란 베이스 + 중앙 마운트판/육각볼트 + 로프 2줄 ─────────
-def rope_strands(x, z0, z1, phase0=0.0):
-    """3-스트랜드 꼬임 와이어 로프 (수직)."""
-    objs = []
-    L = z1 - z0
-    for si in range(3):
-        ph = phase0 + si * 2.0 * math.pi / 3.0
-        cdata = bpy.data.curves.new("strand", type='CURVE')
-        cdata.dimensions = '3D'
-        cdata.bevel_depth = 0.0026
-        cdata.bevel_resolution = 3
-        sp = cdata.splines.new('POLY')
-        n = 90
-        sp.points.add(n - 1)
-        for i in range(n):
-            t = i / (n - 1)
-            a = ph + t * L * 55.0          # 꼬임 피치
-            sp.points[i].co = (x + 0.0032 * math.cos(a), 0.0032 * math.sin(a), z0 + L * t, 1.0)
-        o = bpy.data.objects.new("strand", cdata)
-        bpy.context.collection.objects.link(o)
-        bpy.ops.object.select_all(action='DESELECT')
-        o.select_set(True)
-        bpy.context.view_layer.objects.active = o
-        bpy.ops.object.convert(target='MESH')
-        objs.append(_finish(MAT_ROPE, smooth=True))
-    return objs
-
-def build_base():
-    parts = []
-    # 베이스 본체 (파란 박스) — 로프가 관통하는 구멍 2개를 실제로 뚫는다 (사용자 지시:
-    #   "여기다 구멍을 뚫어줘"). 로프는 x = ±R_ROPE 에서 Z축으로 내려간다.
-    body = add_box((0.385, 0.155, 0.150), (0.0, 0.008, -0.190), MAT_BLUE)
-    for hx in (-R_ROPE, R_ROPE):
-        bpy.ops.mesh.primitive_cylinder_add(vertices=24, radius=0.017, depth=0.30,
-                                            location=(hx, 0.008, -0.190))
-        cutter = bpy.context.active_object
-        bpy.ops.object.select_all(action='DESELECT')
-        body.select_set(True)
-        bpy.context.view_layer.objects.active = body
-        md = body.modifiers.new("ropehole", 'BOOLEAN')
-        md.operation = 'DIFFERENCE'
-        md.object = cutter
-        bpy.ops.object.modifier_apply(modifier=md.name)
-        bpy.data.objects.remove(cutter, do_unlink=True)
-    parts.append(body)
-    # 구멍 테두리 부싱 (구멍이 뚫린 게 눈에 띄게)
-    for hx in (-R_ROPE, R_ROPE):
-        parts.append(add_ring(0.024, 0.017, 0.008, (hx, 0.008, -0.111), MAT_STEEL, verts=24))
-    # 하단 플랜지
-    parts.append(add_box((0.425, 0.175, 0.016), (0.0, 0.008, -0.268), MAT_BLUE))
-    # 좌우 측판 (휠 하부 감쌈)
-    parts.append(add_box((0.020, 0.120, 0.210), (-0.188, -0.006, -0.055), MAT_BLUE))
-    parts.append(add_box((0.020, 0.120, 0.210), (0.188, -0.006, -0.055), MAT_BLUE))
-    # 전면 볼트 3개
-    for bx in (-0.125, 0.0, 0.125):
-        parts.append(add_cyl(0.0055, 0.012, (bx, -0.074, -0.155), MAT_CHROME, rot=AXROT, verts=12))
-    # 중앙 마운트판 (회색) — 휠 전면
-    parts.append(add_box((0.088, 0.013, 0.118), (0.004, -0.036, 0.022), MAT_STEEL))
-    # 육각볼트 2개 수직 배치 (상=축 너트 z=0.05, 하) + 블랙 코어 + 소형 나사
-    for hz, hr in ((0.050, 0.0215), (-0.012, 0.0195)):
-        parts.append(add_cyl(hr, 0.022, (0.0, -0.048, hz), MAT_CHROME, rot=AXROT, verts=6, smooth=False))
-        parts.append(add_cyl(hr * 0.52, 0.024, (0.0, -0.049, hz), MAT_DARK, rot=AXROT, verts=18))
-    parts.append(add_ball(0.005, (0.014, -0.046, 0.020), MAT_CHROME))
-    # ★로프는 .glb에 넣지 않는다 (v2.5, 사용자 지시).
-    #   예전엔 여기서 좌우 로프 2줄(z -0.275~0.052)과 시브 홈 위 로프 링을 같이 구웠는데,
-    #   js/environment.js 가 조속기~피트 인장시브 전 구간을 실사 로프 메시로 그리게 되면서
-    #   같은 자리에 로프가 두 겹이 됐다. .glb 쪽은 35cm 토막이라 잘린 검은 호스처럼 보였다.
-    #   로프는 승강로 길이에 맞춰 런타임에 그려야 하므로 .glb가 아니라 environment.js 담당이다.
-    #   (rope_strands() 헬퍼는 남겨둔다 — 나중에 정지 컷용 .glb가 필요할 때 쓸 수 있다.)
-    return join_group(parts, "BaseFrame")
-
-pulley = build_pulley()
-cam    = build_cam()
-pend   = build_pendulum()
-pawl   = build_pawl()
-lever  = build_lever()
-spring = build_spring()
-cover  = build_cover()
-switch = build_switch()
-base   = build_base()
+    B = SPR_BASE
+    p = []
+    p.append(add_cyl(0.0165, 0.008, T(B[0], B[1] + 0.004, B[2]), MAT_GREY, verts=20))
+    p.append(add_helix(T(B[0], B[1] + 0.008, B[2]), MAT_CHROME,
+                       coil_r=0.020, wire=0.0050, turns=8, length=0.082, name="coil"))
+    p.append(add_cyl(0.0052, 0.104, T(B[0], B[1] + 0.058, B[2]), MAT_CHROME, verts=16))
+    p.append(add_cyl(0.0090, 0.016, T(B[0], B[1] + 0.104, B[2]), MAT_CHROME, verts=6))  # 육각 조정너트
+    p.append(add_sphere(0.0080, T(B[0], B[1] + SPR_REACH, B[2]), MAT_CHROME))
+    return join_group(p, "Spring", origin=T(B[0], B[1], B[2]))
 
 # =============================================================================
-#  4. .glb 내보내기 (glTF Binary, Y-up)
+#  4-7. Plunger — 실사형 액추에이터
+#       뿌리 부채꼴(절반 박스 안) + 짧고 두툼한 암 + 끝 좌우 T손잡이
 # =============================================================================
+def build_plunger():
+    """스위치 액추에이터 — 실사 형상. 바늘형 칼날·덧댄 팁(actTip)·이중 끝은 두지 않는다.
+       끝의 T손잡이는 보수기사가 손으로 스위치를 중간 위치로 되돌리는 도구이며,
+       Plunger 메시의 일부다 (전면 L자 ResetPin/ResetBracket 소품과는 다른 것).
+       끝 옆 흰 동그라미(롤러)는 두지 않는다."""
+    R, K = ACT_ROOT, ACT_TIP
+    ux, uy = ACT_DIR
+    nx, ny = ACT_NRM
+    p = []
+    # ① 뿌리 부채꼴 — 원판 중심이 박스 우측면 위 → 절반이 박스 안으로 숨는다(위·아래 운동)
+    p.append(add_cyl(SECT_R, ACT_THK - 0.001, T(R[0], R[1], SW_Z), MAT_STEEL,
+                     rot=AX, verts=40))
+    p.append(add_cyl(0.0035, ACT_THK + 0.010, T(R[0], R[1], SW_Z), MAT_CHROME,
+                     rot=AX, verts=16))                       # 피벗 축
+    # ② 암 — 뿌리 ACT_HR → 끝 ACT_HT 로 살짝 테이퍼, 끝은 뭉툭한 평면(뾰족 금지)
+    tipAx = (K[0] - nx * ACT_HT, K[1] - ny * ACT_HT)
+    arm = [(R[0] + nx * ACT_HR, R[1] + ny * ACT_HR),
+           K,                                                 # 윗면 끝 = 타격점
+           (tipAx[0] - nx * ACT_HT, tipAx[1] - ny * ACT_HT),  # 아랫면 끝
+           (R[0] - nx * ACT_HR, R[1] - ny * ACT_HR)]
+    p.append(add_plate(arm, ACT_THK, MAT_STEEL, loc=(0, -SW_Z, 0),
+                       bevel_w=0.0006, name="actArm"))
+    # ③ 끝 좌우 수동복귀 손잡이 — 암을 관통해 좌우로 10mm 씩 나온 T 바 + 끝 마디
+    #   ★위쪽(캐치 쪽)으로는 키우지 않는다 — 대기 간극을 먹는다.
+    #   ★끝 옆 흰 동그라미(롤러)는 두지 않는다 — 손잡이만 남긴다.
+    hx, hy = tipAx[0] - ux * 0.003, tipAx[1] - uy * 0.003
+    p.append(add_cyl(0.0024, ACT_THK + 0.020, T(hx, hy, SW_Z), MAT_CHROME,
+                     rot=AX, verts=14))
+    for zc in (SW_Z - ACT_THK / 2 - 0.0085, SW_Z + ACT_THK / 2 + 0.0085):
+        p.append(add_cyl(0.0040, 0.004, T(hx, hy, zc), MAT_CHROME, rot=AX, verts=14))
+    return join_group(p, "Plunger", origin=T(*PLG_BASE))
+
+# =============================================================================
+#  5. 빌드 & 내보내기
+# =============================================================================
+build_base()
+build_cover()
+build_pulley()
+build_pendulum("PendA", PEND_ANG_A)
+build_pendulum("PendB", PEND_ANG_A + math.pi)
+build_catch()
+build_spring()
+build_plunger()
+
 def export_glb(path):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     bpy.ops.object.select_all(action='DESELECT')
-    bpy.ops.export_scene.gltf(
-        filepath=path,
-        export_format='GLB',
-        use_selection=False,
-        export_apply=True,
-        export_yup=True,
-    )
-    print("[overspeed_governor v2.3] 내보내기 완료:", path)
+    bpy.ops.export_scene.gltf(filepath=path, export_format='GLB',
+                              use_selection=False, export_apply=True, export_yup=True)
+    print("[overspeed_governor v4.2] 내보내기 완료:", path)
 
 export_glb(OUTPUT_PATH)
 print("완료 — 오브젝트:", sorted(o.name for o in bpy.data.objects))

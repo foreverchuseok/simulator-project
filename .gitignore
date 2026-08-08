@@ -1,22 +1,28 @@
-# ─── 앱 실행에 필요한 것만 Git에 유지 ───
-# 유지: index.html, js/, assets/, vercel.json, AGENTS.md, package.json, .gitignore
+# ─── 앱 실행 파일과 공유 문서만 Git에 유지 ───
+# 공유 문서: README.md, AGENTS.md, CLAUDE.md, GEMINI.md, blender/BLENDER-WORKFLOW.md
+# 유지 에셋: assets/bg/*.png(코드 로드), assets/safety_gear.glb, models/gltf/*.glb, sound/
 
-# 로컬 참고용 화면 녹화
+# 로컬 참고용 화면 녹화·참고 영상 (앱 미로드)
 *.mp4
 Screen_Recording_*.mp4
 
-# Claude / Antigravity → Cursor 핸드오프용 임시 계획서
+# Antigravity 분석 → Claude Code / Cursor 전달용 현재 작업 임시 계획서
+# 작업 하나만 담고 완료 후 삭제하거나 다음 계획으로 교체
 PLAN.md
 
 # 개인 PC·터미널·도구 설정 메모 (프로젝트 업무 무관, 로컬 전용)
 MISC-SETTINGS-MEMO.md
 
-# AI·개발용 임시 스크린샷·PDF 추출·캡처 스크립트
+# AI·개발용 임시 스크린샷·PDF 추출·캡처 스크립트·작업 폴더
 .shot-*.png
 .rv-*.png
 .pdf-*.png
-.claude-tmp-shot*.js
 .claude-tmp*
+.claude-tmp-*/
+
+# 로컬 참고 사진·캡처 폴더와 루트 미사용 이미지 (앱 미로드)
+temporary/
+mobile.jpg
 
 # 참고용 PDF (앱이 로드하지 않음 — 로컬 디자인/규격 문서)
 *.pdf
@@ -28,8 +34,9 @@ KR100839584B1.pdf
 node_modules/
 package-lock.json
 
-# Claude Code / 로컬 AI 설정
+# Claude Code / Cursor 로컬 설정·캐시
 .claude/
+.cursor/
 
 # OS·에디터 잡파일
 .DS_Store

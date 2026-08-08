@@ -119,6 +119,8 @@
       const h = hatchDoors[curFloor];
       // 인터록 해정: 클러치가 적층 롤러를 물고 록 레버를 젖힘 → 접점 분리 → 도어 개방
       if (h && h.hook) gsap.to(h.hook.rotation, { z: -0.28, duration: 0.28, ease: 'power1.out' });
+      // 삼각키 레버 시각 연동(소폭) — 비상해제 표현은 최소
+      if (h && h.triKey) gsap.to(h.triKey.rotation, { z: -0.08, duration: 0.28, ease: 'power1.out' });
       snd.doorOpen.currentTime = 0; snd.doorOpen.play();
       gsap.to(carDoorL.position, { x: carDoorL.userData.ox, duration: 1.15, ease: 'power2.out', delay: 0.22 });
       gsap.to(carDoorR.position, {
@@ -148,6 +150,7 @@
           currentState = ELEVATOR_STATE.IDLE;
           // 인터록 재잠금: 후크 복귀 → 접점 브리지 삽입 (회로 폐성)
           if (h && h.hook) gsap.to(h.hook.rotation, { z: 0, duration: 0.25, ease: 'power1.in' });
+          if (h && h.triKey) gsap.to(h.triKey.rotation, { z: 0, duration: 0.25, ease: 'power1.in' });
         }
       });
       if (h) { gsap.to(h.left.position, { x: h.left.userData.cx, duration: 0.95, ease: 'power2.inOut' }); gsap.to(h.right.position, { x: h.right.userData.cx, duration: 0.95, ease: 'power2.inOut' }); }
