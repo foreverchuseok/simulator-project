@@ -394,6 +394,13 @@ def build_base():
     p.append(add_box((0.005, SW_D + 0.004, SW_H - 0.008), T(*SWP(SW_X - SW_W / 2 - 0.004, SW_Y), SW_Z), MAT_GREY, rot=SW_ROT))
     for by in (SW_Y - SW_H * 0.28, SW_Y + SW_H * 0.28):
         p.append(add_cyl(0.0030, 0.012, T(*SWP(SW_X - SW_W / 2 - 0.008, by), SW_Z), MAT_CHROME, rot=(0, math.pi / 2 + SW_TILT, 0), verts=12))
+
+    # 후면 투명 커버 고정용 베이스 프레임 체결 브라켓 & 스터드 보스 (나비너트 물리 결합부)
+    rc_b = 0.125
+    for bx_b in (-rc_b + 0.024, rc_b - 0.024):
+        p.append(add_box((0.020, 0.028, 0.024), T(bx_b, 0.120, -0.038), MAT_BLUE))
+        p.append(add_cyl(0.0055, 0.008, T(bx_b, 0.120, -0.048), MAT_STEEL, rot=AX, verts=16))
+
     return join_group(p, "BaseFrame")
 
 # =============================================================================
@@ -407,16 +414,16 @@ def build_cover():
     p.append(add_box((0.145 - COV_L, 0.008, 0.026), T((COV_L + 0.145) / 2, 0.113, Z_GLASS), MAT_GLASS))
     p.append(add_box((0.008, 0.122, 0.152), T(COV_L, 0.176, 0.026), MAT_GLASS))
     p.append(add_box((0.008, 0.070, 0.100), T(0.145, 0.150, 0.004), MAT_GLASS))
-    # ── 후면 투명 보호덮개 + 중앙 축 육각 볼트 + 하단 나비너트 2개 ───────────
-    rc, ry0, ry1, rcut, rt, rz = 0.125, 0.100, 0.350, 0.010, 0.006, -0.052
+    # ── 후면 투명 보호덮개 (스핀들 회전축 GWY 높이까지만 반절 축소) + 중앙 볼트 + 하단 나비너트 2개 ───
+    rc, ry0, ry1, rcut, rt, rz = 0.125, 0.100, 0.230, 0.010, 0.006, -0.052
     rzb = rz - rt / 2
     rr = [(-rc + rcut, ry0), (rc - rcut, ry0), (rc, ry0 + rcut), (rc, ry1 - rcut),
           (rc - rcut, ry1), (-rc + rcut, ry1), (-rc, ry1 - rcut), (-rc, ry0 + rcut)]
     p.append(add_plate(rr, rt, MAT_GLASS, loc=(0, -rz, 0), bevel_w=0.0018, name="rearCover"))
     p.append(add_cyl(0.020, 0.004, T(0, GWY, rzb - 0.002), MAT_STEEL, rot=AX, verts=28))
     p.append(add_cyl(0.014, 0.013, T(0, GWY, rzb - 0.0105), MAT_CHROME, rot=AX, verts=6))
-    for wx in (-rc + 0.026, rc - 0.026):
-        p += add_wing_nut(wx, ry0 + 0.016, rzb)
+    for wx in (-rc + 0.024, rc - 0.024):
+        p += add_wing_nut(wx, ry0 + 0.020, rzb)
 
     for sx, sy in ((-0.162, 0.190), (0.135, 0.190), (-0.162, 0.112), (0.135, 0.112)):
         p.append(add_sphere(0.0036, T(sx, sy, Z_GLASS + 0.006), MAT_CHROME))
