@@ -3012,7 +3012,7 @@
             armRot0: 0,          // 대기 자세는 .glb 메시에 구워짐 — 래퍼 0 = 대기
             pawlRot0: 0,
             pendRot0: [0, 0],
-            toothStep: (Math.PI * 2) / 6,  // 날(캠) 톱니 6개 (.py cam_pts n=6)
+            toothStep: (Math.PI * 2) / 10, // 날(캠) 톱니 10개 (.py CAM_TEETH 와 반드시 일치)
             sprScale0: 1,
             plungerX0: 0
           },
