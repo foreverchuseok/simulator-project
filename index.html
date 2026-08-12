@@ -802,6 +802,12 @@
         camera.position.set(0.55, FLOOR_Y[1] + 2.25, 0.30);
         controls.target.set(-0.02, FLOOR_Y[1] + 2.02, 1.05);
         document.getElementById('loading').style.display = 'none';
+      } else if (location.search.includes('govcam=2')) {
+        // 조속기 후면 근접 뷰 — 진자 뒷면 브라켓·연동 링크 2개(타이바·인장 스프링) 확인용
+        controls.minDistance = 0.05;
+        camera.position.set(GOV_TENS_X - 0.72, Y0 + TOTAL_H + 0.72, GOV_TENS_Z + 0.30);
+        controls.target.set(GOV_TENS_X, Y0 + TOTAL_H + 0.60, GOV_TENS_Z - 0.03);
+        document.getElementById('loading').style.display = 'none';
       } else if (location.search.includes('govcam')) {
         // 조속기 정면 근접 뷰 (실사 재현 검증용) — 정면은 +X 방향
         controls.minDistance = 0.05;

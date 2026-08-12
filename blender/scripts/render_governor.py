@@ -111,3 +111,13 @@ cam_data.lens = 50
 scene.render.filepath = os.path.join(ROOT, ".shot-gov-blender-top.png")
 bpy.ops.render.render(write_still=True)
 print("[render] top ->", scene.render.filepath)
+
+# 후면 (three -Z 방향 = Blender +Y 에서 바라봄)
+REAR_T = (0.0, -0.048, 0.225)
+cam.location = (0.0, 0.85, 0.24)
+look_at(cam, REAR_T)
+cam_data.lens = 50
+scene.render.filepath = os.path.join(ROOT, ".shot-gov-blender-rear.png")
+bpy.ops.render.render(write_still=True)
+print("[render] rear ->", scene.render.filepath)
+

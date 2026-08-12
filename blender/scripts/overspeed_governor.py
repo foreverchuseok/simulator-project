@@ -147,7 +147,10 @@ def add_plate(pts, depth, mat, loc=(0, 0, 0), rot=(0, 0, 0), bevel_w=0.0012, nam
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
     return obj
 
-def add_helix(loc, mat, coil_r=0.020, wire=0.0050, turns=9, length=0.098, name="helix"):
+def add_helix(loc, mat, coil_r=0.020, wire=0.0050, turns=9, length=0.098, name="helix",
+              rot=(0, 0, 0)):
+    """코일 스프링. 기본 축은 Blender +Z(= three +Y). rot 로 눕힐 수 있다
+       (three +X 축으로 눕히려면 rot=(0, π/2, 0))."""
     cdata = bpy.data.curves.new(name + "_curve", type='CURVE')
     cdata.dimensions = '3D'
     cdata.bevel_depth = wire
@@ -169,6 +172,7 @@ def add_helix(loc, mat, coil_r=0.020, wire=0.0050, turns=9, length=0.098, name="
     bpy.ops.object.convert(target='MESH')
     o = bpy.context.active_object
     o.location = loc
+    o.rotation_euler = rot
     return _finish(mat, smooth=True)
 
 def add_wing_nut(cx, cy, zb, wing=0.016, tilt=math.radians(22)):
@@ -249,14 +253,11 @@ B_OUT, B_IN = 0.0975, 0.082      # 그 안쪽 파란 전면 밴드
 CAM_OUT, CAM_ROOT = 0.056, 0.044   # ★작게 (예전 0.076/0.052 는 "너무 크다")
 CAM_TEETH = 10                     # ★js/environment.js geom.toothStep = 2π/CAM_TEETH 와 짝
 CAM_T     = 0.004                  # ★얇게 (예전 0.008~0.011)
-# 위상은 발톱 궤적에서 역산한다: 이빨 팁각 = CAM_PHASE + (0.80+k)·step 이므로
-# 발톱 트립각(189.1°) 바로 앞(188.5°)에 팁이 오도록 15.7°. 어긋나면 발톱이 등면에 얹힌다.
-CAM_PHASE = math.radians(15.7)
-CLAW_GAP  = 0.0015                 # 대기 시 발톱이 톱니끝 위에 띄우는 여유
-CLAW_A0, CLAW_A1 = 181.0, 189.5    # 발톱 안쪽 모서리가 훑는 방위(도)
-CLAW_T    = 0.006                  # ★발톱도 얇게
-CLAW_Z    = 0.0450                 # 발톱 평면 = 날 평면 (같은 면에서 문다)
-                                   #   0.042~0.048 → 진자 앞면(0.041) 위 1mm, 날을 다 덮는다
+# ★위상은 쇄기 부리에서 역산한다 (아래 PAWL 블록의 CAM_PHASE 재정의를 볼 것).
+#   한 이빨 = 골(a0) → 완만한 등면 → 팁(a0+0.80·step) → 급경사 걸림면(a0+0.88·step)
+#   → 골(a0+step). 부리는 걸림면 **다음 골** 한가운데(a0+0.94·step)에 박혀야
+#   휠이 CW 로 끌릴 때 걸림면이 부리 옆면으로 밀려와 문다.
+CLAW_GAP  = 0.0015                 # 대기 시 부리가 톱니끝 위에 띄우는 여유
 AX = (math.pi / 2, 0, 0)        # 실린더/토러스 축을 three-z(휠 축)로
 
 CATCH_PIV = (0.000, 0.268, 0.0535)  # 캐치 피벗 — 레버를 날보다 앞 면으로 뺐다
@@ -268,6 +269,67 @@ SPR_BASE  = (CATCH_PIV[0] + 0.112 * math.cos(LEV_TILT),
 SPR_REACH = 0.114
 SHOE_X    = 0.108
 SHOE_Y0, SHOE_Y1 = 0.146, 0.222
+
+# (lev_bottom_y 삭제 — 쇄기 푸시 탭이 없어져 쓰는 곳이 사라졌다)
+
+# ── 쇄기(Pawl/Wedge) — ★11시, 진자 뭉치 옆 브래킷에 매달린다 ────────────────
+#   163638.mp4 육성 지시 + 표시 스크린샷(1637531.png):
+#   · 빨강 3곳 = 휠 **아래**에 있던 예전 쇄기 3종 세트 → 전부 삭제했다.
+#     ① Pawl 본체(바닥 피벗 벨크랭크) ② BaseFrame 의 쇄기 귀 브래킷·핀
+#     ③ Catch 레버의 쇄기 푸시 탭. "이게 왜 있는지 모르겠어 / 공중에 떠 있는 요거".
+#   · 노랑 1곳 = 쇄기가 새로 달릴 자리. 표시 픽셀을 카메라 역투영해 실측한 값이
+#     govBodyGrp 로컬 (-0.0779, 0.2700) = 휠중심에서 **r 0.090 / 방위 150°(11시)**.
+#     "이 세기가 요기에 달려야 돼 ... 진자를 벌어지면 이 쎄기가 여기로 툭 떨어져야 되니까"
+#
+#   ★쇄기는 여전히 **정지부**(govBodyGrp 직계)다. 휠과 함께 도는 진자에 붙여 버리면
+#     날(휠에 구워진 라쳇)과 같이 돌아 영원히 못 문다 — 멈출 수가 없다.
+#     대신 피벗을 진자 뭉치(릴리즈 탭 보스, 대기 방위 128°→개방 142°) **바로 옆**
+#     11시에 두어, 원심으로 벌어진 뭉치가 쇄기 트립 탭을 쳐서 떨어뜨리는 배치로 만든다.
+#   ★설계 핵심(유지): 피벗–휠중심–부리가 **직각**이면 쇄기 회전이 곧 부리의 반경 변화고,
+#     암이 톱니끝 안으로 파고들지 않는다(직선 PB 의 휠중심 최근접점이 곧 부리다).
+PAWL_PIV  = (-0.0779, 0.2700)      # ★11시 피벗 핀 (노란 표시 실측 — r 0.090 / 150°)
+PAWL_REST = CAM_OUT + CLAW_GAP     # 0.0575 대기 부리 반경 (톱니끝 위 1.5mm)
+PAWL_BITE = 0.0500                 # 물림 부리 반경 (골 0.044 위 6mm)
+PAWL_BOSS = 0.0105                 # 피벗 보스 반경
+PAWL_HOLE = 0.0045                 # ★원형 피벗 홀 — 브래킷 핀이 관통한다
+PAWL_W    = 0.0072                 # 암 반폭 — 실물 사진(163937)처럼 넓적한 판
+PAWL_T    = 0.0055                 # 두께 — 날 평면에서 문다
+PAWL_Z    = 0.0445                 # 쇄기 평면 중심 = 날 평면 (0.0418~0.0473)
+                                   #   진자 앞면(0.041) 위 0.8mm, 날(0.0425~0.0465)을 덮고
+                                   #   캐치 레버(0.048~) 아래 0.8mm 로 빠진다 (BVH 로 확인)
+# ★브래킷은 캐치 레버(z 0.048~0.059) **앞**으로 뺀다. 마운트판에서 11시로 뻗으면
+#   레버 띠를 반드시 가로지르는데(레버는 x -0.100 까지 온다), 같은 z 에 두면 서로
+#   파고든다. 앞으로 빼면서 중앙 육각볼트(r 0.013, z 0.0615~0.0745)도 피해야 해서
+#   뿌리를 마운트판 **좌상 모서리**(r 0.0255)에 둔다.
+PAWL_BRK_Z = 0.0650                # 피벗 브래킷 판 중심 (0.0605~0.0695)
+PAWL_BRK_A = (-0.0185, 0.2425)     # 브래킷 뿌리 = 마운트판 좌상 모서리
+# 트립 탭 — 진자 뭉치(릴리즈 탭 사각머리)가 치는 면. **피벗 기준** 극좌표로 잡는다.
+#   ★휠 중심 기준으로 잡으면 안 된다 — 피벗이 이미 r 0.090 이라 휠 방위를 조금만
+#     돌려도 탭이 피벗 코앞(8mm)에 붙어 모멘트 암이 사라지고 스냅링과 겹친다.
+#   방향 86° / 길이 0.024 는 스윕 최적값: 뭉치의 진행 방향(-0.830,-0.558)에 대해
+#   토크 +0.0189 (CCW ✓), 스냅링(13mm) 회피, 휠 r 0.1028 (노란 밴드 안), 대기 간극
+#   7.8mm, 스트로크 40% 부터 밀기 시작해 최종 잔여 0.9mm.
+PAWL_TAB_D = math.radians(86)
+PAWL_TAB_L = 0.024
+PAWL_TAB_R = 0.0980
+PAWL_TAB_Z = 0.0355                # 탭만 z 로 내려와 진자 층(0.027~0.041)과 겹친다
+
+def _pawl_geo():
+    """피벗–휠중심–부리 직각 구성에서 부리 방위·암 길이·물림 회전각을 역산한다."""
+    d = math.hypot(PAWL_PIV[0], PAWL_PIV[1] - GWY)          # 피벗–휠중심 거리
+    base = math.atan2(PAWL_PIV[1] - GWY, PAWL_PIV[0])       # 휠중심→피벗 방위
+    arm = math.sqrt(d * d - PAWL_REST ** 2)                 # 피벗→부리 암 길이
+    a_rest = base + math.acos(PAWL_REST / d)                # 부리 방위 (CCW 해)
+    psi0 = math.acos(arm / d)                               # 피벗에서 본 대기 사잇각
+    psi1 = math.acos((d * d + arm * arm - PAWL_BITE ** 2) / (2 * d * arm))
+    return a_rest, arm, psi0 - psi1                         # 물림각(CCW, +z)
+
+PAWL_A, PAWL_ARM, PAWL_ROT = _pawl_geo()   # 200.29° / 0.0692 / +0.1086 rad
+# ★js/environment.js pose.trip.pawl 은 PAWL_ROT 와 같은 값이어야 한다.
+
+# 톱날 위상 — 부리가 걸림면 다음 **골 한가운데**(a0 + 0.94·step)에 오도록 역산.
+_STEP = 2.0 * math.pi / CAM_TEETH
+CAM_PHASE = (PAWL_A - 0.94 * _STEP) % _STEP     # ≈ 24.2°
 
 BASE_L    = -0.175
 SW_X, SW_Y, SW_Z = -0.139, 0.220, 0.050
@@ -285,15 +347,67 @@ PEND_ARM_T = 0.026                  # 피벗→웨이트 접선 성분 (개방 �
 PEND_ARM_R = 0.022                  # 피벗→웨이트 반경 성분
 PEND_MASS  = math.hypot(PEND_PIV_R + PEND_ARM_R, PEND_ARM_T)   # 0.0581 대기 반경
 PEND_LAG   = math.atan2(PEND_ARM_T, PEND_PIV_R + PEND_ARM_R)   # 웨이트가 피벗보다 뒤처지는 각
-PEND_W_R   = 0.0190                 # 웨이트 원판 반경
+PEND_W_R   = 0.0190                 # 웨이트 원판 반경 (앞·뒤 원판 공통)
 PEND_B_R   = 0.0105                 # 피벗 보스 반경
-PEND_W_T   = 0.014                  # 웨이트 두께(z) — 두툼하게
 PEND_TAB_L = 0.010                  # ★릴리즈 탭 반경 길이 (스위치에 닿도록 2mm 연장)
 PEND_TAB_W = 0.014
-PEND_REAR  = -0.024                 # 피벗 볼트 뒤끝 — 뒷면 링크가 붙는 z
+PEND_TAB_T = 0.014                  # 릴리즈 탭 두께(z) — 탭은 전면 원판 층에만 붙는다
+PEND_REAR  = -0.024                 # ★웨이트 뒤끝 = 피벗 볼트 뒤끝 = 뒷면 링크 z
 PEND_LNK_T = 0.007
+# ── ★웨브 관통 목 (앞 원판 ↔ 뒤 원판을 잇는 축) ─────────────────────────────
+#   반경은 두 간섭이 정한다. 개방(+0.45rad)에서 웨이트 중심은 r 0.0581 → 0.0627.
+#   ① 파란 바디 링 내경 0.076 (z -0.008~0.016) → 0.076-0.0627-여유 = 0.0120 상한
+#   ② 노란 스포크 → SPOKE_BIAS 보정 후 전 스트로크 최소거리 0.0160 (여유 4.0mm)
+PEND_THRU_R = 0.0120
+PEND_WEB_R  = -0.010                # 관통 목 뒤끝 — 바디 링(-0.008)보다 2mm 뒤
+PEND_WEB_F  = 0.026                 # 관통 목 앞끝 — 전면 밴드(0.025)보다 1mm 앞
 SPOKE_N    = 3
-SPOKE_A0   = PEND_ANG_A - PEND_LAG - math.radians(30)   # 첫 스포크 방위 ≈ 98.4°
+# 첫 스포크 방위. 3발이 스포크와 180° 진자 2개를 동시에 권역 한가운데 둘 수는 없어
+# "권역 시작점 +30°" 가 최적해다. 여기에 SPOKE_BIAS 를 더한다 —
+#   ① 블레이드가 curve 로 방위 감소 쪽으로 휘어 실제 중심선이 8°가량 밀려 있고
+#   ② 개방에서 두 진자가 방위 +13.8° 이동해 PendB 쪽 창이 먼저 닫힌다.
+#   +14° 가 A(대기)·B(개방) 양쪽 최소거리를 0.0160 으로 같게 만드는 최적값이다.
+SPOKE_BIAS = math.radians(14)
+SPOKE_A0   = PEND_ANG_A - PEND_LAG - math.radians(30) + SPOKE_BIAS   # 첫 스포크 방위 ≈ 112.4°
+
+# ── ★진자 뒷면 연동 기구 — 링크 2개 (실사 조속기 원리) ────────────────────────
+#   육성 지시(153224.mp4 40~115s): "뒤쪽에서 보면 동그라미보다 넓은 브라켓이 있고,
+#   두 진자가 링크 두 개로 이어져 있어. 하나는 스프링이고 하나는 스프링이 아닌 거."
+#   → 진자마다 따로 붙던 가짜 코일·링크를 전부 버리고, **두 진자를 실제로 잇는**
+#     ①강성 연동 링크(타이바) ②복귀 인장 스프링 두 부재만 남긴다.
+#
+#   [캐노니컬 좌표] build_pendulum 의 W() 좌표 — x = 접선, y = 반경.
+#   월드로는 x → 방위 (PEND_ANG_A-90°), y → 방위 PEND_ANG_A 로 간다.
+#   두 진자는 점대칭이라 B 프레임의 캐노니컬 c 는 월드에서 -c·e1 로 나온다.
+#
+#   ★타이바(강성): A 러그를 캐노니컬 +k, B 러그를 -k 에 두면 두 러그의 **월드
+#     오프셋이 같아진다** → 러그 간 벡터 = 피벗-피벗 벡터(2·PEND_PIV_R)로 고정.
+#     즉 개방 각도와 무관하게 길이 60mm 불변, 회전 없이 **평행이동만** 하는
+#     평행사변형 커플러다. 그래서 두 진자가 반드시 같은 각으로 함께 벌어진다.
+#     (점대칭 위치에 링크를 걸면 길이가 변해 강성 링크가 성립하지 않는다 —
+#      예전 코드가 진자마다 링크를 따로 박아 놓은 이유이자 실패한 지점.)
+#   ★인장 스프링: 반대로 A·B 러그를 캐노니컬 **같은 부호 쪽**에 두어 길이가
+#     변하게 한다. 원심 개방에서 60.8mm → 65.0mm 로 늘어나 복귀력을 만든다.
+#   ★두 링크는 휠 중심(축 r0.009·후면 보스)을 사이에 두고 반대편을 지난다.
+TIE_KX  = -0.027     # 타이바 러그 — A 캐노니컬 x (B 는 -TIE_KX)
+SPR_MX  =  0.032     # 인장 스프링 러그 — A 캐노니컬 x
+SPR_NX  = -0.022     # 인장 스프링 러그 — B 캐노니컬 x
+LUG_R   =  0.0095    # 브라켓 러그 보스 반경
+LUG_PIN =  0.0034    # 러그 핀 반경
+BRK_T   =  0.0065    # 뒷면 브라켓 판 두께
+
+_FC = PEND_ANG_A - math.pi / 2                 # 캐노니컬 프레임 각
+E1  = (math.cos(_FC), math.sin(_FC))           # 캐노니컬 +x(접선)의 월드 방향
+OW  = (PEND_PIV_R * math.cos(PEND_ANG_A),
+       PEND_PIV_R * math.sin(PEND_ANG_A))      # A 피벗 (휠 중심 기준)
+
+def lugA(cx):
+    """A 진자의 캐노니컬 x 러그 → 휠 중심 기준 좌표 (대기 자세)."""
+    return (OW[0] + cx * E1[0], OW[1] + cx * E1[1])
+
+def lugB(cx):
+    """B 진자의 캐노니컬 x 러그 → 휠 중심 기준 좌표 (프레임이 180° 뒤집혀 부호 반전)."""
+    return (-OW[0] - cx * E1[0], -OW[1] - cx * E1[1])
 
 # ── z 층 (뒤 → 앞) ──────────────────────────────────────────────────────────
 #   진자 0.027~0.041 → 날 0.0425~0.0465 → 캐치 레버 0.048~0.059
@@ -301,8 +415,15 @@ Z_WHEEL_F = 0.026    # 휠 전면 최전방
 Z_CAM     = 0.0445   # ★날 평면 중심 — 진자 바로 다음 면(겹치지 않음), 레버보다 뒤
 Z_PEND_F  = 0.041    # 진자 웨이트 전면 z
 Z_PEND    = 0.032    # 진자 기준 평면 (뒷면 링크 계산용)
+# ★웨이트는 후면 브라켓 층(PEND_REAR)부터 전면(Z_PEND_F)까지 축방향으로 관통한다.
+PEND_W_T  = Z_PEND_F - PEND_REAR         # 0.065 — 웨이트 축방향 전체 두께
+PEND_W_ZC = (Z_PEND_F + PEND_REAR) / 2   # 0.0085 — 관통 추의 축방향 중심
 Z_GLASS   = 0.042    # 반투명 커버 전면
 Z_LEVER   = CATCH_PIV[2]            # 캐치 레버 평면 중심 (0.0535)
+# ── 뒷면 층 (앞 → 뒤): 추 뒤끝 -0.024 → 브라켓 → 타이바 → 스프링 → 후면 커버 -0.049
+BRK_Z   = -0.02725   # 뒷면 넓은 브라켓 판 중심 (-0.0305 ~ -0.024)
+TIE_Z   = -0.036     # 타이바 평면 중심   (-0.039 ~ -0.033)
+PSPR_Z  = -0.0405    # 인장 스프링 축 중심 (코일 외경 포함 -0.0476 ~ -0.0334)
 
 def LEVP(rx, ry):
     """캐치 레버 로컬(수평 기준, 원점=피벗) → govBodyGrp 로컬. 기울기 LEV_TILT 적용."""
@@ -353,7 +474,9 @@ def build_base():
     
     # ★뒷면 파란 페데스탈 박스는 두지 않는다 — 뒤에서 보면 휠 한가운데를 가리는
     #   네모 뭉치로만 보였다. 축은 후면 투명 커버 중앙의 육각 볼트가 잡는다.
-    p.append(add_cyl(0.020, 0.022, T(0, GWY, -0.036), MAT_GREY, rot=AX, verts=28))
+    #   ★후면 베어링 칼라는 r0.012 로 얇다 — 예전 r0.020 은 진자 뒷면 타이바
+    #     (휠 중심에서 최소 15.5mm)·인장 스프링(15.3mm)이 지나는 길을 막았다.
+    p.append(add_cyl(0.012, 0.022, T(0, GWY, -0.036), MAT_GREY, rot=AX, verts=24))
     p.append(add_cyl(0.009, 0.104, T(0, GWY, -0.008), MAT_CHROME, rot=AX, verts=20))
     
     ax_ = SPR_BASE[0] + math.sin(SPR_TILT) * SPR_REACH
@@ -394,6 +517,25 @@ def build_base():
     p.append(add_box((0.005, SW_D + 0.004, SW_H - 0.008), T(*SWP(SW_X - SW_W / 2 - 0.004, SW_Y), SW_Z), MAT_GREY, rot=SW_ROT))
     for by in (SW_Y - SW_H * 0.28, SW_Y + SW_H * 0.28):
         p.append(add_cyl(0.0030, 0.012, T(*SWP(SW_X - SW_W / 2 - 0.008, by), SW_Z), MAT_CHROME, rot=(0, math.pi / 2 + SW_TILT, 0), verts=12))
+
+    # ── ★쇄기 피벗 브래킷 + 샤프트 핀 — 11시(진자 뭉치 옆)로 옮겼다 ───────────
+    #   예전엔 마운트판에서 **좌하**로 내린 귀였고, 그 귀·핀·쇄기·레버 푸시 탭이
+    #   화면에서 "공중에 떠 있는 3종 세트"로 보였다(1637531.png 빨강 3곳) → 삭제.
+    #   이제 마운트판에서 **좌상 11시**로 뻗은 넓은 귀가 쇄기를 확실히 물고 있다.
+    #   판은 날(0.0425~0.0465)·쇄기(0.042~0.048)보다 앞(z 0.049~0.058)이라 안 닿는다.
+    #   ★귀 끝단은 쇄기 보스(0.0105)보다 **좁게**(0.0080) 한다 — 브래킷이 쇄기보다
+    #     앞(z 0.0605~)이라 넓으면 정면에서 쇄기 피벗을 통째로 가린다.
+    p.append(add_plate(tangent_hull(PAWL_BRK_A, 0.0100, PAWL_PIV, 0.0080), 0.009,
+                       MAT_GREY, loc=(0, -PAWL_BRK_Z, 0), bevel_w=0.0010,
+                       name="pawlBracket"))
+    #   뿌리 라이저 — 마운트판 앞면(0.0575)에서 브래킷 뒷면(0.0605)까지 세운 발
+    p.append(add_cyl(0.0090, 0.0060, T(PAWL_BRK_A[0], PAWL_BRK_A[1], 0.0590),
+                     MAT_GREY, rot=AX, verts=20))
+    #   핀 — 브래킷 앞면(0.0695)에서 쇄기 뒤(0.0405)까지 관통한다
+    p.append(add_cyl(PAWL_HOLE - 0.0004, 0.0290, T(PAWL_PIV[0], PAWL_PIV[1], 0.0550),
+                     MAT_CHROME, rot=AX, verts=18))
+    p.append(add_cyl(0.0072, 0.0040, T(PAWL_PIV[0], PAWL_PIV[1], 0.0395),
+                     MAT_CHROME, rot=AX, verts=16))   # 핀 뒤끝 스냅 링
 
     # 후면 투명 커버 고정용 베이스 프레임 체결 브라켓 & 스터드 보스 (나비너트 물리 결합부)
     rc_b = 0.125
@@ -502,11 +644,14 @@ def build_pulley():
 # =============================================================================
 #  4-4. PendA / PendB — ★동그란 원형 플라이웨이트 진자 + 상단 진자 스위치 릴리즈 탭
 # =============================================================================
-def build_pendulum(name, pivot_ang, release_tab=False, rear_layer=0):
+def build_pendulum(name, pivot_ang, release_tab=False, tie_cx=0.0, spr_cx=0.0):
     """동그란 플라이웨이트 진자.
        ★"진자는 여기에 들어가 있으면서 앞뒤로 잡으러 튀어나와 있어야 되고" —
-         웨이트는 휠 앞으로 두툼하게 솟고, 피벗 볼트는 휠 웨브를 관통해 뒤로 나가
-         뒷면의 링크 바·인장 스프링과 물린다.
+         웨이트는 후면 브라켓 층(PEND_REAR)에서 시작해 노란 스포크 사이 개구부를
+         z 로 관통하고 휠 앞(Z_PEND_F)까지 뻗는 두꺼운 고체 추다(두께 PEND_W_T=65mm).
+         그래서 정면·후면·사선 어디서 봐도 추가 휠을 뚫고 지나가는 게 보인다.
+       ★단 휠 웨브 구간(PEND_WEB_R~PEND_WEB_F)만 PEND_THRU_R 로 좁힌다 —
+         파란 바디 링(내경 0.076)이 개방 자세 원판 외경(0.0817)과 겹치기 때문이다.
        ★암과 원판을 한 덩어리 hull 로 만들면 "오이 모양"이 된다. 원판은 독립 실루엣,
          암은 확실히 더 가는 별도 바로 뒤층에 깐다."""
     F = pivot_ang - math.pi / 2
@@ -517,7 +662,9 @@ def build_pendulum(name, pivot_ang, release_tab=False, rear_layer=0):
         return (piv[0] + cx * math.cos(F) - cy * math.sin(F),
                 piv[1] + cx * math.sin(F) + cy * math.cos(F))
 
-    zc = Z_PEND_F - PEND_W_T / 2           # 웨이트 평면 중심 (0.034)
+    zc  = (PEND_WEB_F + Z_PEND_F) / 2      # 전면 원판 평면 중심 (0.0335)
+    zrc = (PEND_REAR + PEND_WEB_R) / 2     # 후면 원판 평면 중심 (-0.017)
+    znc = (PEND_WEB_R + PEND_WEB_F) / 2    # 웨브 관통 목 중심 (0.008)
     dx, dy = W(mc[0], mc[1])
     p = []
     # 암 — 원판보다 확실히 가는 바 (뒤층)
@@ -525,71 +672,196 @@ def build_pendulum(name, pivot_ang, release_tab=False, rear_layer=0):
     arm = tangent_hull((0.0, 0.0), PEND_B_R, mc, aw)
     p.append(add_plate([W(q[0], q[1]) for q in arm], 0.008, MAT_GREY,
                        loc=(0, -(zc - 0.003), 0), bevel_w=0.0012, name="pendArm"))
-    # 동그란 웨이트 원판 (전 모서리 챔퍼)
+    # 동그란 웨이트 — 전면 원판 / 웨브 관통 목 / 후면 원판이 한 덩어리 고체 추
     disc = [(dx + PEND_W_R * math.cos(2 * math.pi * k / 48),
              dy + PEND_W_R * math.sin(2 * math.pi * k / 48)) for k in range(48)]
-    p.append(add_plate(disc, PEND_W_T, MAT_STEEL, loc=(0, -zc, 0),
+    p.append(add_plate(disc, Z_PEND_F - PEND_WEB_F, MAT_STEEL, loc=(0, -zc, 0),
                        bevel_w=0.0022, name="pendMass"))
-    p.append(add_cyl(PEND_W_R - 0.0055, 0.0025, T(dx, dy, Z_PEND_F - 0.0005),
-                     MAT_STEEL, rot=AX, verts=40))
-    p.append(add_cyl(0.0046, 0.006, T(dx, dy, Z_PEND_F - 0.0025), MAT_CHROME, rot=AX, verts=20))
-    # ── 과속스위치 릴리즈 탭 (PendA 전용) ────────────────────────────────────
-    #   "스위치가 쪼가리를 못치잖아 → 더 바깥쪽으로 튀어나와야 돼"
+    p.append(add_cyl(PEND_THRU_R, PEND_WEB_F - PEND_WEB_R, T(dx, dy, znc),
+                     MAT_STEEL, rot=AX, verts=36))
+    p.append(add_plate(disc, PEND_WEB_R - PEND_REAR, MAT_STEEL, loc=(0, -zrc, 0),
+                       bevel_w=0.0022, name="pendMassRear"))
+    # 앞·뒤 챔퍼 림 + 중심 캡 — 양쪽에서 똑같이 두툼한 추로 보이게 대칭 배치
+    for zf, zk in ((Z_PEND_F - 0.0005, Z_PEND_F - 0.0025),
+                   (PEND_REAR + 0.0005, PEND_REAR + 0.0025)):
+        p.append(add_cyl(PEND_W_R - 0.0055, 0.0025, T(dx, dy, zf), MAT_STEEL, rot=AX, verts=40))
+        p.append(add_cyl(0.0046, 0.006, T(dx, dy, zk), MAT_CHROME, rot=AX, verts=20))
+    # ── 과속스위치 릴리즈 탭 (PendA 전용 실사 체결 볼트 조합) ─────────────────
+    #   실사 구조: 진자 원통 추 외경에 탭 구멍 → 하단 육각 너트 → 나사산 스터드 → 상단 정사각형 네모 머리 볼트
     if release_tab:
+        ztab = Z_PEND_F - PEND_TAB_T / 2   # 0.034
         rl = math.hypot(dx, dy - GWY)
         ux, uy = dx / rl, (dy - GWY) / rl
         ang = math.atan2(uy, ux)
-        base = PEND_W_R - 0.003
-        tc = (dx + ux * (base + PEND_TAB_L / 2), dy + uy * (base + PEND_TAB_L / 2))
-        p.append(add_box((PEND_TAB_L, PEND_W_T, PEND_TAB_W), T(tc[0], tc[1], zc),
+        rot_rad = (0, math.pi / 2 - ang, 0)  # 반경 방향(ux, uy)과 100% 수직·직각 정렬
+        
+        # 1. 하단 육각 너트 (Hex locknut sitting directly on flyweight cylinder rim)
+        r_nut = PEND_W_R + 0.0022
+        p_nut = (dx + ux * r_nut, dy + uy * r_nut)
+        p.append(add_cyl(0.0065, 0.0045, T(p_nut[0], p_nut[1], ztab),
+                         MAT_CHROME, rot=rot_rad, verts=6))
+
+        # 2. 나사산 스터드 기둥 (Threaded bolt shaft protruding radially)
+        r_shaft = PEND_W_R + 0.0075
+        p_shaft = (dx + ux * r_shaft, dy + uy * r_shaft)
+        p.append(add_cyl(0.0035, 0.010, T(p_shaft[0], p_shaft[1], ztab),
+                         MAT_STEEL, rot=rot_rad, verts=16))
+        # 나사산 링 연출 (Thread rings)
+        for ring_off in (0.0055, 0.0085):
+            p_ring = (dx + ux * ring_off, dy + uy * ring_off)
+            p.append(add_cyl(0.0039, 0.0012, T(p_ring[0], p_ring[1], ztab),
+                             MAT_CHROME, rot=rot_rad, verts=16))
+
+        # 3. 상단 정사각형 네모 머리 볼트 (Square head bolt striking switch lever)
+        r_head = PEND_W_R + 0.0135
+        p_head = (dx + ux * r_head, dy + uy * r_head)
+        p.append(add_box((0.0090, 0.0090, 0.0090), T(p_head[0], p_head[1], ztab),
                          MAT_STEEL, rot=(0, -ang, 0)))
-        nose = (dx + ux * (base + PEND_TAB_L), dy + uy * (base + PEND_TAB_L))
-        p.append(add_cyl(PEND_TAB_W / 2, PEND_W_T + 0.001, T(nose[0], nose[1], zc),
-                         MAT_CHROME, rot=AX, verts=28))
     # ── 피벗 볼트 — 휠을 관통해 뒤로 (앞: 육각 머리 / 뒤: 링크·스프링) ────────
     #   z 상한 0.042 — 캐치 레버(0.048~)와 날(0.0425~0.0465)이 피벗 원 위를 지난다.
     p.append(add_cyl(PEND_B_R * 0.82, 0.004, T(piv[0], piv[1], 0.0345),
                      MAT_STEEL, rot=AX, verts=24))
     p.append(add_cyl(0.0072, 0.005, T(piv[0], piv[1], 0.0375), MAT_CHROME, rot=AX, verts=6))
-    p.append(add_cyl(0.0052, 0.041 - PEND_REAR, T(piv[0], piv[1], (0.041 + PEND_REAR) / 2),
+    p.append(add_cyl(0.0052, PEND_W_T + 0.008, T(piv[0], piv[1], PEND_W_ZC - 0.004),
                      MAT_CHROME, rot=AX, verts=18))
-    # ── 뒷면 링크 바 + 인장 스프링 (두 진자를 뒤에서 잇는다) ─────────────────
-    zl = PEND_REAR + (0.0 if rear_layer == 0 else PEND_LNK_T + 0.002)
-    bar = [(-0.007, -0.072), (0.006, -0.072), (0.006, 0.002), (-0.007, 0.002)]
-    p.append(add_plate([W(b[0], b[1]) for b in bar], PEND_LNK_T, MAT_STEEL,
-                       loc=(0, -zl, 0), bevel_w=0.0008, name="pendLink"))
-    spr_rot = (0, -(pivot_ang + math.pi / 2), 0)   # 코일 축 = 링크 축선(반경 안쪽)
-    sb = W(-0.001, -0.062)
-    p.append(add_box((0.015, PEND_LNK_T + 0.007, 0.011), T(sb[0], sb[1], zl), MAT_GREY))
-    for i in range(7):
-        sx, sy = W(-0.001, -0.032 - i * 0.0045)
-        p.append(add_torus(0.0058, 0.0013, T(sx, sy, zl), MAT_CHROME,
-                           rot=spr_rot, mseg=20, nseg=8))
-    p.append(add_cyl(0.0026, 0.032, T(*W(-0.001, -0.046), zl), MAT_CHROME,
-                     rot=spr_rot, verts=12))
+    # ── ★뒷면 넓은 브라켓 + 링크 러그 2개 ──────────────────────────────────
+    #   "뒤쪽에서 이렇게 보면 요렇게 동그라미가 더 넓게 브라켓이 이렇게 있고,
+    #    이쪽도 당연히 브라켓이 있으면 두 개가 링크가 돼 있어야 되겠지"
+    #   ① 넓은 판 — 관통 추 뒤를 덮는 부채꼴 (추 지름보다 15% 넓다)
+    #   ② 크로스바 — 피벗을 가로질러 두 러그(타이바·스프링)를 물고 있는 접선 바
+    #   링크 자체는 진자 노드가 아니라 PendTie / PendSpring 독립 노드다.
+    #   진자에 구우면 상대 진자를 따라갈 수 없어(최대 27mm 어긋남) 링크가 성립 안 한다.
+    p.append(add_plate([W(q[0], q[1]) for q in
+                        tangent_hull((0.0, 0.0), PEND_B_R * 1.5, mc, PEND_W_R * 1.15)],
+                       BRK_T, MAT_STEEL, loc=(0, -BRK_Z, 0), bevel_w=0.0012,
+                       name="pendBracket"))
+    bar_l, bar_r = min(tie_cx, spr_cx) - 0.004, max(tie_cx, spr_cx) + 0.004
+    p.append(add_plate([W(q[0], q[1]) for q in
+                        tangent_hull((bar_l, 0.0), LUG_R, (bar_r, 0.0), LUG_R)],
+                       BRK_T, MAT_STEEL, loc=(0, -BRK_Z, 0), bevel_w=0.0012,
+                       name="pendBracketBar"))
+    brk_face = BRK_Z + BRK_T / 2                     # 브라켓 앞면 (-0.024)
+    #   러그 핀 — 브라켓을 뚫고 뒤로 나가 각 링크의 아이(eye)를 관통한다
+    for cx, zt in ((tie_cx, TIE_Z - 0.005), (spr_cx, PSPR_Z - 0.005)):
+        lp = W(cx, 0.0)
+        p.append(add_cyl(LUG_PIN, brk_face - zt, T(lp[0], lp[1], (brk_face + zt) / 2),
+                         MAT_CHROME, rot=AX, verts=16))
+        p.append(add_cyl(0.0052, 0.0032, T(lp[0], lp[1], zt + 0.0016),
+                         MAT_CHROME, rot=AX, verts=6))   # 핀 뒤끝 고정 너트
+    #   피벗 뒷면 너트 — 브라켓이 피벗 볼트에 물린 것을 보여준다
+    p.append(add_cyl(0.0080, 0.0035, T(piv[0], piv[1], BRK_Z - BRK_T / 2 - 0.0018),
+                     MAT_CHROME, rot=AX, verts=6))
     return join_group(p, name, origin=T(piv[0], piv[1], Z_PEND - 0.008))
+
+# =============================================================================
+#  4-4b. PendTie / PendSpring — ★두 진자 뒷면 브라켓을 잇는 링크 2개
+#        (진자 노드가 아니라 휠 직계 자식. env.js governor.setLinkage 가 몬다.)
+# =============================================================================
+def build_pend_tie():
+    """강성 연동 링크(타이바) — 스프링이 아닌 쪽 링크.
+       두 러그의 월드 오프셋이 같아 길이 60mm 가 고정이고 **평행이동만** 한다.
+       ★원점 = 휠 중심(z 0) → env.js 는 position.x/y 만 건드리면 된다."""
+    a, b = lugA(TIE_KX), lugB(-TIE_KX)
+    A2, B2 = (a[0], GWY + a[1]), (b[0], GWY + b[1])
+    p = [add_plate(tangent_hull(A2, LUG_R - 0.0007, B2, LUG_R - 0.0007), 0.006, MAT_STEEL,
+                   loc=(0, -TIE_Z, 0), bevel_w=0.0012, name="pendTieBar")]
+    for c in (A2, B2):
+        p.append(add_ring(LUG_R - 0.0007, LUG_PIN + 0.0004, 0.0090,
+                          T(c[0], c[1], TIE_Z), MAT_CHROME, rot=AX, verts=26))
+    return join_group(p, "PendTie", origin=T(0, GWY, 0))
+
+
+def build_pend_spring():
+    """복귀 인장 스프링 — 스프링 쪽 링크. 아이볼트 + 조정 너트 + 코일.
+       ★로컬 +X 로 곧게 눕혀 만든다. env.js 가 A 러그에 놓고(position)
+         B 러그를 향해 돌린 뒤(rotation.z) scale.x 로 늘인다.
+         원점 = A 러그(z 0) 라 mount() 가 대기 위치를 그대로 읽어 간다."""
+    a, b = lugA(SPR_MX), lugB(SPR_NX)
+    L0 = math.hypot(b[0] - a[0], b[1] - a[1])          # 60.83mm (개방 시 64.98mm)
+    ox, oy = a[0], GWY + a[1]
+    p = []
+    for ex in (0.0, L0):                                # 양 끝 아이(eye)
+        p.append(add_ring(0.0082, LUG_PIN + 0.0004, 0.0085,
+                          T(ox + ex, oy, PSPR_Z), MAT_CHROME, rot=AX, verts=24))
+    p.append(add_cyl(0.0026, L0 - 0.012, T(ox + L0 / 2, oy, PSPR_Z),
+                     MAT_CHROME, rot=(0, math.pi / 2, 0), verts=14))   # 조정 나사봉
+    p.append(add_helix(T(ox + 0.010, oy, PSPR_Z), MAT_CHROME, coil_r=0.0055, wire=0.0016,
+                       turns=11, length=0.031, name="pendSprCoil", rot=(0, math.pi / 2, 0)))
+    for hx in (0.0075, 0.0430):                         # 코일 시트 / 조정 육각 너트
+        p.append(add_cyl(0.0058, 0.0040, T(ox + hx, oy, PSPR_Z),
+                         MAT_CHROME, rot=(0, math.pi / 2, 0), verts=6))
+    return join_group(p, "PendSpring", origin=T(ox, oy, 0))
+
 
 # =============================================================================
 #  4-5. Catch — 폴리시드 캐치 레버 + 떡판(캐치슈) 레그
 # =============================================================================
 def claw_pts():
-    """쇄기 발톱 윤곽 (govBodyGrp 좌표). 바깥 변은 레버 하면을 따라 붙고,
-       안쪽 변은 톱니끝(CAM_OUT) 위 CLAW_GAP 를 훑는다.
-       ★운동학: 발톱을 캐치 피벗 둘레로 φ 돌리면 반경은 dr = 0.043·cosθ·φ 로만 변한다.
-         그래서 θ≈180°(왼쪽)에 둬야 낙하(+0.12rad)가 반경 감소 = 물림이 된다."""
-    ri = CAM_OUT + CLAW_GAP
-    _c, _s = math.cos(LEV_TILT), math.sin(LEV_TILT)
+    """쇄기 부리(Beak) 윤곽 (govBodyGrp 좌표) — 톱날 골에 박히는 쐐기.
+       ★걸림면과 1:1 로 물려야 한다. 한 이빨의 걸림면은 팁(a3, r CAM_OUT)에서
+         a4(=a3+0.08·step, r CAM_ROOT+0.002)까지 떨어지는 급경사면이라, 순수 반경에서
+         atan(step·0.08·r / (CAM_OUT-CAM_ROOT-0.002)) 만큼 기울어 있다.
+         부리의 CW 쪽(걸림) 옆면을 **같은 기울기**로 깎아야 면끼리 맞닿는다."""
+    step = 2.0 * math.pi / CAM_TEETH
+    # 걸림면 기울기 — 반경선 기준. 부리 방위에서 걸림면은 CW(방위 감소) 쪽에 있다.
+    lock_tilt = math.atan2(step * 0.08 * CAM_OUT, (CAM_OUT - CAM_ROOT) - 0.002)
+    # ★부리 폭은 골 입구보다 좁아야 앉는다. 물림 반경(0.050)에서 걸림면은 방위
+    #   270.8° 까지 물러나 있으므로 부리 CW 모서리를 271.5° 에 두면 0.7° 여유로
+    #   앉고, 이어지는 끌림(pose.ratchet)이 걸림면을 부리 옆면으로 밀어 문다.
+    half = math.radians(2.6)          # 부리 폭(방위) 절반 — 물림 반경에서 4.5mm
+    ro, ri = PAWL_REST + 0.013, PAWL_REST   # 뿌리(암 쪽) / 부리 끝
 
-    def lev_bottom(x):
-        rx = (x - 0.013 * _s) / _c
-        return (x, CATCH_PIV[1] + rx * _s - 0.013 * _c)
+    def P(a, r):
+        return (math.cos(a) * r, GWY + math.sin(a) * r)
 
-    pts = [lev_bottom(x) for x in (-0.0760, -0.0700, -0.0640, -0.0610)]
-    n = 4
-    for i in range(n):
-        a = math.radians(CLAW_A0 + (CLAW_A1 - CLAW_A0) * i / (n - 1))
-        pts.append((math.cos(a) * ri, GWY + math.sin(a) * ri))
-    return pts
+    # CW 쪽 옆면을 걸림면과 평행하게: 끝점에서 반경이 커질수록 방위를 lock_tilt 만큼 연다.
+    d_lock = math.atan2(math.tan(lock_tilt) * (ro - ri), ri)
+    return [P(PAWL_A - half, ri), P(PAWL_A + half, ri),
+            P(PAWL_A + half + math.radians(2.0), ro),
+            P(PAWL_A - half - d_lock, ro)]
+
+
+def build_pawl():
+    """쇄기(Pawl/Wedge) — 11시 브래킷 핀에 매달린 판. 원점=피벗 핀 = 애니메이션 회전축.
+       ★실물 사진(163937.png): 한쪽 끝에 원형 피벗 홀, 반대쪽은 톱날 골을 향해
+         사선으로 좁아지는 넓적한 방패꼴 판이다. 그래서 암을 넓게(PAWL_W) 잡고
+         부리 쪽으로 테이퍼를 준다.
+       원심으로 벌어진 진자 뭉치가 트립 탭을 치면 CCW(+PAWL_ROT)로 돌아
+       부리가 r 0.0575 → 0.0500 으로 떨어져 톱날 골에 박힌다."""
+    p = []
+    # ★암 끝은 부리 뿌리보다 조금 바깥에 둔다 — 물림으로 암이 안쪽으로 스윙할 때
+    #   안쪽 모서리가 톱니끝(0.056) 밑으로 내려가면 톱니 등을 긁는다.
+    beak_base = (math.cos(PAWL_A) * (PAWL_REST + 0.014),
+                 GWY + math.sin(PAWL_A) * (PAWL_REST + 0.014))
+    # 피벗 보스 → 부리로 좁아지는 방패꼴 본체 (실물처럼 넓적하게)
+    tabc = (PAWL_PIV[0] + PAWL_TAB_L * math.cos(PAWL_TAB_D),
+            PAWL_PIV[1] + PAWL_TAB_L * math.sin(PAWL_TAB_D))
+    #   ★본체와 트립 암을 **먼저 합친 뒤** 피벗 홀을 뚫는다. 트립 암을 따로 두고
+    #     본체만 뚫으면 암이 핀 자리를 막아 핀이 통짜 살을 관통한다(BVH 56면).
+    body = join_group([
+        add_plate(tangent_hull(PAWL_PIV, PAWL_BOSS + 0.0035, beak_base, PAWL_W), PAWL_T,
+                  MAT_CAM, loc=(0, -PAWL_Z, 0), bevel_w=0.0010, name="pawlBody"),
+        add_plate(tangent_hull(PAWL_PIV, PAWL_BOSS - 0.0015, tabc, 0.0060), PAWL_T,
+                  MAT_CAM, loc=(0, -PAWL_Z, 0), bevel_w=0.0008, name="pawlTripArm")
+    ], "pawlBody")
+    # ★원형 피벗 홀 — 브래킷 핀이 실제로 관통한다
+    bpy.ops.mesh.primitive_cylinder_add(vertices=24, radius=PAWL_HOLE, depth=0.040,
+                                        location=T(PAWL_PIV[0], PAWL_PIV[1], PAWL_Z), rotation=AX)
+    boolean_cut(body, bpy.context.active_object)
+    p.append(body)
+    p.append(add_plate(claw_pts(), PAWL_T, MAT_CAM,
+                       loc=(0, -PAWL_Z, 0), bevel_w=0.0008, name="pawlClaw"))
+    #   보스 보강 링 — ★판 두께 안에 넣는다. 앞으로 튀어나오면 캐치 레버(0.048~)를 뚫는다.
+    p.append(add_ring(PAWL_BOSS, PAWL_HOLE + 0.0008, PAWL_T - 0.0008,
+                      T(PAWL_PIV[0], PAWL_PIV[1], PAWL_Z), MAT_CHROME, rot=AX, verts=28))
+    # ── 트립 탭 보스 — 진자 뭉치(릴리즈 탭 사각머리)가 치는 면 ────────────────
+    #   ★탭만 z 로 진자 층(0.027~0.041)까지 내려와야 실제로 맞는다 —
+    #     쇄기 판(0.0418~0.0473)은 진자 앞면(0.041)보다 앞이라 그대로는 안 닿는다.
+    p.append(add_cyl(0.0058, PAWL_Z + PAWL_T / 2 - (PAWL_TAB_Z - 0.006),
+                     T(tabc[0], tabc[1],
+                       ((PAWL_Z + PAWL_T / 2) + (PAWL_TAB_Z - 0.006)) / 2),
+                     MAT_STEEL, rot=AX, verts=20, smooth=False))   # 진자 층까지 내려온 타격 보스
+    return join_group(p, "Pawl", origin=T(PAWL_PIV[0], PAWL_PIV[1], PAWL_Z))
 
 
 def build_catch():
@@ -600,29 +872,25 @@ def build_catch():
         return (P[0] + rx * _c - ry * _s, P[1] + rx * _s + ry * _c)
 
     p = []
+    # 레버판 — 좌단 스위치 타격 뭉치는 원본 tip 폴리곤(통짜 블록+작은 팁).
+    #   ★1·2번 빨간 원: 레버 위 장식 원형 캡/리벳은 실사에 없음 → 만들지 않음.
     tip = [(LEV_L + 0.020,  0.011), (LEV_L - 0.002,  0.011), (LEV_L - 0.004,  0.002),
            (LEV_L - 0.004, -0.014), (LEV_L + 0.004, -0.016), (LEV_L + 0.020, -0.007)]
     plate = tip + [(LEV_R, -0.013), (LEV_R, 0.014)]
     p.append(add_plate([A(q[0], q[1]) for q in plate], 0.011, MAT_STEEL,
                        loc=(0, -Z_LEVER, 0), bevel_w=0.0016, name="catchPlate"))
 
-    # ── 쇄기 발톱 — 레버 하면에서 날 평면(Z_CAM)까지 한 단 내려온 얇은 후크 ──
-    #   "쇠기가 나중에 날을 무는 거란 말이야" — 발톱과 날이 같은 면(Z_CAM)에서 만난다.
-    p.append(add_plate(claw_pts(), CLAW_T, MAT_CAM,
-                       loc=(0, -CLAW_Z, 0), bevel_w=0.0008, name="pawlClaw"))
-    p.append(add_cyl(0.0035, CLAW_T + 0.010, T(-0.0665, 0.2320, CLAW_Z + 0.004),
-                     MAT_CHROME, rot=AX, verts=16))          # 발톱 리벳 (레버와 결합)
+    # ★쇄기 푸시 탭 삭제 (1637531.png 빨강) — 쇄기가 11시로 옮겨가 진자 뭉치가
+    #   직접 치므로 레버에서 내려오던 이 발은 더 이상 아무 것도 누르지 않는다.
 
-    p.append(add_cyl(0.0130, 0.013, T(P[0], P[1], Z_LEVER + 0.013), MAT_CHROME, rot=AX, verts=28))
-    p.append(add_cyl(0.0065, 0.026, T(P[0], P[1], Z_LEVER - 0.004), MAT_CHROME, rot=AX, verts=16))
-    p.append(add_cyl(0.0095, 0.011, T(*A(0.112, 0.002), Z_LEVER + 0.011), MAT_CHROME, rot=AX, verts=20))
+    # 피벗 원형 캡(1번)·스프링 쪽 원형 캡(2번) 완전 삭제 — 레버 표면 매끈.
+    # Catch 노드 origin=CATCH_PIV 가 애니메이션 피벗이므로 메시 피벗 캡 불필요.
     p.append(add_cyl(0.015, 0.009, T(SPR_BASE[0], SPR_BASE[1] - 0.003, SPR_BASE[2]), MAT_GREY, rot=(0, SPR_TILT, 0), verts=20))
 
     leg = [(0.094, 0.300), (0.122, 0.312), (0.137, 0.268),
            (0.134, 0.230), (0.114, 0.226), (0.110, 0.266)]
     p.append(add_plate(leg, 0.014, MAT_STEEL, loc=(0, -Z_LEVER, 0), bevel_w=0.0012, name="shoeLeg"))
-    for rx, ry in ((0.118, 0.290), (0.126, 0.250)):
-        p.append(add_sphere(0.0036, T(rx, ry, Z_LEVER + 0.008), MAT_CHROME))
+    # 떡판 레그 위 장식 구(가짜 리벳) 삭제 — 실사 매끈면
     p.append(add_box((0.018, 0.048, 0.024), T(0.128, 0.228, 0.024), MAT_STEEL))
     shoe_h = SHOE_Y1 - SHOE_Y0
     shoe_y = (SHOE_Y0 + SHOE_Y1) / 2
@@ -670,9 +938,12 @@ def build_plunger():
 build_base()
 build_cover()
 build_pulley()
-build_pendulum("PendA", PEND_ANG_A, release_tab=True, rear_layer=0)
-build_pendulum("PendB", PEND_ANG_A + math.pi, rear_layer=1)
+build_pendulum("PendA", PEND_ANG_A, release_tab=True, tie_cx=TIE_KX, spr_cx=SPR_MX)
+build_pendulum("PendB", PEND_ANG_A + math.pi, tie_cx=-TIE_KX, spr_cx=SPR_NX)
+build_pend_tie()
+build_pend_spring()
 build_catch()
+build_pawl()
 build_spring()
 build_plunger()
 

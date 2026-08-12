@@ -1457,6 +1457,12 @@
       const lockT = 0.38;
       tl.to(gov.pendulums[0].rotation, { z: g.pendRot0[0] + pose.pendulum, duration: lockT, ease: 'power2.out' }, 0);
       tl.to(gov.pendulums[1].rotation, { z: g.pendRot0[1] + pose.pendulum, duration: lockT, ease: 'power2.out' }, 0);
+      // 뒷면 연동 링크(타이바·인장 스프링)도 같은 개방각으로 따라간다
+      if (gov.setLinkage) {
+        const lk = { v: gov.pendulums[0].rotation.z - g.pendRot0[0] };
+        tl.to(lk, { v: pose.pendulum, duration: lockT, ease: 'power2.out',
+                    onUpdate: () => gov.setLinkage(lk.v) }, 0);
+      }
       tl.to(wheel.rotation, { z: Wstop, duration: 0.55, ease: 'power2.out' }, 0);
       // ★동시 물림: 쇄기(캐치 일체)·암·스프링·스위치
       tl.to(gov.pawl.rotation, { z: g.pawlRot0 + (pose.pawl || 0), duration: 0.14, ease: 'power4.in' }, lockT);
@@ -1503,6 +1509,11 @@
       tl.to(wheel.rotation, { z: w2, duration: 0.80, ease: 'power1.inOut' }, 0.55);
       tl.to(gov.pendulums[0].rotation, { z: gov.geom.pendRot0[0], duration: 0.80, ease: 'power2.inOut' }, 0.55);
       tl.to(gov.pendulums[1].rotation, { z: gov.geom.pendRot0[1], duration: 0.80, ease: 'power2.inOut' }, 0.55);
+      if (gov.setLinkage) {
+        const lk = { v: gov.pendulums[0].rotation.z - gov.geom.pendRot0[0] };
+        tl.to(lk, { v: 0, duration: 0.80, ease: 'power2.inOut',
+                    onUpdate: () => gov.setLinkage(lk.v) }, 0.55);
+      }
       
       // 세이프티 기어 복귀 애니메이션 (웨지 하강·샤프트 복원·스프링 신장)
       const sg = carGrp.userData.safetyGear;

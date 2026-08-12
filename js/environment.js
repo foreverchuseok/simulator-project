@@ -2914,6 +2914,11 @@
       const govPendA = new THREE.Group();                     // 진자 (원심 개방)
       const govPendB = new THREE.Group();
       govWheelGrpL.add(govPendA, govPendB);
+      // 진자 뒷면 연동 링크 2개 — 두 진자를 실제로 잇는 부재라 진자가 아니라
+      // 휠 직계 자식이다 (진자에 매달면 상대 진자를 따라갈 수 없다).
+      const govPendTie = new THREE.Group();                   // 강성 타이바 (평행이동)
+      const govPendSpr = new THREE.Group();                   // 복귀 인장 스프링 (회전+신장)
+      govWheelGrpL.add(govPendTie, govPendSpr);
       const govTopArmGrp = new THREE.Group();                 // 캐치 레버 (트립 낙하)
       govBodyGrp.add(govTopArmGrp);
       const govSprGrp = new THREE.Group();                    // 그립 스프링 (scale.y 압축)
@@ -2926,13 +2931,58 @@
       govSwMountGrp.add(govPlungerGrp);
       const govRatchetGrp = new THREE.Group();                // 끌림 계산용 핸들 (메시 없음)
       govBodyGrp.add(govRatchetGrp);
-      const govPawlGrp = new THREE.Group();                   // 구 API 핸들 (훅은 캐치와 일체 — 회동 0)
-      govTopArmGrp.add(govPawlGrp);
+      // 쇄기(Pawl/Wedge) — ★11시 브래킷 핀에 매달린 **정지부**라 캐치 레버가 아니라
+      //   govBodyGrp 직계 자식이다. 원심으로 벌어진 진자 뭉치가 트립 탭을 쳐서
+      //   떨어뜨리면 부리가 휠의 톱날 골에 박힌다.
+      //   ★휠과 함께 도는 진자에 매달면 날과 같이 돌아 영원히 못 문다 — 붙이지 말 것.
+      const govPawlGrp = new THREE.Group();
+      govBodyGrp.add(govPawlGrp);
       const govTripGrp = new THREE.Group();
       govTopArmGrp.add(govTripGrp);
       const govLink = new THREE.Group();                      // 구 API 더미
       govLink.visible = false;
       govBodyGrp.add(govLink);
+
+      /* ── ★진자 연동 기구 (뒷면 링크 2개) — .py 와 같은 상수·같은 식 ──────────
+         두 진자는 휠 중심 기준 점대칭으로 놓여 같은 각(open)만큼 함께 벌어진다.
+         캐노니컬 좌표(x=접선, y=반경)에서 캐노니컬 +x 의 월드 방향이 E1 이고,
+         B 진자는 프레임이 180° 뒤집혀 캐노니컬 c 가 월드 -c·E1 로 나온다.
+
+         · 타이바(스프링 아닌 링크): A 러그 +k, B 러그 -k → 두 러그의 월드
+           오프셋이 같아져 러그 간 벡터가 피벗-피벗 벡터(60mm)로 **고정**된다.
+           길이가 안 변하는 진짜 강성 링크라, 회전 없이 평행이동만 시키면 된다.
+         · 인장 스프링: A·B 러그를 캐노니컬 같은 부호 쪽에 두어 길이가 변한다.
+           대기 60.83mm → 개방(0.45rad) 64.98mm 로 늘어나며 복귀력을 만든다.
+           메시는 로컬 +X 로 곧게 구워져 있어 회전 + scale.x 로 늘인다. */
+      const PIV_A = Math.PI * 155 / 180;   // .py PEND_ANG_A
+      const PIV_R = 0.030;                 // .py PEND_PIV_R
+      const TIE_KX = -0.027, SPR_MX = 0.032, SPR_NX = -0.022;  // .py 동명 상수
+      const E1X = Math.cos(PIV_A - Math.PI / 2), E1Y = Math.sin(PIV_A - Math.PI / 2);
+      const OWX = PIV_R * Math.cos(PIV_A), OWY = PIV_R * Math.sin(PIV_A);
+      const TIE_K0X = TIE_KX * E1X, TIE_K0Y = TIE_KX * E1Y;
+      let govSprL0 = 1;
+      // 진자 러그의 휠 로컬 좌표 — sgn +1 = A, -1 = B (B 는 오프셋 부호가 뒤집힌다)
+      const govLug = (cx, sgn, c, s) => {
+        const ox = sgn * cx * E1X, oy = sgn * cx * E1Y;
+        return { x: sgn * OWX + ox * c - oy * s, y: sgn * OWY + ox * s + oy * c };
+      };
+      const govSetLinkage = (open) => {
+        const c = Math.cos(open), s = Math.sin(open);
+        // 타이바 — 길이·방향 불변, 러그를 따라 평행이동만
+        govPendTie.position.set(TIE_K0X * c - TIE_K0Y * s - TIE_K0X,
+                                TIE_K0X * s + TIE_K0Y * c - TIE_K0Y, 0);
+        // 인장 스프링 — A 러그에 앉아 B 러그를 향해 돌고, 그만큼 늘어난다
+        const a = govLug(SPR_MX, 1, c, s), b = govLug(SPR_NX, -1, c, s);
+        const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy);
+        govPendSpr.position.set(a.x, a.y, 0);
+        govPendSpr.rotation.z = Math.atan2(dy, dx);
+        govPendSpr.scale.x = L / govSprL0;
+      };
+      {   // 대기 길이 기준값 — scale.x = 1 이 되는 지점
+        const a = govLug(SPR_MX, 1, 1, 0), b = govLug(SPR_NX, -1, 1, 0);
+        govSprL0 = Math.hypot(b.x - a.x, b.y - a.y);
+      }
+      govSetLinkage(0);
 
       // ── .glb 로드 — 노드(원점=피벗)를 래퍼에 장착 ───────────────────────
       new THREE.GLTFLoader().load('models/gltf/overspeed_governor.glb', (gltf) => {
@@ -2959,7 +3009,12 @@
         mount('Pulley', govWheelGrpL);
         mount('PendA', govPendA, wheelPivot);
         mount('PendB', govPendB, wheelPivot);
+        // 연동 링크 — 대기 위치는 govSetLinkage 가 매번 다시 잡으므로 장착만 한다
+        mount('PendTie', govPendTie, wheelPivot);
+        mount('PendSpring', govPendSpr, wheelPivot);
+        govSetLinkage(govPendA.rotation.z);
         mount('Catch', govTopArmGrp);
+        mount('Pawl', govPawlGrp);                           // 원점 = 베이스 피벗 핀
         mount('Spring', govSprGrp, govTopArmGrp.position);   // 수직 메시 → SPRING_TILT 로 기울음
         // 플런저: 마운트(-90°) 안에 원상 복원 회전(+90°)으로 장착 → position.x = 아래로 눌림
         const plg = g.getObjectByName('Plunger');
@@ -3000,6 +3055,11 @@
           wheel: govWheelGrpL,
           ratchet: govRatchetGrp,
           pendulums: [govPendA, govPendB],
+          // 진자 개방각(rad)을 넣으면 뒷면 링크 2개가 따라 움직인다.
+          // 진자 rotation.z 를 바꾸는 곳은 반드시 이걸 같이 호출해야 한다.
+          setLinkage: govSetLinkage,
+          pendTie: govPendTie,
+          pendSpring: govPendSpr,
           pawl: govPawlGrp,
           tripLever: govTripGrp,
           switchLever: govPlungerGrp,
@@ -3027,7 +3087,10 @@
             trip: {
               pendulum: 0.45,     // 돔 원심 개방
               topArm: 0.12,       // 캐치 낙하 — 좌단 12mm 하강 (플런저 5mm 눌림)
-              pawl: 0,            // 훅은 캐치와 일체
+              pawl: 0.1086,       // ★쇄기 물림 — .py PAWL_ROT 와 반드시 같은 값.
+                                  //   11시 피벗(r 0.090)에서 부리가 톱니끝 위 1.5mm
+                                  //   → 골 위 6mm 로 **떨어져** 박힌다(예전 0.2047 은
+                                  //   휠 바닥 피벗 시절 값).
               switchLever: 0.0076, // 액추에이터 레버 눌림 (마운트 -90°: +x = 아래) — 대기 간극 4mm
               ratchet: 0.22,      // 물린 채 끌림
               spring: 0.97        // 일자 링크라 스프링은 거의 안 눌린다

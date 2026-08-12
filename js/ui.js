@@ -243,6 +243,7 @@
           * gov.pose.trip.pendulum * 0.8;
         gov.pendulums[0].rotation.z = gov.geom.pendRot0[0] + open;
         gov.pendulums[1].rotation.z = gov.geom.pendRot0[1] + open;
+        if (gov.setLinkage) gov.setLinkage(open);   // 뒷면 타이바·인장 스프링 연동
         // 트립: 정격 130% 도달(또는 최하층 근접 시 과주 방지)
         if (!tripped && (v >= vTripMs || carGrp.position.y <= yFloor1 + 0.25)) {
           tripped = true; gsap.ticker.remove(fallTick); onGovernorOverspeed(spinDir, btn);
