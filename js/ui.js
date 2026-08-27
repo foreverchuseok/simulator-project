@@ -112,13 +112,15 @@
     function updateStatus(id, txt, col) { const e = document.getElementById(id); if (e) { e.textContent = txt; if (col) e.style.color = col; } console.log("Current FSM State:", currentState); }
 
     function openDoors(cb) {
+      // 점검 운전 중에는 도어 오퍼레이터 회로가 차단된다 (착상 위치가 아닐 수 있음)
+      if (insMode) { updateStatus('v-door', '점검운전 중 — 도어 조작 불가', '#f0883e'); return; }
       if (gsap.isTweening(carDoorL.position) || moving || estop) return;
       currentState = ELEVATOR_STATE.DOOR_OPENING;
       doorOpen = true; updateStatus('v-door', '열리는 중', '#f0883e'); clearTimeout(autoTimer);
       currentState = ELEVATOR_STATE.DOOR_OPEN;
       const h = hatchDoors[curFloor];
-      // 인터록 해정: 클러치가 적층 롤러를 물고 록 레버를 젖힘 → 접점 분리 → 도어 개방
-      if (h && h.hook) gsap.to(h.hook.rotation, { z: -0.28, duration: 0.28, ease: 'power1.out' });
+      // 인터록 해정: 클러치가 적층 롤러를 물고 록 레버를 젖힘(-z = 후크 끝 들림) → 접점 분리
+      if (h && h.hook) gsap.to(h.hook.rotation, { z: -0.30, duration: 0.28, ease: 'power1.out' });
       // 삼각키 레버 시각 연동(소폭) — 비상해제 표현은 최소
       if (h && h.triKey) gsap.to(h.triKey.rotation, { z: -0.08, duration: 0.28, ease: 'power1.out' });
       snd.doorOpen.currentTime = 0; snd.doorOpen.play();
@@ -131,7 +133,14 @@
           autoTimer = setTimeout(() => { if (doorOpen && !moving) closeDoors(); }, 3500);
         }
       });
-      if (h) { gsap.to(h.left.position, { x: h.left.userData.ox, duration: 1.15, ease: 'power2.out', delay: 0.22 }); gsap.to(h.right.position, { x: h.right.userData.ox, duration: 1.15, ease: 'power2.out', delay: 0.22 }); }
+      // 승장 행거판 — 연동로프·풀리·폐문 스프링은 이 트윈에 물려 같이 갱신한다
+      if (h) {
+        gsap.to(h.left.position, { x: h.left.userData.ox, duration: 1.15, ease: 'power2.out', delay: 0.22 });
+        gsap.to(h.right.position, {
+          x: h.right.userData.ox, duration: 1.15, ease: 'power2.out', delay: 0.22,
+          onUpdate: () => spinDoorDrive(h), onComplete: () => spinDoorDrive(h)
+        });
+      }
     }
 
     function closeDoors(cb) {
@@ -153,14 +162,192 @@
           if (h && h.triKey) gsap.to(h.triKey.rotation, { z: 0, duration: 0.25, ease: 'power1.in' });
         }
       });
-      if (h) { gsap.to(h.left.position, { x: h.left.userData.cx, duration: 0.95, ease: 'power2.inOut' }); gsap.to(h.right.position, { x: h.right.userData.cx, duration: 0.95, ease: 'power2.inOut' }); }
+      // 승장 행거판 — 연동로프·풀리·폐문 스프링은 이 트윈에 물려 같이 갱신한다
+      if (h) {
+        gsap.to(h.left.position, { x: h.left.userData.cx, duration: 0.95, ease: 'power2.inOut' });
+        gsap.to(h.right.position, {
+          x: h.right.userData.cx, duration: 0.95, ease: 'power2.inOut',
+          onUpdate: () => spinDoorDrive(h), onComplete: () => spinDoorDrive(h)
+        });
+      }
     }
 
-    function rotateGovernorTension(deltaY) {
+    /* ─────────────────────────────────────────────────────────────
+       시브(도르래) 물리 연동 — 카가 실제로 움직인 양(deltaY) 하나로 4개를 모두 구동한다.
+       시간 기반으로 "대충 돌리는" 연출이 아니므로 방향·속도가 로프와 항상 일치하고,
+       카가 멈추면 시브도 그 순간 멈춘다.
+
+       ▪ 4개 시브 모두 회전축이 월드 +X (스핀 파라미터만 다름)
+           주도르래 mainSheaveGrp.rotation.z   (마운트 rotation.y=π/2 → 로컬+Z=월드+X)
+           현수도르래 deflectorSheaveGrp.rotation.z (동일 구조)
+           조속기휠 governorWheelGrp.rotation.z (govBodyGrp rotation.y=π/2 → 동일)
+           인장시브 tensionSheaveGrp.rotation.x (축이 이미 월드 X)
+       ▪ 부호 규칙 — +X축 회전 ω에서 접점 표면속도의 Y성분:
+           시브 +Z측 접점 → v = -ωR  ⇒  dθ = -Δy / R
+           시브 -Z측 접점 → v = +ωR  ⇒  dθ = +Δy / R
+       ▪ 권상 로프(1본): 카측은 주도르래 +Z 접점(refreshRopes 호 시작각 a=0),
+         균형추측은 현수도르래 -Z 접점(a=π) → 둘 다 dθ = -Δy/R (같은 로프이므로 같은 방향).
+       ▪ 조속기 로프(1본): 카 연동(클램프) 가닥이 두 시브 모두 +Z측(govRopeData.z = 중심 + R)
+         → 둘 다 dθ = -Δy/R. 즉 조속기·인장시브가 주도르래와 같은 방향으로 돈다.
+         ★이건 GOV_TENS_Z(index.html) 오프셋이 "클램프 오프셋 + 홈반경"으로 맞춰져 있어
+           클램프가 앞쪽 가닥을 물기 때문이다. 축을 옮기면 무는 가닥이 바뀌어 방향이 뒤집힌다.
+       ▪ 회전량이 Δy/R 그대로라 별도 속도 계수가 없다. 반지름이 작을수록 빨리 돈다.
+    ───────────────────────────────────────────────────────────── */
+
+    // 권상 로프계 — 주도르래 + 현수(편향)도르래
+    function spinTractionSheaves(deltaY) {
       if (!deltaY) return;
-      const govR = (mrGrp && mrGrp.userData && mrGrp.userData.govR) || 0.14;
+      const ud = (mrGrp && mrGrp.userData) || {};
+      if (mainSheaveGrp)      mainSheaveGrp.rotation.z      -= deltaY / (ud.mainR || 0.33);
+      if (deflectorSheaveGrp) deflectorSheaveGrp.rotation.z -= deltaY / (ud.defRadius || 0.144);
+    }
+
+    // 조속기 로프계 — 조속기 휠 + 피트 인장시브
+    // 과속 트립(ESTOP) 시 떡판이 로프를 파지하므로 두 시브가 함께 멈춘다
+    // (트립 연출 회전은 elevator.js governorTrip 이 담당).
+    function spinGovernorSheaves(deltaY) {
+      if (!deltaY) return;
+      if (currentState === ELEVATOR_STATE.ESTOP) return;
+      const govR = (mrGrp && mrGrp.userData && mrGrp.userData.govR) || 0.15;
       if (governorWheelGrp) governorWheelGrp.rotation.z -= deltaY / govR;
-      if (tensionSheaveGrp) tensionSheaveGrp.rotation.x += deltaY / 0.15;
+      if (tensionSheaveGrp) tensionSheaveGrp.rotation.x -= deltaY / govR;
+    }
+
+    function spinSheaves(deltaY) {
+      spinTractionSheaves(deltaY);
+      spinGovernorSheaves(deltaY);
+    }
+
+    /* ─────────────────────────────────────────────────────────────
+       점검(수동) 운전 — INS / AUT / ▲ / ▼
+       현장 규칙: 점검 스위치를 넣으면 자동·승강장 호출이 모두 무효가 되고,
+       ▲/▼ 버튼을 "누르고 있는 동안만" 서행 이동(hold-to-run)한다. 손을 떼면
+       즉시 정지. 점검 속도는 정격(60 m/min)이 아니라 15 m/min(0.25 m/s)로,
+       법정 상한 0.63 m/s 이내다. 종단(최상·최하층 ±INS_OVERRUN)에서 자동 정지.
+    ───────────────────────────────────────────────────────────── */
+    const INSPECT_SPEED = 15;   // 점검 운전 속도 (m/min) — 정격 60 대비 1/4 서행
+    const INS_OVERRUN   = 0.35; // 최상·최하층 착상면 기준 허용 오버런 (m)
+    let insMode = false;        // 점검 운전 스위치 ON/OFF
+    let insDir  = 0;            // 현재 이동 방향 (+1 상승 / -1 하강 / 0 정지)
+    let insHold = 0;            // 버튼을 누르고 있는 방향 (도어 폐쇄 대기 중 판정용)
+
+    function insLimits() {
+      return {
+        top: FLOOR_Y[FLOORS - 1] + S.CAR_H / 2 + INS_OVERRUN,
+        bot: FLOOR_Y[0] + S.CAR_H / 2 - INS_OVERRUN
+      };
+    }
+
+    // 카 바닥(문턱) 기준 현재 표시 층수
+    function insDisplayFloor() {
+      const carSill = carGrp.position.y - S.CAR_H / 2;
+      let f = 1;
+      for (let i = FLOORS - 1; i >= 0; i--) { if (carSill >= FLOOR_Y[i] - 0.01) { f = i + 1; break; } }
+      return f;
+    }
+
+    // 프레임 단위 등속 이동 (가감속 없이 일정 서행 — 점검 운전 특성)
+    function insTick(time, deltaMs) {
+      // 저사양·저FPS에서도 서행 속도가 유지되도록 최대 0.1초까지 델타 인정
+      const dt = Math.min((deltaMs || 16.7) / 1000, 0.1);
+      const lim = insLimits();
+      const y0 = carGrp.position.y;
+      const ny = Math.min(Math.max(y0 + insDir * (INSPECT_SPEED / 60) * dt, lim.bot), lim.top);
+      const deltaY = ny - y0;
+
+      carGrp.position.y = ny;
+      spinSheaves(deltaY);
+      cwtGrp.position.y -= deltaY;
+      refreshRopes(); refreshGovernorRope();
+
+      syncAllIndicators(insDisplayFloor(), insDir > 0 ? '↑' : '↓');
+      MACH.setDrive(INSPECT_SPEED / 60); // 서행 구동음 (정격 대비 비율 아닌 절대 서행감)
+      updateStatus('v-spd', INSPECT_SPEED + ' m/min', '#f0883e');
+      updateStatus('v-floor', insDisplayFloor() + 'F', '#f0883e');
+      const l = scene.getObjectByName('carLight'); if (l) l.position.y = carGrp.position.y + S.CAR_H * 0.75;
+
+      // 종단(최상·최하 오버런 한계) 도달 → 강제 정지
+      if ((insDir > 0 && ny >= lim.top) || (insDir < 0 && ny <= lim.bot)) {
+        insStop('■ 점검 종단 리미트 (더 이상 이동 불가)');
+      }
+    }
+
+    function insStart(dir) {
+      if (!insMode || estop || overspeedActive || insDir === dir) return;
+      // 도어가 열려 있으면 먼저 닫고, 그때까지 버튼을 계속 누르고 있는 경우에만 출발
+      if (doorOpen || gsap.isTweening(carDoorL.position)) {
+        updateStatus('v-dir', '도어 폐쇄 중 — 계속 누르고 대기', '#f0883e');
+        closeDoors(() => { if (insHold === dir) insStart(dir); });
+        return;
+      }
+      if (insDir !== 0) gsap.ticker.remove(insTick); // 방향 전환
+
+      insDir = dir; moving = true;
+      currentState = ELEVATOR_STATE.MOVING;
+      updateStatus('v-dir', dir > 0 ? '▲ 점검 상승 (서행)' : '▼ 점검 하강 (서행)', '#f0883e');
+      MACH.resume(); MACH.brakeRelease(); MACH.motorOn(); MACH.setDrive(INSPECT_SPEED / 60);
+      gsap.ticker.add(insTick);
+    }
+
+    function insStop(msg) {
+      if (insDir === 0) return;
+      gsap.ticker.remove(insTick);
+      insDir = 0; moving = false;
+      currentState = ELEVATOR_STATE.IDLE;
+      MACH.motorOff(); MACH.brakeSet();
+      const f = insDisplayFloor();
+      syncAllIndicators(f, '');
+      updateStatus('v-spd', '0 m/min', '#f0883e');
+      updateStatus('v-floor', f + 'F', '#f0883e');
+      updateStatus('v-dir', msg || '■ 점검 정지 (INS)', '#f0883e');
+    }
+
+    // 점검 스위치 ON/OFF. ON: 자동 운전 즉시 차단 / OFF: 착상 위치가 아니면 최근접 층 착상
+    function setInspectionMode(on) {
+      if (insMode === on) return;
+      insMode = on;
+      insHold = 0;
+      insStop();
+
+      const up = document.getElementById('btn-ins-up');
+      const dn = document.getElementById('btn-ins-dn');
+      if (up) up.disabled = !on;
+      if (dn) dn.disabled = !on;
+      document.getElementById('btn-ins')?.classList.toggle('mode-on', on);
+      document.getElementById('btn-aut')?.classList.toggle('mode-on', !on);
+
+      if (on) {
+        // 운전 중 점검 전환 → 자동 운전 즉시 중단 (그 자리에 정지)
+        clearTimeout(autoTimer);
+        gsap.killTweensOf(carGrp.position); gsap.killTweensOf(cwtGrp.position);
+        if (moving) { moving = false; MACH.motorOff(); MACH.brakeSet(); }
+        currentState = ELEVATOR_STATE.IDLE;
+        syncAllIndicators(insDisplayFloor(), '');
+        updateStatus('v-spd', '0 m/min', '#f0883e');
+        updateStatus('v-dir', '점검운전 (INS) — ▲▼ 누르는 동안 서행', '#f0883e');
+      } else {
+        // 자동 복귀: 착상면에서 벗어나 있으면 최근접 층으로 서행 착상
+        let off = Infinity;
+        FLOOR_Y.forEach(fy => { off = Math.min(off, Math.abs(carGrp.position.y - (fy + S.CAR_H / 2))); });
+        updateStatus('v-dir', '자동운전 (AUT)', '#3fb950');
+        if (off > 0.01 && !estop && !overspeedActive) {
+          rescueToNearestFloor('자동 복귀 (착상)', false);
+        } else {
+          curFloor = insNearestFloor();
+          syncAllIndicators(curFloor + 1, '');
+          updateStatus('v-floor', (curFloor + 1) + 'F', '#3fb950');
+          document.querySelectorAll('#fbtns .c-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.f) === curFloor));
+        }
+      }
+    }
+
+    function insNearestFloor() {
+      let nf = 0, best = Infinity;
+      FLOOR_Y.forEach((fy, i) => {
+        const d = Math.abs(carGrp.position.y - (fy + S.CAR_H / 2));
+        if (d < best) { best = d; nf = i; }
+      });
+      return nf;
     }
 
     /* ─────────────────────────────────────────────────────────────
@@ -189,10 +376,14 @@
       gsap.to(controls.target, { x: tx, y: ty, z: tz, duration: dur, ease, onComplete: onDone });
     }
     function _govWorld() { const v = new THREE.Vector3(); (governorWheelGrp || mrGrp).getWorldPosition(v); return v; }
-    function _deviceWorld() { return carGrp.localToWorld(new THREE.Vector3(1.2575, -S.CAR_H / 2 - 0.16, 0.04)); }
+    function _deviceWorld() {
+      // 카 우측 하단 세이프티 기어 웨지/작동 샤프트 월드 좌표
+      return carGrp.localToWorld(new THREE.Vector3(S.CAR_W / 2 + 0.05, -S.CAR_H / 2 - 0.12, 0.04));
+    }
 
     function startOverspeedFault(btn) {
       const gov = mrGrp.userData.governor;
+      if (insMode) { updateStatus('v-dir', '점검운전 중 — 자동 시연 불가 (AUT 전환)', '#f0883e'); return; }
       if (!gov || moving || doorOpen || estop || gsap.isTweening(carDoorL.position)) return;
 
       // 낙하 과속 시연은 3층 이상에서만 (아래로 떨어지며 속도가 붙을 거리 필요). 1·2층 불가.
@@ -202,7 +393,7 @@
       }
 
       const spinDir = 1;                              // 하강 폭주 (휠 rotation.z 증가)
-      const ty = FLOOR_Y[0] + S.CAR_H / 2, cy = carGrp.position.y; // 최하층 방향으로 낙하(도중 트립)
+      const ty = FLOOR_Y[0] + S.CAR_H / 2;           // 최하층 방향으로 낙하(도중 트립)
 
       overspeedActive = true; moving = true;
       currentState = ELEVATOR_STATE.MOVING;
@@ -210,17 +401,16 @@
       btn.disabled = true;
       MACH.resume(); MACH.brakeRelease(); MACH.motorOn();
 
-      // 카메라: 조속기 클로즈업으로 이동 — 폭주 회전·진자 개방·트립을 관람
+      // 카메라: 조속기 정면 3/4 사선 클로즈업으로 부드럽게 이동 (쐐기 물림·스위치 타격·캐치슈 파지 관람)
       _saveCam();
       const gv = _govWorld();
-      _camTo(gv.x + 0.30, gv.y + 0.12, gv.z + 0.76, gv.x, gv.y - 0.02, gv.z, 1.2);
+      _camTo(gv.x + 0.70, gv.y + 0.15, gv.z + 0.35, gv.x - 0.02, gv.y + 0.02, gv.z, 1.2);
 
       // 폭주 낙하 — 완만한 가속 물리 적분(gsap.ticker). 정격 50%로 하강 시작 →
-      // 약 1.3~1.5개 층(≈5m) 미끄러지며 가속 → 정격 130%(트립 임계) 도달 시 조속기 작동.
-      // (gsap.to power2.in은 가속이 급해 반 층 만에 트립됐던 문제를 물리 적분으로 대체)
+      // 약 1.3~1.5개 층 미끄러지며 가속 → 정격 130%(트립 임계) 도달 시 조속기 슬로우 작동.
       const vTrip = targetSpeed * 1.3;        // 트립 임계 (m/min)
       const vTripMs = vTrip / 60;             // m/s
-      const yFloor1 = ty;                     // 최하층 카 정위치 Y (과주 방지 안전 트립 기준)
+      const yFloor1 = ty;                     // 최하층 카 정위치 Y
       let v = (targetSpeed * 0.5) / 60;       // 초기 하강 속도 (정격 50%, m/s)
       const ACCEL = 0.14;                     // 폭주 가속도 (m/s²)
       let tripped = false;
@@ -229,22 +419,22 @@
         v += ACCEL * dt;
         const deltaY = -v * dt;
         carGrp.position.y += deltaY;
-        rotateGovernorTension(deltaY);
+        spinSheaves(deltaY);
         cwtGrp.position.y -= deltaY;
         refreshRopes(); refreshGovernorRope();
         let curF = 1;
         for (let i = FLOORS - 1; i >= 0; i--) { if (carGrp.position.y >= FLOOR_Y[i]) { curF = i + 1; break; } }
         syncAllIndicators(curF, '↓');
         const vmm = v * 60; // m/min
-        MACH.setDrive(Math.min(vmm / vTrip, 1)); // 폭주 가속에 구동음 연동
+        MACH.setDrive(Math.min(vmm / vTrip, 1));
         updateStatus('v-spd', Math.round(vmm) + ' m/min', '#f85149');
-        // 진자 원심 개방 — 정격 90%부터 속도 비례로 벌어짐 (트립 최대각의 80%까지)
+        // 진자 원심 개방 — 정격 90%부터 속도 비례로 벌어짐 (트립 최대각의 70%까지)
         const open = Math.min(Math.max((vmm - targetSpeed * 0.9) / (vTrip - targetSpeed * 0.9), 0), 1)
-          * gov.pose.trip.pendulum * 0.8;
+          * gov.pose.trip.pendulum * 0.7;
         gov.pendulums[0].rotation.z = gov.geom.pendRot0[0] + open;
         gov.pendulums[1].rotation.z = gov.geom.pendRot0[1] + open;
-        if (gov.setLinkage) gov.setLinkage(open);   // 뒷면 타이바·인장 스프링 연동
-        // 트립: 정격 130% 도달(또는 최하층 근접 시 과주 방지)
+        if (gov.setLinkage) gov.setLinkage(open);
+        // 트립: 정격 130% 도달
         if (!tripped && (v >= vTripMs || carGrp.position.y <= yFloor1 + 0.25)) {
           tripped = true; gsap.ticker.remove(fallTick); onGovernorOverspeed(spinDir, btn);
         }
@@ -256,45 +446,52 @@
       estop = true; moving = false;
       MACH.motorOff();
       currentState = ELEVATOR_STATE.ESTOP;
-      updateStatus('v-dir', '⚠ 과속 검출 — 조속기 트립', '#f85149');
+      updateStatus('v-dir', '⚠ 과속 검출 — 조속기 슬로우 트립', '#f85149');
 
-      // ① 조속기 트립 (카메라는 조속기에 머물러 트립을 관람) — 로프 고정 순간 카 급정지·물림
+      // ① 조속기 4단계 슬로우 트립 (진자 개방 → 쐐기 결착 → 휠 드래그 → 로프 파지 & 스위치 타격)
       const tripTl = governorTrip(spinDir, () => engageDeviceStop(spinDir, btn));
 
-      // ② 트립 관람 후 디바이스(세이프티 기어)로 카메라 이동 → 물린 결과 클로즈업 → 복귀
-      const govDone = tripTl ? tripTl.duration() : 1.2;
-      gsap.delayedCall(govDone + 0.15, () => {
-        updateStatus('v-dir', '■ 세이프티 기어 물림 (레일 파지)', '#f85149');
+      // ② 조속기 완전 물림 상태를 약 2.0초간 화면에 고정하여 디테일을 명확히 관람
+      const govDone = tripTl ? tripTl.duration() : 2.0;
+      const govHoldTime = govDone + 2.0; // 슬로우 완료 후 2초간 정지 화면 유지
+
+      gsap.delayedCall(govHoldTime, () => {
+        updateStatus('v-dir', '■ 세이프티 기어 작동 (레일 파지)', '#f85149');
         const d = _deviceWorld();
-        _camTo(d.x + 0.30, d.y - 0.14, d.z + 0.54, d.x - 0.04, d.y + 0.05, d.z - 0.05, 1.2, 'power2.inOut',
-          () => { gsap.delayedCall(2.2, () => _restoreCam(1.6)); });
+        // 승강로 외벽을 통과하지 않고 전면/측면 개방 뷰를 통해 부드럽게 카 세이프티 기어로 전환
+        _camTo(d.x + 0.60, d.y + 0.22, d.z + 0.85, d.x - 0.02, d.y, d.z, 2.0, 'power2.inOut', () => {
+          // 세이프티 기어 레일 파지 상태를 3초간 클로즈업 관람 후 복귀
+          gsap.delayedCall(3.0, () => _restoreCam(1.8));
+        });
       });
     }
 
-    // 로프 고정 순간: 카 짧은 미끄럼 후 급정지 + 세이프티 웨지 상승·핀 파지·스프링 압축
+    // 로프 고정 순간: 조속기 로프 장력에 의해 작동 샤프트 회전 + 리프트 상승 + 웨지가 레일을 물어 카 완벽 급정지
     function engageDeviceStop(spinDir, btn) {
       let prevY = carGrp.position.y;
       const sg = carGrp.userData.safetyGear;
       const stopTween = gsap.to(carGrp.position, {
-        y: carGrp.position.y - 0.22, duration: 0.45, ease: 'power3.out',
+        y: carGrp.position.y - 0.25, duration: 0.85, ease: 'power2.out',
         onUpdate: () => {
           const deltaY = carGrp.position.y - prevY; prevY = carGrp.position.y;
           cwtGrp.position.y -= deltaY;
+          // 조속기 로프는 떡판에 파지되어 정지, 권상 로프는 카를 따라 계속 움직인다
+          spinTractionSheaves(deltaY);
           const p = stopTween.progress(); // 0 ~ 1
           if (sg && sg.shaft) {
-            sg.shaft.rotation.x = -0.35 * p;            // 조속기 로프 견인 → 작동 샤프트 회전
-            sg.liftL.position.y = 0.05 * p;             // 리프트 그룹 상승 → 웨지가 테이퍼로 파고듦
-            sg.liftR.position.y = 0.05 * p;
-            (sg.springs || []).forEach(spr => { spr.scale.y = 1 - 0.32 * p; });   // U-스프링 압축
-            (sg.wedges || []).forEach(w => {            // 웨지가 레일 핀 쪽(Z)으로 파지
+            sg.shaft.rotation.x = -0.38 * p;            // 조속기 로프 견인 → 작동 샤프트 덜컥 회전
+            sg.liftL.position.y = 0.055 * p;            // 리프트 그룹 상승 → 웨지가 테이퍼로 파고듦
+            sg.liftR.position.y = 0.055 * p;
+            (sg.springs || []).forEach(spr => { spr.scale.y = 1 - 0.35 * p; });   // U-스프링 압축
+            (sg.wedges || []).forEach(w => {            // 웨지가 레일 핀 쪽(Z)으로 강력 파지
               const gd = Math.sign(0.04 - w.userData.z0);
-              w.position.z = w.userData.z0 + gd * 0.010 * p;
+              w.position.z = w.userData.z0 + gd * 0.012 * p;
             });
           }
           refreshRopes(); refreshGovernorRope();
         },
         onComplete: () => {
-          MACH.brakeSet(); // 세이프티 기어 쐐기 걸림 → 급정지 클랭
+          MACH.brakeSet(); // 세이프티 기어 쐐기 걸림 → 최종 급정지
           updateStatus('v-spd', '0 m/min', '#f0883e');
           btn.disabled = false; btn.textContent = 'RST';
         }
@@ -313,22 +510,19 @@
     }
 
     // 구출 운전 — 최근접 층까지 서행 이동 후 도어 개방
-    function rescueToNearestFloor() {
-      let nf = 0, best = Infinity;
-      FLOOR_Y.forEach((fy, i) => {
-        const d = Math.abs(carGrp.position.y - (fy + S.CAR_H / 2));
-        if (d < best) { best = d; nf = i; }
-      });
+    // (점검→자동 복귀 착상에도 재사용: label/openAfter 로 문구·도어 개방 여부 조정)
+    function rescueToNearestFloor(label = '구출 운전 (서행)', openAfter = true) {
+      const nf = insNearestFloor();
       const ty = FLOOR_Y[nf] + S.CAR_H / 2;
       moving = true; currentState = ELEVATOR_STATE.MOVING;
-      updateStatus('v-dir', '구출 운전 (서행)', '#f0883e');
+      updateStatus('v-dir', label, '#f0883e');
       MACH.resume(); MACH.brakeRelease(); MACH.motorOn(); MACH.setDrive(0.28); // 서행 구동음
       let prevY = carGrp.position.y;
       gsap.to(carGrp.position, {
         y: ty, duration: Math.max(Math.abs(ty - carGrp.position.y) / 0.4, 0.6), ease: 'power1.inOut',
         onUpdate: () => {
           const deltaY = carGrp.position.y - prevY; prevY = carGrp.position.y;
-          rotateGovernorTension(deltaY);
+          spinSheaves(deltaY);
           cwtGrp.position.y -= deltaY;
           refreshRopes(); refreshGovernorRope();
         },
@@ -341,12 +535,13 @@
           updateStatus('v-dir', '정지 대기', '#8b949e');
           updateStatus('v-spd', '0 m/min', '#f0883e');
           document.querySelectorAll('#fbtns .c-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.f) === nf));
-          setTimeout(() => openDoors(), 300);
+          if (openAfter) setTimeout(() => openDoors(), 300);
         }
       });
     }
 
     function moveElevator(fIdx) {
+      if (insMode) { updateStatus('v-dir', '점검운전 중 — 자동 호출 무효', '#f0883e'); return; }
       if (moving || estop || fIdx === curFloor) return;
       if (doorOpen || gsap.isTweening(carDoorL.position)) { closeDoors(() => moveElevator(fIdx)); return; }
 
@@ -374,7 +569,7 @@
         onUpdate: () => {
           const deltaY = carGrp.position.y - prevCarY;
           prevCarY = carGrp.position.y;
-          rotateGovernorTension(deltaY);
+          spinSheaves(deltaY);
           cwtGrp.position.y = cwtY - (carGrp.position.y - cy);
           refreshRopes();
           refreshGovernorRope();
@@ -481,10 +676,33 @@
         e.currentTarget.classList.toggle('active', on);
       });
 
+      /* ── 점검(수동) 운전 ── AUT/INS 토글 + ▲▼ 홀드 투 런 ── */
+      document.getElementById('btn-aut')?.addEventListener('click', () => setInspectionMode(false));
+      document.getElementById('btn-ins')?.addEventListener('click', () => setInspectionMode(true));
+      document.getElementById('btn-aut')?.classList.add('mode-on'); // 기동 시 자동운전
+
+      [['btn-ins-up', 1], ['btn-ins-dn', -1]].forEach(([id, dir]) => {
+        const b = document.getElementById(id);
+        if (!b) return;
+        b.addEventListener('pointerdown', e => {
+          if (b.disabled) return;
+          e.preventDefault();
+          insHold = dir; insStart(dir);
+        });
+        // 버튼 밖에서 손을 떼도 반드시 멈추도록 포인터 해제는 window 에서 받는다
+        b.addEventListener('contextmenu', e => e.preventDefault());
+      });
+      const insRelease = () => { insHold = 0; insStop(); };
+      window.addEventListener('pointerup', insRelease);
+      window.addEventListener('pointercancel', insRelease);
+      window.addEventListener('blur', insRelease);
+      document.addEventListener('visibilitychange', () => { if (document.hidden) insRelease(); });
+
       document.getElementById('btn-estop').addEventListener('click', e => {
         if (overspeedActive) { updateStatus('v-dir', '조속기 트립 — 우측 패널에서 복귀', '#f85149'); return; }
         estop = !estop;
         if (estop) {
+          insHold = 0; insStop();
           gsap.killTweensOf(carGrp.position); gsap.killTweensOf(cwtGrp.position); moving = false;
           MACH.motorOff(); MACH.brakeSet();
           currentState = ELEVATOR_STATE.ESTOP;

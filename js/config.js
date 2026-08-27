@@ -65,5 +65,171 @@ const M = {
   // 와이어 로프 (선) — 주 로프용. 조속기 로프는 아래 ropeMesh() 실사 메시를 쓴다
   rope: () => new THREE.LineBasicMaterial({ color: 0x222222, linewidth: 2 }),
   // 와이어 로프 (실사 메시) — 아연도금 강선
-  ropeMesh: () => new THREE.MeshStandardMaterial({ color: 0x6e747c, metalness: 0.85, roughness: 0.42 })
+  ropeMesh: () => new THREE.MeshStandardMaterial({ color: 0x6e747c, metalness: 0.85, roughness: 0.42 }),
+
+  /* ──────────────────────────────────────────────────────────────
+     4. 프리미엄 인테리어 그레이드 (Champagne Graphite Titanium & Luxury Marble)
+     참조: grok_image_1786678132161.jpg (PVD Fine Vertical Brushed + Nero Marble)
+  ────────────────────────────────────────────────────────────── */
+  // 샴페인 PVD 하이그로시 티타늄 (수직 브러시 + 클리어코트)
+  pvdTitanium: (tint = 0xd8cfc2) => {
+    const tex = _getPvdBrushedTexture();
+    return new THREE.MeshPhysicalMaterial({
+      color: tint,
+      map: tex,
+      metalness: 0.52,
+      roughness: 0.12,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.06,
+      envMapIntensity: 1.55
+    });
+  },
+  // 카 바닥 보더 인레이 대리석
+  luxuryMarble: () => {
+    const tex = _getLuxuryMarbleTexture();
+    return new THREE.MeshPhysicalMaterial({
+      color: 0xffffff,
+      map: tex,
+      metalness: 0.08,
+      roughness: 0.08,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.05
+    });
+  },
+  // 천장 코브 간접조명 (3000K 샴페인 웜화이트 발광)
+  coveLight: (intensity = 1.8) => {
+    return new THREE.MeshStandardMaterial({
+      color: 0xfff0db,
+      emissive: 0xffdfb0,
+      emissiveIntensity: intensity,
+      roughness: 0.1
+    });
+  },
+  // 일반 승강기 프리미엄 실버 헤어라인 스테인리스 (밝고 고급스러운 은색)
+  silverHairline: (tint = 0xe2e8f0, roughness = 0.32) => {
+    const tex = _getSilverHairlineTexture();
+    return new THREE.MeshStandardMaterial({
+      color: tint,
+      map: tex,
+      metalness: 0.75,
+      roughness: roughness,
+      envMapIntensity: 1.3
+    });
+  }
 };
+
+/* ── 절차적 고해상도 PVD 수직 헤어라인 브러시 텍스처 캐시 ── */
+let _pvdTextureCache = null;
+function _getPvdBrushedTexture() {
+  if (_pvdTextureCache) return _pvdTextureCache;
+  const canvas = document.createElement('canvas');
+  canvas.width = 512; canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+
+  // 베이스 밝은 샴페인
+  ctx.fillStyle = '#d6cec2';
+  ctx.fillRect(0, 0, 512, 512);
+
+  // 미세 수직 헤어라인 노이즈 스트라이프
+  for (let x = 0; x < 512; x++) {
+    const v = Math.sin(x * 1.8) * 0.5 + Math.random() * 0.5;
+    const lum = Math.floor(v * 22 - 10);
+    const r = Math.min(255, Math.max(0, 0xe0 + lum));
+    const g = Math.min(255, Math.max(0, 0xd6 + lum - 2));
+    const b = Math.min(255, Math.max(0, 0xc6 + lum - 4));
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fillRect(x, 0, 1, 512);
+  }
+
+  // 부드러운 수직 그라데이션 광택 블렌딩
+  const grad = ctx.createLinearGradient(0, 0, 512, 0);
+  grad.addColorStop(0.0, 'rgba(255, 252, 245, 0.28)');
+  grad.addColorStop(0.3, 'rgba(210, 198, 180, 0.08)');
+  grad.addColorStop(0.7, 'rgba(255, 250, 240, 0.32)');
+  grad.addColorStop(1.0, 'rgba(200, 188, 170, 0.10)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 512, 512);
+
+  _pvdTextureCache = new THREE.CanvasTexture(canvas);
+  _pvdTextureCache.wrapS = THREE.RepeatWrapping;
+  _pvdTextureCache.wrapT = THREE.RepeatWrapping;
+  return _pvdTextureCache;
+}
+
+/* ── 절차적 럭셔리 네로 마르퀴나 대리석 + 보더 인레이 텍스처 캐시 ── */
+let _marbleTextureCache = null;
+function _getLuxuryMarbleTexture() {
+  if (_marbleTextureCache) return _marbleTextureCache;
+  const canvas = document.createElement('canvas');
+  canvas.width = 512; canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+
+  // 밝은 칼라카타 크림 베이스
+  ctx.fillStyle = '#f3eee6';
+  ctx.fillRect(0, 0, 512, 512);
+
+  // 미세한 대리석 크랙 & 샴페인 베인 (Veins)
+  ctx.strokeStyle = 'rgba(180, 160, 130, 0.28)';
+  ctx.lineWidth = 1.2;
+  for (let i = 0; i < 7; i++) {
+    ctx.beginPath();
+    let cx = Math.random() * 512, cy = Math.random() * 512;
+    ctx.moveTo(cx, cy);
+    for (let j = 0; j < 6; j++) {
+      cx += (Math.random() - 0.4) * 90;
+      cy += (Math.random() - 0.3) * 90;
+      ctx.lineTo(cx, cy);
+    }
+    ctx.stroke();
+  }
+
+  // 외곽 및 내부 더블 보더 인레이 라인 (샴페인 골드)
+  ctx.strokeStyle = '#c4a574';
+  ctx.lineWidth = 6;
+  ctx.strokeRect(20, 20, 472, 472);
+
+  ctx.strokeStyle = '#e8d5b0';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(32, 32, 448, 448);
+
+  _marbleTextureCache = new THREE.CanvasTexture(canvas);
+  return _marbleTextureCache;
+}
+
+/* ── 절차적 고해상도 실버 스테인리스 수직 헤어라인 브러시 텍스처 캐시 ── */
+let _silverTextureCache = null;
+function _getSilverHairlineTexture() {
+  if (_silverTextureCache) return _silverTextureCache;
+  const canvas = document.createElement('canvas');
+  canvas.width = 512; canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+
+  // 밝고 은은한 프리미엄 실버 베이스
+  ctx.fillStyle = '#dce2e8';
+  ctx.fillRect(0, 0, 512, 512);
+
+  // 미세 수직 헤어라인 노이즈 스트라이프
+  for (let x = 0; x < 512; x++) {
+    const v = Math.sin(x * 2.2) * 0.5 + Math.random() * 0.5;
+    const lum = Math.floor(v * 24 - 12);
+    const r = Math.min(255, Math.max(0, 0xd4 + lum));
+    const g = Math.min(255, Math.max(0, 0xda + lum));
+    const b = Math.min(255, Math.max(0, 0xe2 + lum));
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fillRect(x, 0, 1, 512);
+  }
+
+  // 부드러운 수직 메탈릭 광택 하이라이트 블렌딩
+  const grad = ctx.createLinearGradient(0, 0, 512, 0);
+  grad.addColorStop(0.0, 'rgba(255, 255, 255, 0.18)');
+  grad.addColorStop(0.25, 'rgba(200, 210, 225, 0.10)');
+  grad.addColorStop(0.65, 'rgba(255, 255, 255, 0.22)');
+  grad.addColorStop(1.0, 'rgba(195, 205, 220, 0.12)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 512, 512);
+
+  _silverTextureCache = new THREE.CanvasTexture(canvas);
+  _silverTextureCache.wrapS = THREE.RepeatWrapping;
+  _silverTextureCache.wrapT = THREE.RepeatWrapping;
+  return _silverTextureCache;
+}

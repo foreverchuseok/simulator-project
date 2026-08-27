@@ -21,6 +21,8 @@ Three.js로 승강로, 카, 도어, 기계실, 피트와 안전장치를 구성�
 - `GEMINI.md`: Google Antigravity 진입점과 영상·이미지 분석 게이트.
 - `blender/BLENDER-WORKFLOW.md`: Blender Python에서 GLB를 만들고 연결하는 절차.
 - `PLAN.md`: 현재 분석 작업 하나를 넘기는 로컬 임시 문서. Git에는 포함하지 않는다.
+- `docs/DOOR-REBUILD.md`: 도어 재공사 기록. 원본 코드는 `js/archive/doors.js`.
+- `docs/CAR-REBUILD.md`: 카 재공사 기록. 원본 코드는 `js/archive/car.js`.
 
 ## 실제 프로젝트 구조
 
@@ -30,8 +32,14 @@ simmul/
 ├─ js/
 │  ├─ config.js                   카·도어 치수와 공통 재질
 │  ├─ environment.js              배경, 승강로, 센서, 기계실, 피트, 조속기 마운트
-│  ├─ elevator.js                 카, 도어, 균형추, 로프, 세이프티기어, 조속기 동작
-│  └─ ui.js                       운행, 도어, HUD, 사운드, 과속 고장 시퀀스
+│  ├─ elevator.js                 카·도어 스텁, 균형추, 로프, 조속기 동작
+│  ├─ ui.js                       운행, 도어, HUD, 사운드, 과속 고장 시퀀스
+│  └─ archive/
+│     ├─ doors.js                 도어 재공사 원본 (앱 미로드)
+│     └─ car.js                   카 재공사 원본 (앱 미로드)
+├─ docs/
+│  ├─ DOOR-REBUILD.md             도어 재공사 안내
+│  └─ CAR-REBUILD.md              카 재공사 안내
 ├─ blender/
 │  ├─ BLENDER-WORKFLOW.md
 │  └─ scripts/
@@ -79,10 +87,10 @@ Three.js → OrbitControls → GLTFLoader → GSAP
   → buildShaftLandingDevices()
   → buildLimitSwitches()
   → buildMachineRoom()
-  → buildCarCabin()
-  → buildPassenger()
-  → buildCarDoors()
-  → buildHatchDoors()
+  → buildCarCabin()               재공사 스텁 (빈 그룹)
+  → buildPassenger()              재공사 스텁
+  → buildCarDoors()               재공사 스텁 (빈 그룹)
+  → buildHatchDoors()             재공사 스텁 (빈 그룹)
   → buildCounterWeight()
   → buildWireRopes()
   → buildPitFoundation()
@@ -136,16 +144,14 @@ Three.js → OrbitControls → GLTFLoader → GSAP
 
 ### `js/elevator.js`
 
-- 카 프레임·실내·플랫폼과 승객.
-- 카 도어, 승장문, 도어 오퍼레이터·인터록.
-- 균형추, 주 로프와 조속기 로프 갱신.
-- `assets/safety_gear.glb` 로드와 세이프티기어 참조.
-- 조속기 트립·복귀 애니메이션.
+- 카는 재공사 중: `buildCarCabin()` / `buildPassenger()`는 빈 그룹만 만든다. 원본 `js/archive/car.js`.
+- 도어는 재공사 중: `buildCarDoors()` / `buildHatchDoors()`는 빈 그룹만 만든다. 원본 `js/archive/doors.js`.
+- 균형추, 주 로프와 조속기 로프 갱신은 그대로다.
 
 주요 함수:
 
-- `buildCarCabin()`, `buildPassenger()`, `togglePassenger()`
-- `buildCarDoors()`, `buildHatchDoors()`, `spinDoorDrive()`
+- `buildCarCabin()`, `buildPassenger()`, `togglePassenger()` — 현재 스텁. 원본 `js/archive/car.js`
+- `buildCarDoors()`, `buildHatchDoors()`, `spinDoorDrive()` — 현재 스텁. 원본 `js/archive/doors.js`
 - `buildCounterWeight()`
 - `buildWireRopes()`, `refreshRopes()`, `refreshGovernorRope()`
 - `governorTrip()`, `governorReset()`
@@ -183,12 +189,15 @@ Three.js → OrbitControls → GLTFLoader → GSAP
 
 ### 도어
 
+카문은 재공사 중이라 형상이 없다. 승장 쪽은 실·삼방틀·행거 케이스까지 올라와 있다.
+`openDoors()` / `closeDoors()`는 빈 문짝 그룹과 상태만 바꾼다.
+헤더 구조(양단 브라켓 → C레일, 행거판·롤러·인터록은 아직 없음)는 `docs/DOOR-REBUILD.md` 행거 케이스 계약을 따른다.
+
 ```text
 openDoors() / closeDoors()
-  → 카 도어 carDoorL/R
-  → 현재 층 hatchDoors
-  → 인터록 hook / triKey
-  → spinDoorDrive()
+  → 카 도어 carDoorL/R (스텁)
+  → 현재 층 hatchDoors (스텁)
+  → spinDoorDrive() (no-op)
 ```
 
 ### 과속 고장
@@ -239,9 +248,12 @@ ESTOP
 | 층수·층고·피트 | `index.html` | `FLOORS`, `FLOOR_Y`, `PIT`, `OVERHEAD` |
 | 카 깊이 연동 Z 좌표 | `index.html` | `CAR_FRONT_Z`, `CAR_CTR_Z`, `SHAFT_BACK_Z` 등 |
 | HUD 모양 | `index.html` | HTML과 `<style>` |
-| 카 실내·프레임 | `js/elevator.js` | `buildCarCabin()` |
-| 카 도어·오퍼레이터 | `js/elevator.js` | `buildCarDoors()`, `spinDoorDrive()` |
-| 승장문·인터록 | `js/elevator.js` | `buildHatchDoors()` |
+| 카 실내·프레임·에이프런 | `js/elevator.js` 스텁, 원본 `js/archive/car.js` | `buildCarCabin()` |
+| 카 재공사 안내 | `docs/CAR-REBUILD.md` | 부품별 복원 규칙 |
+| 카 도어·오퍼레이터 | `js/elevator.js` 스텁, 원본 `js/archive/doors.js` | `buildCarDoors()`, `spinDoorDrive()` |
+| 승장문·헤더·페시아·토가드 | `js/elevator.js`, 원본 `js/archive/doors.js` | `buildHatchDoors()` |
+| 승장 행거 케이스 | `js/elevator.js` | `createHangerCaseAssembly()` — 계약은 `docs/DOOR-REBUILD.md` |
+| 도어 재공사 안내 | `docs/DOOR-REBUILD.md` | 부품별 복원 규칙 |
 | 균형추 | `js/elevator.js` | `buildCounterWeight()` |
 | 주 로프 | `js/elevator.js` | `buildWireRopes()`, `refreshRopes()` |
 | 배경·건물 | `js/environment.js` | `buildBackground()` 계열 |
@@ -255,7 +267,7 @@ ESTOP
 | 조속기 동작 | `js/elevator.js` | `governorTrip()`, `governorReset()` |
 | 과속 시퀀스·카메라 | `js/ui.js` | `startOverspeedFault()` 계열 |
 | 세이프티기어 형상 | `tools/build_safety_glb.mjs` | GLB 생성 |
-| 세이프티기어 마운트 | `js/elevator.js` | `buildCarCabin()` GLTFLoader 구간 |
+| 세이프티기어 마운트 | `js/archive/car.js` (현재 미로드) | `buildCarCabin()` GLTFLoader 구간 |
 | 운행·도어 UI | `js/ui.js` | `bindUIEvents()`, `moveElevator()` |
 | 사운드 | `js/ui.js`, `sound/` | `MACH`, `snd` |
 
@@ -293,7 +305,7 @@ Python의 `LEV_TILT`, 휠 중심, 피벗과 JavaScript의 래퍼·pose 값도 �
 
 - `assets/bg/logo.png`: 전면벽 지사 현판.
 - `assets/bg/tactile.png`: 점형블록.
-- `assets/bg/hand.png`, `lean.png`: 도어 안전 스티커.
+- `assets/bg/hand.png`, `lean.png`: 도어 안전 스티커. 재공사 중 화면에는 안 붙지만 파일은 유지한다. 붙임 좌표는 `docs/DOOR-REBUILD.md`.
 - `assets/bg/koelsa.png`, `koelsa2.png`: 사진 배경 미리보기.
 - `assets/bg/k_front.png`, `t_length.png`: 3D 배경 건물 간판.
 

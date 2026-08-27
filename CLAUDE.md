@@ -3,6 +3,8 @@
 작업 전에 루트 `AGENTS.md`를 읽고 공통 규칙을 따른다.
 프로젝트 구조와 기능별 수정 위치는 `README.md`를 참고한다.
 Blender 작업은 `blender/BLENDER-WORKFLOW.md`를 추가로 읽는다.
+도어·헤더·페시아·토가드·오퍼레이터 작업은 `docs/DOOR-REBUILD.md`와 `js/archive/doors.js`를 먼저 읽는다. 승장 헤더는 같은 문서의 **행거 케이스 계약**이 우선이다.
+카 본체·실내·에이프런 작업은 `docs/CAR-REBUILD.md`와 `js/archive/car.js`를 먼저 읽는다.
 
 ## 기본 동작
 

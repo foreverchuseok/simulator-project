@@ -37,13 +37,13 @@ _cov = bpy.data.objects.get("Cover")
 if _cov:
     _cov.hide_render = True
 
-# ── 조명: 시뮬(강한 Hemi+Sun) 근사 ──
+# ── 조명: 부드러운 스튜디오 라이트 ──
 sun = bpy.data.objects.new("Sun", bpy.data.lights.new("Sun", type='SUN'))
-sun.data.energy = 4.0
+sun.data.energy = 1.8
 sun.rotation_euler = (math.radians(50), math.radians(-20), math.radians(30))
 scene.collection.objects.link(sun)
 fill = bpy.data.objects.new("Fill", bpy.data.lights.new("Fill", type='AREA'))
-fill.data.energy = 150.0
+fill.data.energy = 30.0
 fill.data.size = 2.0
 fill.location = (0.3, -1.2, 0.5)
 fill.rotation_euler = (math.radians(75), 0, math.radians(15))
@@ -53,8 +53,8 @@ scene.world = bpy.data.worlds.new("W")
 scene.world.use_nodes = True
 bg = scene.world.node_tree.nodes.get("Background")
 if bg:
-    bg.inputs[0].default_value = (0.55, 0.65, 0.75, 1.0)
-    bg.inputs[1].default_value = 0.45
+    bg.inputs[0].default_value = (0.3, 0.35, 0.4, 1.0)
+    bg.inputs[1].default_value = 0.6
 
 # ── 카메라 ──
 cam_data = bpy.data.cameras.new("Cam")
@@ -63,12 +63,8 @@ scene.collection.objects.link(cam)
 scene.camera = cam
 
 scene.render.engine = 'BLENDER_EEVEE'
-try:
-    scene.view_settings.view_transform = 'Standard'  # AgX 탈색 방지 — three.js 발색에 가깝게
-except Exception:
-    pass
-scene.render.resolution_x = 1100
-scene.render.resolution_y = 900
+scene.render.resolution_x = 1200
+scene.render.resolution_y = 1000
 scene.render.film_transparent = False
 
 TARGET = (0.0, -0.048, 0.225)  # Blender 좌표 (three (0, .225, .048))
@@ -103,14 +99,45 @@ scene.render.filepath = os.path.join(ROOT, ".shot-gov-blender-shoe.png")
 bpy.ops.render.render(write_still=True)
 print("[render] shoe ->", scene.render.filepath)
 
-# 탑뷰 — 스위치·90° 브래킷 Z축 정렬 확인 (three +Y 위 = Blender +Z)
-TOP_T = (-0.12, -0.055, 0.230)  # Blender = three (-0.12, 0.230, 0.055)
-cam.location = (-0.12, -0.055, 0.55)
-look_at(cam, TOP_T)
-cam_data.lens = 50
+# 상단 쐐기 & 스프링 클로즈업 (위에서 비스듬히 내려다봄 — 실사 매칭 뷰)
+PAWL_TOP_TGT = (PAWL_PIV[0] - 0.005, -PAWL_Z, PAWL_PIV[1])
+cam.location = (PAWL_PIV[0] - 0.015, -0.14, PAWL_PIV[1] + 0.10)
+look_at(cam, PAWL_TOP_TGT)
+cam_data.lens = 75
 scene.render.filepath = os.path.join(ROOT, ".shot-gov-blender-top.png")
 bpy.ops.render.render(write_still=True)
 print("[render] top ->", scene.render.filepath)
+
+# ── 쐐기 & 래칫 톱날 대기 클로즈업 ──
+PAWL_TGT = (PAWL_PIV[0], -PAWL_Z, PAWL_PIV[1])  # Blender 좌표
+cam.location = (PAWL_PIV[0] + 0.01, -0.38, PAWL_PIV[1] - 0.01)
+look_at(cam, PAWL_TGT)
+cam_data.lens = 85
+scene.render.filepath = os.path.join(ROOT, ".shot-gov-blender-pawl.png")
+bpy.ops.render.render(write_still=True)
+print("[render] pawl ->", scene.render.filepath)
+
+# ── ★트립 자세 (Trip Pose) 쐐기-톱날 정밀 물림 렌더링 ──
+_pawl = bpy.data.objects.get("Pawl")
+_pendA = bpy.data.objects.get("PendA")
+_pendB = bpy.data.objects.get("PendB")
+_catch = bpy.data.objects.get("Catch")
+_plunger = bpy.data.objects.get("Plunger")
+
+if _pawl:
+    _pawl.rotation_euler = (0, -0.60, 0)  # Blender Y- = Three.js rotation.z +0.60 (골 박힘)
+if _pendA:
+    _pendA.rotation_euler = (0, 0.45, 0)
+if _pendB:
+    _pendB.rotation_euler = (0, 0.45, 0)
+if _catch:
+    _catch.rotation_euler = (0, 0.14, 0)
+if _plunger:
+    _plunger.rotation_euler = (0, 0.52, 0)  # 스위치 레버가 아래로 뚝 떨어짐
+
+scene.render.filepath = os.path.join(ROOT, ".shot-gov-blender-trip.png")
+bpy.ops.render.render(write_still=True)
+print("[render] trip ->", scene.render.filepath)
 
 # 후면 (three -Z 방향 = Blender +Y 에서 바라봄)
 REAR_T = (0.0, -0.048, 0.225)

@@ -11,6 +11,10 @@ AI 공통 규칙과 `PLAN.md` 운영 방식은 루트 `AGENTS.md`를 따른다.
 - 조속기 형상 원본: `blender/scripts/overspeed_governor.py`.
 - 조속기 최종 모델: `models/gltf/overspeed_governor.glb`.
 - 조속기 렌더 검증: `blender/scripts/render_governor.py`.
+- 승장 인터록 형상 원본: `blender/scripts/hall_interlock.py`.
+- 승장 인터록 최종 모델: `models/gltf/hall_interlock.glb` (파일 유지).
+- 승장 인터록 렌더 검증: `blender/scripts/render_hall_interlock.py`.
+- 현재 `buildHatchDoors()`는 이 GLB를 로드하지 않는다. 헤더는 양단 브라켓·C레일만 올린다. 다시 붙일 때는 `docs/DOOR-REBUILD.md` 행거 케이스 계약을 본다.
 - 세이프티기어는 예외적으로 기존 경로 `assets/safety_gear.glb`를 사용한다.
 
 앱이 읽는 최종 형식은 glTF Binary 단일 파일인 `.glb`다.
@@ -56,6 +60,13 @@ def T(x, y, z):
 ```powershell
 & 'C:\Program Files\Blender Foundation\Blender 5.2\blender.exe' `
   -b -P blender\scripts\overspeed_governor.py
+```
+
+승장 인터록:
+
+```powershell
+& 'C:\Program Files\Blender Foundation\Blender 5.2\blender.exe' `
+  -b -P blender\scripts\hall_interlock.py
 ```
 
 성공 조건:
@@ -118,6 +129,19 @@ GLB 노드 이름, 원점 또는 래퍼 계층을 바꾸면 `js/elevator.js`의 
 
 노드 이름은 `js/environment.js`의 `mount()` 검색 키와 연결된다.
 삭제하거나 바꾸려면 Python, GLB, `environment.js`, `elevator.js` 계약을 함께 수정해야 한다.
+
+## 승장 인터록 노드 계약
+
+지금은 화면에 올리지 않는다. 헤더를 벽에 고정하는 부품이 아니다. 다음에 행거판에 붙일 때 아래 노드를 쓴다.
+
+| 노드 | 역할 | Three.js 동작 |
+|---|---|---|
+| `InterlockBase` | 좌측 판, 상부 소형 롤러, 기둥, 스프링 조임 | 행거(문짝) |
+| `Hook` | 하부 대형 롤러, J후크 | `h.hook.rotation.z` 해정 |
+| `Keeper` | 키퍼 암 + 인터록 전기 스위치 | 헤더 고정 |
+
+원점은 하부 롤러 중심. 후크 걸림면 `HOOK_FACE_X = -0.1035` 가 출입구 맞춤선(X=0)에 오도록 장착한다.
+`Hook` 피벗은 `(-0.052, 0.006, 0)` — 롤러 중심에서 기둥까지 52mm (178p).
 
 ## 조속기 동작 데이터
 

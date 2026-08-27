@@ -166,6 +166,380 @@
       return new THREE.MeshBasicMaterial({ map: tex });
     }
 
+    // ── 승강장 대리석 — 실사 사진(assets/bg/lobby_marble.png)을 상면에 입힘 ──
+    //   사진 비율 2:1 → 슬래브 1.6m × 0.8m. 승강장 폭에 약 2장 반이 들어가 우편 도장처럼 안 쪼개진다.
+    // 사진은 로드가 끝난 뒤에만 map 에 붙인다. 빈 텍스처를 먼저 넣으면 r128 에서 벽이 검게 나온다.
+    function loadFaceMat(path, u, v, fallback, roughness) {
+      const mat = new THREE.MeshStandardMaterial({
+        color: fallback, roughness: roughness, metalness: 0.0
+      });
+      new THREE.TextureLoader().load(path, (tex) => {
+        tex.encoding = THREE.sRGBEncoding;
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(Math.max(u, 0.01), Math.max(v, 0.01));
+        tex.anisotropy = 8;
+        mat.map = tex;
+        mat.color.setHex(0xffffff);
+        mat.needsUpdate = true;
+      });
+      return mat;
+    }
+    function lobbyStoneMat(u, v) {
+      return loadFaceMat('assets/bg/lobby_wall.png', u, v, 0xe8e2d6, 0.88);
+    }
+    /* ── 승강로 내면 — 노출 콘크리트(제물치기) 프로시저럴 타일 ────────────────
+       실사 승강로 사진 기준으로 다음 네 가지가 있어야 "시멘트"로 읽힌다.
+         ① 거푸집 합판 이음선   — 패널 경계의 가는 음영선 + 그라우트가 삐져나온 밝은 립
+         ② 폼타이 콘 구멍       — 규칙적 격자로 뚫린 Ø28mm 구멍 + 아래로 흐른 물때
+         ③ 타설 이음(lift line) — 타설 회차 경계의 수평 띠, 아래쪽이 어둡다
+         ④ 누수·백화 얼룩       — 세로로 길게 흘러내린 얼룩, 일부는 녹물(주황)
+       사진(shaft_concrete.png)은 미세 그레인 레이어로만 soft-light 합성하고,
+       위 흔적은 캔버스에 직접 그린다. 사진만 쓰면 밋밋한 무지 벽이 된다.
+       타일 1장 = CONC_TILE_W × CONC_TILE_H(m)이며 상하좌우로 이어 붙는다.
+       (이음선·타설선은 타일 경계에 두고, 얼룩은 ±W/±H 로 감아 그려 심을 없앤다) */
+    const CONC_TILE_W = 2.4,  CONC_TILE_H = 3.6;   // 타일 실제 크기 (m)
+    const CONC_PANEL_W = 1.2, CONC_PANEL_H = 1.8;  // 거푸집 합판 1장
+    const CONC_PX = 320;                           // 1m 당 픽셀 (768 × 1152)
+
+    let _concSrc = null;        // { albedo, normal } 캔버스 (1회 생성 후 공유)
+    let _concBuilding = false;
+    const _concPending = [];    // 캔버스 완성 전에 만들어진 재질 대기열
+
+    // 결정적 난수 — 새로고침해도 같은 얼룩이 나와야 스크린샷 비교가 된다.
+    function _concRnd(seed) {
+      let s = seed >>> 0;
+      return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+    }
+
+    function _drawConcrete(photo) {
+      const W = Math.round(CONC_TILE_W * CONC_PX);
+      const H = Math.round(CONC_TILE_H * CONC_PX);
+      const mk = () => { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; };
+      const ac = mk(), hc = mk();                    // albedo / height(높이)
+      const a = ac.getContext('2d'), h = hc.getContext('2d');
+      const R = _concRnd(20260813);
+      const P = CONC_PX;                             // m → px
+
+      // ① 바탕 시멘트色 + 사진 그레인
+      //    ★사진이 밝은 회백색이라 soft-light 알파를 올리면 벽이 하얗게 뜬다. 0.45 고정.
+      a.fillStyle = '#78756e'; a.fillRect(0, 0, W, H);
+      h.fillStyle = '#808080'; h.fillRect(0, 0, W, H);
+      if (photo) {
+        a.save(); a.globalCompositeOperation = 'soft-light'; a.globalAlpha = 0.45;
+        a.drawImage(photo, 0, 0, W, H); a.restore();
+        h.save(); h.globalCompositeOperation = 'soft-light'; h.globalAlpha = 0.55;
+        h.drawImage(photo, 0, 0, W, H); h.restore();
+      }
+
+      // ②' 거푸집 패널별 색조 편차 — 합판을 돌려 쓰면 판마다 물 먹은 정도가 달라
+      //     사각형 단위로 톤이 갈린다. 실사에서 제일 먼저 눈에 띄는 특징이다.
+      for (let px = 0; px < W; px += CONC_PANEL_W * P) {
+        for (let py = 0; py < H; py += CONC_PANEL_H * P) {
+          const al = 0.03 + R() * 0.06;
+          a.fillStyle = R() < 0.36 ? `rgba(102,97,88,${(al * 0.8).toFixed(3)})`
+                                   : `rgba(214,209,199,${(al * 1.5).toFixed(3)})`;
+          a.fillRect(px, py, CONC_PANEL_W * P, CONC_PANEL_H * P);
+        }
+      }
+
+      // ② 타설 얼룩 — 크고 옅은 반점으로 색 편차를 만든다
+      for (let i = 0; i < 80; i++) {
+        const x = R() * W, y = R() * H, r = (0.15 + R() * 0.55) * P;
+        const al = 0.04 + R() * 0.07;
+        const g = a.createRadialGradient(x, y, 0, x, y, r);
+        // ★어두운 반점이 우세하면 벽에 곰팡이 핀 것처럼 보인다. 밝은 쪽을 다수로 둔다.
+        g.addColorStop(0, R() < 0.36 ? `rgba(104,99,90,${al * 0.8})` : `rgba(206,201,192,${al * 1.6})`);
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        a.fillStyle = g; a.beginPath(); a.arc(x, y, r, 0, Math.PI * 2); a.fill();
+      }
+
+      // ③ 누수·녹물 얼룩 — 세로로 흘러내림. ±W/±H 로 감아 그려 타일 심을 지운다.
+      for (let i = 0; i < 30; i++) {
+        const x = R() * W, y0 = R() * H;
+        const len = (0.4 + R() * 2.4) * P;
+        const wd = (0.01 + R() * 0.055) * P;
+        const rust = R() < 0.20;
+        const al = 0.035 + R() * 0.075;
+        for (const dx of [-W, 0, W]) for (const dy of [-H, 0, H]) {
+          const g = a.createLinearGradient(0, y0 + dy, 0, y0 + dy + len);
+          g.addColorStop(0, 'rgba(0,0,0,0)');
+          g.addColorStop(0.14, rust ? `rgba(138,106,68,${al * 1.1})` : `rgba(98,93,84,${al * 0.85})`);
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          a.fillStyle = g; a.fillRect(x + dx - wd / 2, y0 + dy, wd, len);
+        }
+      }
+
+      // ④ 곰보(기포 자국) — 잔점. 가까이서 봐야 보이는 거칠기.
+      //    ★수가 많거나 진하면 벽이 깨 뿌린 것처럼 지저분해진다. 수·농도 모두 낮게 두고
+      //      거칠기는 알베도가 아니라 높이맵(요철)이 내도록 맡긴다.
+      for (let i = 0; i < 380; i++) {
+        const x = R() * W, y = R() * H, r = 0.4 + R() * 1.4;
+        a.fillStyle = `rgba(104,99,90,${(0.04 + R() * 0.09).toFixed(3)})`;
+        a.beginPath(); a.arc(x, y, r, 0, Math.PI * 2); a.fill();
+        h.fillStyle = `rgba(96,96,96,${(0.26 + R() * 0.34).toFixed(3)})`;
+        h.beginPath(); h.arc(x, y, r, 0, Math.PI * 2); h.fill();
+      }
+
+      // ⑤ 타설 이음 — 타일 경계(y=0, y=H)가 회차 경계다. 아래로 물때가 흐른다.
+      const pourLine = (y) => {
+        // 이음 위쪽(먼저 굳은 회차)은 밝게 뜨고 아래쪽은 물때가 흘러 어둡다.
+        const up = a.createLinearGradient(0, y - 0.40 * P, 0, y);
+        up.addColorStop(0, 'rgba(206,201,192,0)');
+        up.addColorStop(1, 'rgba(206,201,192,0.20)');
+        a.fillStyle = up; a.fillRect(0, y - 0.40 * P, W, 0.40 * P);
+        const g = a.createLinearGradient(0, y - 6, 0, y + 0.55 * P);
+        g.addColorStop(0, 'rgba(134,128,118,0.26)');
+        g.addColorStop(0.06, 'rgba(86,81,73,0.38)');
+        g.addColorStop(1, 'rgba(100,95,86,0)');
+        a.fillStyle = g; a.fillRect(0, y - 6, W, 0.55 * P + 6);
+        a.fillStyle = 'rgba(68,64,57,0.52)'; a.fillRect(0, y - 1, W, 2);
+        h.fillStyle = 'rgba(96,96,96,0.85)'; h.fillRect(0, y - 1, W, 2);
+      };
+      pourLine(0); pourLine(H);
+
+      // ⑥ 거푸집 합판 이음선 — 어두운 실선 + 바로 옆 밝은 립(그라우트 누출)
+      const seam = (x, y, w, hh) => {
+        a.fillStyle = 'rgba(84,79,71,0.34)'; a.fillRect(x, y, w, hh);
+        h.fillStyle = 'rgba(104,104,104,0.85)'; h.fillRect(x, y, w, hh);
+      };
+      const lip = (x, y, w, hh) => { a.fillStyle = 'rgba(198,193,184,0.16)'; a.fillRect(x, y, w, hh); };
+      for (let px = 0; px <= W; px += CONC_PANEL_W * P) {          // 세로 이음
+        seam(px - 1, 0, 2, H); lip(px + 1, 0, 2, H);
+      }
+      for (let py = CONC_PANEL_H * P; py < H; py += CONC_PANEL_H * P) {  // 가로 이음
+        seam(0, py - 1, W, 2); lip(0, py + 1, W, 2);
+      }
+
+      // ⑦ 폼타이 콘 구멍 — 패널 1/4 지점 격자(0.6 × 0.9m). 이음선과 겹치지 않는다.
+      const holeR = 0.011 * P;                                     // Ø22mm
+      for (let cx = 0.3 * P; cx < W; cx += 0.6 * P) {
+        for (let cy = 0.45 * P; cy < H; cy += 0.9 * P) {
+          const g = a.createRadialGradient(cx, cy - holeR * 0.25, holeR * 0.15, cx, cy, holeR);
+          g.addColorStop(0, 'rgba(56,52,46,0.88)');
+          g.addColorStop(0.62, 'rgba(84,79,71,0.75)');
+          g.addColorStop(1, 'rgba(130,125,116,0.18)');
+          a.fillStyle = g; a.beginPath(); a.arc(cx, cy, holeR, 0, Math.PI * 2); a.fill();
+          // 빛이 위에서 들어오므로 구멍 하단 테두리가 밝다
+          a.strokeStyle = 'rgba(214,209,199,0.34)'; a.lineWidth = 1.6;
+          a.beginPath(); a.arc(cx, cy + 0.6, holeR * 0.94, 0.15 * Math.PI, 0.85 * Math.PI); a.stroke();
+          // 구멍에서 흘러내린 물때 — ★짧고 넓게. 길고 가늘면 긁힌 자국처럼 보인다.
+          const dl = (0.06 + R() * 0.20) * P;
+          const dg = a.createLinearGradient(0, cy, 0, cy + dl);
+          dg.addColorStop(0, R() < 0.18 ? 'rgba(126,96,62,0.19)' : 'rgba(94,89,80,0.17)');
+          dg.addColorStop(1, 'rgba(94,89,80,0)');
+          a.fillStyle = dg; a.fillRect(cx - holeR * 0.85, cy, holeR * 1.7, dl);
+          // 높이맵 — 실제로 파인 구멍
+          const hg = h.createRadialGradient(cx, cy, 0, cx, cy, holeR);
+          hg.addColorStop(0, 'rgba(44,44,44,1)');
+          hg.addColorStop(0.70, 'rgba(70,70,70,0.9)');
+          hg.addColorStop(1, 'rgba(128,128,128,0)');
+          h.fillStyle = hg; h.beginPath(); h.arc(cx, cy, holeR, 0, Math.PI * 2); h.fill();
+        }
+      }
+      return { albedo: ac, height: hc };
+    }
+
+    // 높이맵 → 노멀맵 (Sobel). bumpMap 은 스치는 각도에서 지저분해서 노멀로 굽는다.
+    function _heightToNormal(hc, strength) {
+      const W = hc.width, H = hc.height;
+      const src = hc.getContext('2d').getImageData(0, 0, W, H).data;
+      const nc = document.createElement('canvas'); nc.width = W; nc.height = H;
+      const ctx = nc.getContext('2d');
+      const out = ctx.createImageData(W, H);
+      const at = (x, y) => src[((((y % H) + H) % H) * W + (((x % W) + W) % W)) * 4];
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const dx = (at(x + 1, y) - at(x - 1, y)) / 255 * strength;
+          const dy = (at(x, y + 1) - at(x, y - 1)) / 255 * strength;
+          // 텍스처 v축은 이미지 y와 반대라 ny 부호가 +dy 다 (구멍이 파여 보여야 정상)
+          const nx = -dx, ny = dy, inv = 1 / Math.hypot(nx, ny, 1);
+          const i = (y * W + x) * 4;
+          out.data[i]     = (nx * inv * 0.5 + 0.5) * 255;
+          out.data[i + 1] = (ny * inv * 0.5 + 0.5) * 255;
+          out.data[i + 2] = (inv * 0.5 + 0.5) * 255;
+          out.data[i + 3] = 255;
+        }
+      }
+      ctx.putImageData(out, 0, 0);
+      return nc;
+    }
+
+    function _applyConc(e) {
+      const tex = new THREE.CanvasTexture(_concSrc.albedo);
+      tex.encoding = THREE.sRGBEncoding;
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(e.u, e.v); tex.anisotropy = 8;
+      const nrm = new THREE.CanvasTexture(_concSrc.normal);
+      nrm.wrapS = nrm.wrapT = THREE.RepeatWrapping;
+      nrm.repeat.set(e.u, e.v); nrm.anisotropy = 8;
+      e.mat.map = tex;
+      e.mat.normalMap = nrm;
+      e.mat.normalScale = new THREE.Vector2(0.9, 0.9);
+      e.mat.color.setHex(0xffffff);
+      e.mat.needsUpdate = true;
+    }
+
+    function _buildConc() {
+      if (_concBuilding) return;
+      _concBuilding = true;
+      const finish = (photo) => {
+        const { albedo, height } = _drawConcrete(photo);
+        _concSrc = { albedo, normal: _heightToNormal(height, 3.2) };
+        _concPending.forEach(_applyConc);
+        _concPending.length = 0;
+      };
+      // 사진은 그레인 보조일 뿐이라 없거나 실패해도 프로시저럴만으로 완성된다.
+      const img = new Image();
+      img.onload = () => finish(img);
+      img.onerror = () => finish(null);
+      img.src = 'assets/bg/shaft_concrete.png';
+    }
+
+    function shaftConcMat(u, v) {
+      const mat = new THREE.MeshStandardMaterial({
+        color: 0x8d8981, roughness: 0.97, metalness: 0.0
+      });
+      const e = { mat, u: Math.max(u, 0.01), v: Math.max(v, 0.01) };
+      if (_concSrc) _applyConc(e);
+      else { _concPending.push(e); _buildConc(); }
+      return mat;
+    }
+    /* ── 기계실 내벽 마감 — 준불연 흡음보드 라이닝 ──────────────────────────
+       실사(기계실 사진): 콘크리트 위에 아이보리색 보드를 덧대 시공한다.
+         ① 1m 안팎으로 나뉜 세로 이음매 — 보드 1장 폭
+         ② 천장 가까이 가로로 한 줄 지나가는 이음매
+         ③ 판 가운데가 볼록한 "푹신한" 쿠션 음영. 이음매 쪽은 눌려 어둡다.
+         ④ 미세한 섬유결과 바닥쪽 때
+       승강로 콘크리트와 달리 벽 1장에 1:1로 입히므로(repeat 없음) 실제 폭·높이
+       비율 그대로 굽는다. 그래야 이음매 간격과 바닥 때 위치가 안 어긋난다. */
+    const MR_LINING_T = 0.030;   // 보드 두께 30mm — 벽에 다는 부속의 X 기준점이기도 하다
+    const _mrLiningCache = {};
+    function mrLiningMats(wM, hM) {
+      const key = `${wM.toFixed(3)}x${hM.toFixed(3)}`;
+      if (!_mrLiningCache[key]) {
+        const PX = 256;
+        const W = Math.round(wM * PX), H = Math.round(hM * PX);
+        const mk = () => { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; };
+        const ac = mk(), hc = mk();
+        const a = ac.getContext('2d'), h = hc.getContext('2d');
+        const R = _concRnd(770421);
+        // 캔버스 y=0 이 벽 윗단이다 (텍스처 v=1 = 박스 면 상단).
+        // ★흰색(255)에 가까운 하이라이트를 얹으면 도장한 흰 벽처럼 채도가 날아간다.
+        //   바탕은 따뜻한 아이보리로 깔고 하이라이트도 누런 기를 남긴다.
+        a.fillStyle = '#d3c9b5'; a.fillRect(0, 0, W, H);
+        h.fillStyle = '#606060'; h.fillRect(0, 0, W, H);
+
+        const nPanel = Math.max(2, Math.round(wM / 1.05));   // 보드 1장 ≈ 1.0m
+        const pw = W / nPanel;
+        const jointY = (0.45 / hM) * H;                      // 천장에서 450mm 아래
+
+        // ③ 판별 쿠션 음영 — 가운데 볼록, 이음매 쪽으로 눌림
+        for (let i = 0; i < nPanel; i++) {
+          const x0 = i * pw;
+          const g = a.createLinearGradient(x0, 0, x0 + pw, 0);
+          g.addColorStop(0.00, 'rgba(126,114,94,0.32)');
+          g.addColorStop(0.13, 'rgba(255,248,228,0.07)');
+          g.addColorStop(0.50, 'rgba(255,248,228,0.13)');
+          g.addColorStop(0.87, 'rgba(255,248,228,0.07)');
+          g.addColorStop(1.00, 'rgba(126,114,94,0.32)');
+          a.fillStyle = g; a.fillRect(x0, 0, pw, H);
+          const gh = h.createLinearGradient(x0, 0, x0 + pw, 0);
+          gh.addColorStop(0.00, 'rgba(46,46,46,1)');
+          gh.addColorStop(0.15, 'rgba(150,150,150,1)');
+          gh.addColorStop(0.50, 'rgba(182,182,182,1)');
+          gh.addColorStop(0.85, 'rgba(150,150,150,1)');
+          gh.addColorStop(1.00, 'rgba(46,46,46,1)');
+          h.fillStyle = gh; h.fillRect(x0, 0, pw, H);
+        }
+        // 위아래도 눌린다 — 세로 방향 쿠션
+        const gv = a.createLinearGradient(0, 0, 0, H);
+        gv.addColorStop(0.00, 'rgba(126,114,94,0.26)');
+        gv.addColorStop(0.10, 'rgba(255,248,228,0.04)');
+        gv.addColorStop(0.90, 'rgba(255,248,228,0.04)');
+        gv.addColorStop(1.00, 'rgba(126,114,94,0.26)');
+        a.fillStyle = gv; a.fillRect(0, 0, W, H);
+
+        // ④ 섬유결 — 아주 옅은 세로 잔선
+        for (let i = 0; i < 1400; i++) {
+          const x = R() * W, y = R() * H, len = (0.04 + R() * 0.30) * PX;
+          a.fillStyle = `rgba(156,143,120,${(0.015 + R() * 0.045).toFixed(3)})`;
+          a.fillRect(x, y, 1, len);
+        }
+        // 얼룩 — 보드마다 미묘한 색 편차
+        for (let i = 0; i < 40; i++) {
+          const x = R() * W, y = R() * H, r = (0.12 + R() * 0.40) * PX;
+          const g = a.createRadialGradient(x, y, 0, x, y, r);
+          g.addColorStop(0, R() < 0.5 ? 'rgba(140,128,106,0.06)' : 'rgba(255,248,228,0.06)');
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          a.fillStyle = g; a.beginPath(); a.arc(x, y, r, 0, Math.PI * 2); a.fill();
+        }
+
+        // ①② 이음매 — 세로(보드 경계) + 가로(천장 가까이 한 줄)
+        const jointW = Math.max(2, 0.008 * PX);
+        for (let i = 0; i <= nPanel; i++) {
+          const x = i * pw;
+          a.fillStyle = 'rgba(110,99,80,0.42)'; a.fillRect(x - jointW / 2, 0, jointW, H);
+          h.fillStyle = 'rgba(24,24,24,1)';       h.fillRect(x - jointW / 2, 0, jointW, H);
+        }
+        a.fillStyle = 'rgba(110,99,80,0.38)'; a.fillRect(0, jointY - jointW / 2, W, jointW);
+        h.fillStyle = 'rgba(28,28,28,1)';       h.fillRect(0, jointY - jointW / 2, W, jointW);
+
+        // 바닥쪽 때
+        const soilH = 0.26 * PX;
+        const gs = a.createLinearGradient(0, H - soilH, 0, H);
+        gs.addColorStop(0, 'rgba(108,96,78,0)');
+        gs.addColorStop(1, 'rgba(108,96,78,0.26)');
+        a.fillStyle = gs; a.fillRect(0, H - soilH, W, soilH);
+
+        // 보드는 부드러워 요철이 완만하다 — 노멀 강도를 콘크리트보다 낮게 굽는다.
+        _mrLiningCache[key] = { albedo: ac, normal: _heightToNormal(hc, 1.6) };
+      }
+      const src = _mrLiningCache[key];
+      const tex = new THREE.CanvasTexture(src.albedo);
+      tex.encoding = THREE.sRGBEncoding;
+      tex.anisotropy = 8;
+      const nrm = new THREE.CanvasTexture(src.normal);
+      nrm.anisotropy = 8;
+      const face = new THREE.MeshStandardMaterial({
+        map: tex, normalMap: nrm, normalScale: new THREE.Vector2(0.7, 0.7),
+        roughness: 0.96, metalness: 0.0
+      });
+      const edge = M.conc(0xd6cfc1);   // 보드 절단면
+      return [face, edge, edge, edge, edge, edge];
+    }
+
+    // BoxGeometry 면 순서: +X -X +Y -Y +Z -Z
+    function lobbyFrontWallMats(w, h, d) {
+      const stone = lobbyStoneMat(w / 1.6, h / 0.8);
+      const conc = shaftConcMat(w / CONC_TILE_W, h / CONC_TILE_H);
+      const edge = M.conc(0xc8c2b8);
+      return [edge, edge, edge, edge, stone, conc];
+    }
+    function lobbySideWallMats(w, h, d) {
+      const stone = lobbyStoneMat(d / 1.6, h / 0.8);
+      const conc = shaftConcMat(d / CONC_TILE_W, h / CONC_TILE_H);
+      const edge = M.conc(0xc8c2b8);
+      return [conc, stone, edge, edge, stone, edge];
+    }
+
+    let _lobbyMarbleMats = null;
+    function lobbyMarbleFaceMats(w, d) {
+      if (_lobbyMarbleMats) return _lobbyMarbleMats;
+      const tex = new THREE.TextureLoader().load('assets/bg/lobby_marble.png');
+      tex.encoding = THREE.sRGBEncoding;
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(w / 1.6, d / 0.8);
+      tex.anisotropy = 8;
+      const top = new THREE.MeshStandardMaterial({
+        map: tex, roughness: 0.34, metalness: 0.03
+      });
+      const edge = M.conc(0xd0cbc4);
+      _lobbyMarbleMats = [edge, edge, top, edge, edge, edge];
+      return _lobbyMarbleMats;
+    }
+
     // ── 수풀형 가로수 — 줄기 + 불규칙 블롭 수관 (정점 컬러 로우폴리) ──
     let TREE_MAT = null;
     function buildTree(parent, x, z, s) {
@@ -1462,10 +1836,9 @@
     function buildFrontWallAndLobby() {
       if (wallGrp) scene.remove(wallGrp);
       wallGrp = new THREE.Group();
-      // 이탈리아 팔라초 팔레트: 트라버틴 석재 + 테라코타 밴드 + 딥 올리브 문틀 (형태는 기존 유지, 색만)
-      const wallMat = M.conc(0xb8956a);
+      // 외면=석재 사진, 승강로 내면=콘크리트. 현판·코니스·문틀은 그대로 둔다.
       const terracottaMat = M.paint(0xa95032);
-      const oliveMat = M.paint(0x3f4a36);
+      const jambSs = M.silverHairline(0xc8d0d8, 0.28);
       const wallZ = FRONT_WALL_INNER_Z + S.WALL_T / 2; // 승강로 전면벽 — 카 전면에서 ~200mm (문 구역 깊이 확보)
       const doorHoleW = S.DOOR_W + 0.1;
       const totalWallW = S.SHAFT_W + S.WALL_T * 2;
@@ -1477,27 +1850,31 @@
         const fh = (i === 0) ? 4.0 : (i === 1 ? 3.65 : 3.7);
 
         // 좌우 벽체
-        createBox(sideW, fh, S.WALL_T, wallMat, -doorHoleW / 2 - sideW / 2, fy + fh / 2, wallZ, wallGrp);
-        createBox(sideW, fh, S.WALL_T, wallMat, doorHoleW / 2 + sideW / 2, fy + fh / 2, wallZ, wallGrp);
+        createBox(sideW, fh, S.WALL_T, lobbyFrontWallMats(sideW, fh, S.WALL_T),
+          -doorHoleW / 2 - sideW / 2, fy + fh / 2, wallZ, wallGrp);
+        createBox(sideW, fh, S.WALL_T, lobbyFrontWallMats(sideW, fh, S.WALL_T),
+          doorHoleW / 2 + sideW / 2, fy + fh / 2, wallZ, wallGrp);
 
         // 상부 마감벽 틈새 완벽 차단 (도어+문틀+막판 높이 계산)
         const transomTopY = 2.56;
         const topH = fh - transomTopY;
-        createBox(doorHoleW, topH, S.WALL_T, wallMat, 0, fy + transomTopY + topH / 2, wallZ, wallGrp);
+        createBox(doorHoleW, topH, S.WALL_T, lobbyFrontWallMats(doorHoleW, topH, S.WALL_T),
+          0, fy + transomTopY + topH / 2, wallZ, wallGrp);
 
-        // 팔라초식 출입구 프레임 — 딥 올리브 세로선과 테라코타 상인방
+        // 승강장 삼방틀 — 헤어라인 스테인리스 (올리브/테라코타 장식틀 제거)
         const portalX = doorHoleW / 2 + 0.045;
-        createBox(0.09, 2.56, 0.025, oliveMat, -portalX, fy + 1.28, facadeZ, wallGrp);
-        createBox(0.09, 2.56, 0.025, oliveMat,  portalX, fy + 1.28, facadeZ, wallGrp);
-        createBox(doorHoleW + 0.18, 0.10, 0.028, terracottaMat, 0, fy + 2.56, facadeZ + 0.002, wallGrp);
+        createBox(0.09, 2.56, 0.025, jambSs, -portalX, fy + 1.28, facadeZ, wallGrp);
+        createBox(0.09, 2.56, 0.025, jambSs,  portalX, fy + 1.28, facadeZ, wallGrp);
+        createBox(doorHoleW + 0.18, 0.10, 0.028, jambSs, 0, fy + 2.56, facadeZ + 0.002, wallGrp);
 
         // 층별 수평 코니스 — 단조로운 흰 수직면을 분절하는 따뜻한 테라코타 띠
         createBox(totalWallW + 0.08, 0.11, 0.035, terracottaMat,
           0, fy + fh - 0.055, facadeZ + 0.004, wallGrp);
 
-        // 로비 대리석 바닥 (전면벽 이동에 맞춰 깊이 보정, 외부 끝 위치 유지)
+        // 로비 대리석 바닥 — 상면만 타일 텍스처 (전면벽 이동에 맞춰 깊이 보정)
         const lobbyDepth = 1.5 + (S.SHAFT_D / 2 - FRONT_WALL_INNER_Z);
-        createBox(totalWallW, 0.12, lobbyDepth, M.ss(0x8b7962), 0, fy - 0.06, wallZ + S.WALL_T / 2 + lobbyDepth / 2, wallGrp);
+        createBox(totalWallW, 0.12, lobbyDepth, lobbyMarbleFaceMats(totalWallW, lobbyDepth),
+          0, fy - 0.06, wallZ + S.WALL_T / 2 + lobbyDepth / 2, wallGrp);
 
         // 천장 Y 좌표 (해당 층 바닥 + 층고)
         const ceilingY = fy + fh;
@@ -1526,7 +1903,8 @@
       }
 
       // 피트 전면벽 추가
-      createBox(totalWallW, PIT, S.WALL_T, wallMat, 0, Y0 + PIT / 2, wallZ, wallGrp);
+      createBox(totalWallW, PIT, S.WALL_T, lobbyFrontWallMats(totalWallW, PIT, S.WALL_T),
+        0, Y0 + PIT / 2, wallZ, wallGrp);
 
       // [수정] 좌측 벽면 — 전면(FRONT_INNER_Z) 고정, 후면은 SHAFT_BACK_Z 로 확장
       const sideWallH = TOTAL_H + 2.2;
@@ -1535,7 +1913,8 @@
       const sideWallD = sideWallFront - SHAFT_BACK_Z; // 깊이 확장 시 후방으로만 성장
       const sideWallCZ = (sideWallFront + SHAFT_BACK_Z) / 2;
 
-      createBox(S.WALL_T, sideWallH, sideWallD, wallMat, sideWallX, Y0 + sideWallH / 2, sideWallCZ, wallGrp);
+      createBox(S.WALL_T, sideWallH, sideWallD, lobbySideWallMats(S.WALL_T, sideWallH, sideWallD),
+        sideWallX, Y0 + sideWallH / 2, sideWallCZ, wallGrp);
 
       // --- 세로형 지사 로고 현판 (assets/bg/logo.png) ---
       const logoTex = new THREE.TextureLoader().load('assets/bg/logo.png',
@@ -1815,12 +2194,25 @@
       createBox(S.SHAFT_W + 0.4, 0.25, S.SHAFT_D / 2 - SHAFT_BACK_Z + 0.4, M.conc(), 0, my - 0.12, mrSlabCZ, mrGrp);
       createBox(S.SHAFT_W + 0.2, 0.02, S.SHAFT_D / 2 - SHAFT_BACK_Z + 0.2, M.paint(0x2e7d32), 0, my + 0.01, mrSlabCZ, mrGrp); // 진한 초록색 (우레탄 도장 느낌)
 
-      // 로프 이송구 — 네모 홀 + 회색 플라스틱 방수턱 (검사기준 ≥50mm / 체대는 그 50%)
+      /* 기계실 내벽 마감 — 콘크리트 벽에 준불연 흡음보드를 덧시공한 라이닝.
+         기계실을 두르는 벽은 좌측벽 하나뿐이다(나머지는 절개면). 그 벽은
+         buildFrontWallAndLobby()의 승강로 좌측벽이 기계실 위로 2.2m 더 뻗은 것이라
+         면 재질을 못 바꾼다 → 실제 시공처럼 안쪽에 보드를 한 겹 덧대 가린다.
+         치수는 좌측벽과 같은 식으로 뽑아야 어긋나지 않는다. */
+      const linT = MR_LINING_T;
+      const linFront = FRONT_WALL_INNER_Z + S.WALL_T;      // 좌측벽 전면 (좌측벽 생성식과 동일)
+      const linD = linFront - SHAFT_BACK_Z;
+      const linH = (my + 2.2) - mrFloorY;                  // 좌측벽이 기계실 위로 뻗은 높이
+      createBox(linT, linH, linD, mrLiningMats(linD, linH),
+        -(S.SHAFT_W / 2) + linT / 2, mrFloorY + linH / 2, (linFront + SHAFT_BACK_Z) / 2, mrGrp);
+
+      // 로프 이송구 — 네모 홀 + 회색 플라스틱 방수턱 (검사기준 ≥50mm / 체대는 그 50%) 및 승강로 천장 슬리브
       const ropeHoleMat = M.paint(0x141618);
       const ropeSillMat = M.paint(0x9aa0a6); // 회색 플라스틱 커버
+      const slabCeilingY = my - 0.245; // 승강로 천장 슬래브 하면
       function addRopeHole(cx, floorY, cz, holeW, holeD, sillH) {
         const tw = 0.014; // 턱 두께
-        // 홀(암부) — 바닥 면보다 약간 아래로 뚫린 느낌
+        // 1. 기계실 바닥면 상면 홀(암부) & 방수턱
         createBox(holeW, 0.006, holeD, ropeHoleMat, cx, floorY - 0.003, cz, mrGrp);
         // 전후 방수턱
         createBox(holeW + tw * 2, sillH, tw, ropeSillMat,
@@ -1832,13 +2224,26 @@
           cx + holeW / 2 + tw / 2, floorY + sillH / 2, cz, mrGrp);
         createBox(tw, sillH, holeD, ropeSillMat,
           cx - holeW / 2 - tw / 2, floorY + sillH / 2, cz, mrGrp);
+
+        // 2. 승강로 천장 콘크리트 슬래브 하면 사각 관통구 (스크린샷 180501)
+        const ceilSillH = 0.020; // 천장 하면 돌출 사각 슬리브 칼라
+        createBox(holeW, 0.008, holeD, ropeHoleMat, cx, slabCeilingY + 0.004, cz, mrGrp);
+        // 천장 하면 사각 테두리 슬리브 플랜지
+        createBox(holeW + tw * 2, ceilSillH, tw, ropeSillMat,
+          cx, slabCeilingY - ceilSillH / 2, cz + holeD / 2 + tw / 2, mrGrp);
+        createBox(holeW + tw * 2, ceilSillH, tw, ropeSillMat,
+          cx, slabCeilingY - ceilSillH / 2, cz - holeD / 2 - tw / 2, mrGrp);
+        createBox(tw, ceilSillH, holeD, ropeSillMat,
+          cx + holeW / 2 + tw / 2, slabCeilingY - ceilSillH / 2, cz, mrGrp);
+        createBox(tw, ceilSillH, holeD, ropeSillMat,
+          cx - holeW / 2 - tw / 2, slabCeilingY - ceilSillH / 2, cz, mrGrp);
       }
       const floorSillH = 0.050; // ≥50mm
       const bedSillH = floorSillH * 0.5; // 체대측 1번 = 50%
       const rhW = 0.20, rhD = 0.14; // 5가닥(±0.06) + 여유
-      // ② 카측 주로프 — 기계실 바닥 (Z=CAR_CTR_Z, 카 히치 수직선)
+      // ② 카측 주로프 — 기계실 바닥 & 승강로 천장 (Z=CAR_CTR_Z, 카 히치 수직선)
       addRopeHole(0, mrFloorY, CAR_CTR_Z, rhW, rhD, floorSillH);
-      // ③ 균형추측 주로프 — 기계실 바닥 (Z=CWT)
+      // ③ 균형추측 주로프 — 기계실 바닥 & 승강로 천장 (Z=CWT)
       addRopeHole(0, mrFloorY, CWT_CENTER_Z, rhW, rhD, floorSillH);
 
       /* 4. 제어반(Control Panel) 및 덕트 (좌측 벽면에 밀착, 전면부로 이동) */
@@ -2062,11 +2467,17 @@
         defGrp.add(defRimF);
       });
 
-      defGrp.rotation.y = Math.PI / 2;
       // 후면 접선 = 균형추 수직선 — 현수 로프가 도르래에서 이탈 후 반듯하게 수직 하강
       const defCenterZ = CWT_CENTER_Z + defRadius;
-      defGrp.position.set(0, defY, defCenterZ);
-      mrGrp.add(defGrp);
+      // 스핀 래퍼 — 주도르래(tmShvMount/tmShvSpin)와 동일 구조.
+      // 마운트가 축을 월드 X로 눕히고, 자식(defGrp)이 rotation.z 로 자전한다.
+      // 자전은 ui.js spinSheaves()가 카 실이동량에서 물리적으로 구동한다.
+      const defMount = new THREE.Group();
+      defMount.rotation.y = Math.PI / 2;
+      defMount.position.set(0, defY, defCenterZ);
+      defMount.add(defGrp);
+      mrGrp.add(defMount);
+      deflectorSheaveGrp = defGrp;
 
       // 로프브레이크↔편향도르래 공용 넓은 받침대 — 균형추 로프 네모 통로
       const defPedW = 0.56;
@@ -2715,7 +3126,8 @@
       }
 
       /* ⑤ 개방 레버 + ⑥ 수동 핸들 — 제어반 반대편(-Z) 좌측벽, 같은 높이·걸쇠 각각 (PDF 4·6p) */
-      const wallInnerX = -(S.SHAFT_W / 2 + S.WALL_T / 2) + S.WALL_T / 2 + 0.01;
+      // 걸쇠는 콘크리트가 아니라 흡음보드 라이닝 면에 붙는다 → 보드 두께만큼 안쪽으로.
+      const wallInnerX = -(S.SHAFT_W / 2) + MR_LINING_T + 0.01;
       const hookY = my + 0.92;
       const hookShiftZ = -0.30;
       const levHookZ = panelZ - 0.52 + hookShiftZ;
@@ -2854,10 +3266,49 @@
       // 상판 (Top Plate)
       createBox(0.16, 0.025, 0.36, govStandMat, 0, pHeight + 0.047, 0, govGrp);
 
-      // 디테일: 상판 로프 관통 홀 2개 — 로컬 ±0.10 × 스케일 1.5 = 월드 ±0.15 (로프 가닥 정렬)
-      const holeMat = M.paint(0x050505);
-      createCylinder(0.020, 0.020, 0.024, holeMat, 0, pHeight + 0.047, 0.10, govGrp);
-      createCylinder(0.020, 0.020, 0.024, holeMat, 0, pHeight + 0.047, -0.10, govGrp);
+      // 디테일: 상판 & 하판 로프 관통 홀 2개소 (검은색 테두리 슬리브 링) — 로컬 ±0.10 (월드 ±0.15 로프 가닥 정렬)
+      const holeMat = M.paint(0x111315);
+      const ringMat = M.paint(0x1a1c1e);
+      [-0.10, 0.10].forEach(pz => {
+        // 상판 관통 홀 및 테두리 링
+        createCylinder(0.016, 0.016, 0.028, holeMat, 0, pHeight + 0.047, pz, govGrp);
+        const topRimU = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.0028, 6, 16), ringMat);
+        topRimU.rotation.x = Math.PI / 2;
+        topRimU.position.set(0, pHeight + 0.047 + 0.0126, pz);
+        govGrp.add(topRimU);
+        const topRimD = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.0028, 6, 16), ringMat);
+        topRimD.rotation.x = Math.PI / 2;
+        topRimD.position.set(0, pHeight + 0.047 - 0.0126, pz);
+        govGrp.add(topRimD);
+
+        // 하판 관통 홀 및 테두리 링 (스크린샷 1734371)
+        createCylinder(0.016, 0.016, 0.038, holeMat, 0, 0.018, pz, govGrp);
+        const botRimU = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.0028, 6, 16), ringMat);
+        botRimU.rotation.x = Math.PI / 2;
+        botRimU.position.set(0, 0.018 + 0.0176, pz);
+        govGrp.add(botRimU);
+        const botRimD = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.0028, 6, 16), ringMat);
+        botRimD.rotation.x = Math.PI / 2;
+        botRimD.position.set(0, 0.018 - 0.0176, pz);
+        govGrp.add(botRimD);
+      });
+
+      // 승강로 천정 콘크리트 슬래브 하면 로프 관통구 (스크린샷 1735031 — 검은색 테두리 슬리브 링)
+      [-0.15, 0.15].forEach(wz => {
+        // 기계실 바닥면 관통 슬리브
+        createCylinder(0.022, 0.022, 0.040, holeMat, govX, mrFloorY, govZ + wz, mrGrp);
+        const flRim = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.0035, 6, 16), ringMat);
+        flRim.rotation.x = Math.PI / 2;
+        flRim.position.set(govX, mrFloorY + 0.002, govZ + wz);
+        mrGrp.add(flRim);
+
+        // 승강로 천장 하면 관통구 (슬리브 링 및 내부 암부)
+        createCylinder(0.022, 0.022, 0.035, holeMat, govX, slabCeilingY + 0.010, govZ + wz, mrGrp);
+        const ceilRim = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.0035, 6, 16), ringMat);
+        ceilRim.rotation.x = Math.PI / 2;
+        ceilRim.position.set(govX, slabCeilingY - 0.001, govZ + wz);
+        mrGrp.add(ceilRim);
+      });
 
       const boltHoleZ = 0.22;
       const boltHoleX = 0.05;
@@ -2931,12 +3382,8 @@
       govSwMountGrp.add(govPlungerGrp);
       const govRatchetGrp = new THREE.Group();                // 끌림 계산용 핸들 (메시 없음)
       govBodyGrp.add(govRatchetGrp);
-      // 쇄기(Pawl/Wedge) — ★11시 브래킷 핀에 매달린 **정지부**라 캐치 레버가 아니라
-      //   govBodyGrp 직계 자식이다. 원심으로 벌어진 진자 뭉치가 트립 탭을 쳐서
-      //   떨어뜨리면 부리가 휠의 톱날 골에 박힌다.
-      //   ★휠과 함께 도는 진자에 매달면 날과 같이 돌아 영원히 못 문다 — 붙이지 말 것.
       const govPawlGrp = new THREE.Group();
-      govBodyGrp.add(govPawlGrp);
+      govWheelGrpL.add(govPawlGrp);                       // 쇄기는 삼발이 브라켓에 고정, 휠과 같이 돈다
       const govTripGrp = new THREE.Group();
       govTopArmGrp.add(govTripGrp);
       const govLink = new THREE.Group();                      // 구 API 더미
@@ -2956,7 +3403,7 @@
            메시는 로컬 +X 로 곧게 구워져 있어 회전 + scale.x 로 늘인다. */
       const PIV_A = Math.PI * 155 / 180;   // .py PEND_ANG_A
       const PIV_R = 0.030;                 // .py PEND_PIV_R
-      const TIE_KX = -0.027, SPR_MX = 0.032, SPR_NX = -0.022;  // .py 동명 상수
+      const TIE_KX = 0.027, SPR_MX = -0.022, SPR_NX = 0.032;  // .py 동명 상수
       const E1X = Math.cos(PIV_A - Math.PI / 2), E1Y = Math.sin(PIV_A - Math.PI / 2);
       const OWX = PIV_R * Math.cos(PIV_A), OWY = PIV_R * Math.sin(PIV_A);
       const TIE_K0X = TIE_KX * E1X, TIE_K0Y = TIE_KX * E1Y;
@@ -3014,7 +3461,7 @@
         mount('PendSpring', govPendSpr, wheelPivot);
         govSetLinkage(govPendA.rotation.z);
         mount('Catch', govTopArmGrp);
-        mount('Pawl', govPawlGrp);                           // 원점 = 베이스 피벗 핀
+        mount('Pawl', govPawlGrp, wheelPivot);               // 원점 = 쇄기 피벗, 삼발이 브라켓에 물림
         mount('Spring', govSprGrp, govTopArmGrp.position);   // 수직 메시 → SPRING_TILT 로 기울음
         // 플런저: 마운트(-90°) 안에 원상 복원 회전(+90°)으로 장착 → position.x = 아래로 눌림
         const plg = g.getObjectByName('Plunger');
@@ -3072,33 +3519,25 @@
             armRot0: 0,          // 대기 자세는 .glb 메시에 구워짐 — 래퍼 0 = 대기
             pawlRot0: 0,
             pendRot0: [0, 0],
-            toothStep: (Math.PI * 2) / 10, // 날(캠) 톱니 10개 (.py CAM_TEETH 와 반드시 일치)
+            toothStep: (Math.PI * 2) / 8, // 날(원형 톱날 래칫) 톱니 8개 (.py CAM_TEETH 와 반드시 일치)
             sprScale0: 1,
             plungerX0: 0
           },
-          /* 트립은 2단계다 (.py v3.4 헤더 참조).
-             ① trip  캐치 낙하(+CCW = 좌단 하강) — 발톱이 캠에 물리고 플런저를 침
-             ② grip  물린 발톱을 휠이 끌고 가며 레버를 반대(-CW)로 돌린다 →
-                     피벗 아래·우측의 떡판이 로프를 홈 쪽(-x)으로 눌러 파지
-             ★각도가 작은 이유: 레버 팔 길이가 0.10~0.13 이라 0.12rad 만 돌아도
-               좌단이 12mm 내려간다. 예전 0.30 은 스위치를 뚫고 들어갔다. */
+          /* 트립은 2단계다 (.py v5.0 참조).
+             ① trip  원심 개방 → 쐐기 +0.60rad 로 톱날 골에 갈고리 부리 맞물림 + 플런저 타격
+             ② grip  물린 쐐기를 휠이 끌고 가며 레버를 반대(-CW)로 돌린다 →
+                     피벗 아래·우측의 떡판(캐치슈)이 로프를 홈 쪽(-x)으로 눌러 파지
+                     → 로프·휠 정지 → 카 안전기 물림 */
           pose: {
-            rest: { pendulum: 0, topArm: 0, pawl: 0, switchLever: 0, ratchet: 0, spring: 1 },
+            rest: { pendulum: 0, topArm: 0, pawl: 0, switchLever: 0, switchRot: 0, ratchet: 0, spring: 1 },
             trip: {
-              pendulum: 0.45,     // 돔 원심 개방
-              topArm: 0.12,       // 캐치 낙하 — 좌단 12mm 하강 (플런저 5mm 눌림)
-              pawl: 0.1086,       // ★쇄기 물림 — .py PAWL_ROT 와 반드시 같은 값.
-                                  //   11시 피벗(r 0.090)에서 부리가 톱니끝 위 1.5mm
-                                  //   → 골 위 6mm 로 **떨어져** 박힌다(예전 0.2047 은
-                                  //   휠 바닥 피벗 시절 값).
-              switchLever: 0.0076, // 액추에이터 레버 눌림 (마운트 -90°: +x = 아래) — 대기 간극 4mm
-              ratchet: 0.22,      // 물린 채 끌림
-              spring: 0.97        // 일자 링크라 스프링은 거의 안 눌린다
-            },
-            grip: {
-              topArm: -0.05,      // 끌려 돌아간 각 — 떡판이 로프에 물린다
-              switchLever: 0.002, // 접점은 래치, 플런저는 거의 복귀
-              spring: 1.03        // 시트가 앵커에서 멀어져 살짝 늘어남
+              pendulum: 0.45,      // 원심 진자 개방
+              topArm: 0.14,        // 캐치 레버 전방 밀림 (로프 파지 및 스위치 타격 위치)
+              pawl: 0.60,          // +z = 부리가 골 바닥(r≈39mm)으로. 음수는 톱니 위로 들어 올림
+              switchLever: 0.016,  // 스위치 플런저 하강 (+x)
+              switchRot: -0.52,    // 스위치 레버 아래로 뚝 떨어짐 (트립 차단 각도)
+              ratchet: 0.22,       // 휠 관성 드래그 회전량
+              spring: 0.95         // 가압 스프링 압축
             }
           }
         }
@@ -3115,9 +3554,9 @@
       
       // [추가] 1. 피트 사다리 (승강로 좌측 벽면 안쪽 — 전면벽 관통 방지)
       const ladderH = FLOOR_Y[0] + 1.1;
-      // 전면벽 안쪽으로 배치 (전면벽 내측에서 이격)
+      const WALL_GAP = 0.250; // 좌측 벽 내면 → 사다리 레일 중심 250mm (교재)
       const ladderZ = FRONT_WALL_INNER_Z - 0.40;
-      const ladderX = -(S.SHAFT_W / 2) + 0.18; // 좌측 벽 내면에서 안쪽 이격
+      const ladderX = -(S.SHAFT_W / 2) + WALL_GAP;
       const rungCount = Math.floor(ladderH / 0.3); // 30cm 간격
       const lMat = M.paint(0xf1c40f); // 안전 노란색
 
@@ -3134,6 +3573,24 @@
         rung.rotation.z = Math.PI / 2;
       }
 
+      // L브라켓 3단 × 좌우 레일 — 벽체 앙카 + 수평 암 (공중 부유 방지)
+      const brMat = M.ss(0x9aa3ad);
+      const brBolt = M.ss(0xb8bec6);
+      [Y0 + 0.32, Y0 + ladderH * 0.52, Y0 + ladderH - 0.22].forEach(by => {
+        [-0.15, 0.15].forEach(rx => {
+          createBox(0.072, 0.090, 0.006, brMat, rx, by, -(WALL_GAP - 0.003), ladderGrp);
+          createBox(0.010, 0.040, WALL_GAP - 0.028, brMat, rx, by, -WALL_GAP / 2, ladderGrp);
+          createBox(0.036, 0.048, 0.008, brMat, rx, by, -0.024, ladderGrp);
+          [-0.018, 0.018].forEach(oy => {
+            const anc = createCylinder(0.006, 0.006, 0.028, brBolt,
+              rx, by + oy, -(WALL_GAP + 0.008), ladderGrp);
+            anc.rotation.x = Math.PI / 2;
+          });
+          const rb = createCylinder(0.005, 0.005, 0.022, brBolt, rx, by, -0.012, ladderGrp);
+          rb.rotation.x = Math.PI / 2;
+        });
+      });
+
       // Y축 기준 90도 회전시켜 좌측 벽면과 완벽히 평행하게 배치
       ladderGrp.position.set(ladderX, 0, ladderZ);
       ladderGrp.rotation.y = Math.PI / 2;
@@ -3145,25 +3602,12 @@
       const tensBaseZ = GOV_TENS_Z;                   // 가이드 레일 파묻힘 방지 — Z축으로 카 후면측 이격
       const tensionerY = Y0 + 0.5;               // 피트 바닥 +500mm
 
-      // ── 1. 가이드 레일 고정 브라켓 + 피벗 암 (PDF 6p ③: 상하 요동 가능한 플랫 암)
+      // ── 1. 가이드 레일 고정 브라켓 (인장시브는 tensBaseZ, 구 전면 피벗·플랫 암은 제거)
       const bracketMat = M.ss(0x4b5563);
-      const armMat = M.paint(0x8a5a28);   // 적동색 플랫 암
 
       // 수직 베이스판 (가이드 레일 웹/플랜지 측면에 체결되는 지지대) — 카 레일 Z 추종
       createBox(0.04, 0.45, 0.08, bracketMat,
         S.CAR_BG / 2 - 0.02, tensionerY + 0.15, CAR_CTR_Z + 0.04, pitGrp);
-
-      // 레일측 피벗 클레비스 + 핀 (로프 늘어짐 시 암이 회전하며 시브가 하강)
-      createBox(0.035, 0.050, 0.050, bracketMat,
-        tensGovX + 0.030, tensionerY + 0.40, 0.055, pitGrp);
-      const tensPivPin = createCylinder(0.008, 0.008, 0.055, M.ss(0xb6bcc4),
-        tensGovX + 0.030, tensionerY + 0.40, 0.055, pitGrp);
-      tensPivPin.rotation.z = Math.PI / 2;
-
-      // 적동색 플랫 암 — 피벗(레일측 상단)에서 시브 허브까지 하향 경사
-      const tensArm = createBox(0.012, 0.045, 0.20, armMat,
-        tensGovX + 0.030, tensionerY + 0.35, 0.1375, pitGrp);
-      tensArm.rotation.x = -0.545;
 
       // ── 2. 인장추 하부 풀리 (Tension Sheave) ──
       // 조속기와 동일하게 휠 축을 X축으로 맞춤
@@ -3217,22 +3661,19 @@
       // 조속기 휠·인장시브 모두 회전축이 X방향이므로 로프 두 가닥은 Z = tensBaseZ ± 홈반경에 걸린다.
       // ★얇은 THREE.Line(옛 과속조절기 선)을 전부 걷어내고 실사 와이어로프 메시로 교체.
       //   조속기부터 피트 인장추까지 한 굵기로 이어진다 (사용자 지시).
-      const gRopeMat = M.ropeMesh();
       const govData = mrGrp.userData || {};
       const govWheelY = govData.govWheelY || (Y0 + TOTAL_H + 0.42);
       // 풀리 홈 반경 = 가닥 Z 오프셋.
       // ★.glb 로더 스케일이 1.0 이므로 userData.govR(= 로컬 gR 0.10 × govGrp 1.5 = 0.15)이 정답.
-      //   구값 0.162는 로더 0.72 시절 값이라 지금 시브와 12mm 어긋난다.
-      //   베이스 로프 관통 구멍·떡판(캐치슈) 작동면도 모두 같은 자리(로컬 ±0.10) 기준이다.
       const ropeR = govData.govR || 0.15;
       const tensShvY = tensionerY + 0.30;
-      const GOV_ROPE_R = 0.006;                // Ø12 — .glb 조속기 로프 굵기와 정합
+      const GOV_ROPE_R = GOV_ROPE_D / 2;       // Ø8mm
       if (!govRopeGeom) govRopeGeom = makeRopeGeometry(GOV_ROPE_R);
 
-      // 귀환측(자유측) 로프 — 전면(Z+) 탄젠트, 카와 무관하게 고정
-      const retRope = new THREE.Mesh(govRopeGeom, gRopeMat);
-      retRope.position.set(tensGovX, (govWheelY + tensShvY) / 2, tensBaseZ + ropeR);
-      retRope.scale.y = govWheelY - tensShvY;
+      // 귀환측(자유측) 로프 — 후면(Z-) 탄젠트, 카와 무관하게 고정
+      const retRope = new THREE.Mesh(govRopeGeom, makeGovRopeMat());
+      retRope.position.set(tensGovX, (govWheelY + tensShvY) / 2, tensBaseZ - ropeR);
+      setGovRopeLen(retRope, govWheelY - tensShvY);
       retRope.castShadow = true;
       pitGrp.add(retRope);
 
@@ -3247,20 +3688,28 @@
         return pts;
       };
       const wrapTube = (pts) => {
-        const m = new THREE.Mesh(new THREE.TubeGeometry(
-          new THREE.CatmullRomCurve3(pts), 32, GOV_ROPE_R, 8, false), gRopeMat);
+        const path = new THREE.CatmullRomCurve3(pts);
+        const mat = makeGovRopeMat();
+        mat.userData.ropeLen = path.getLength();
+        const m = new THREE.Mesh(new THREE.TubeGeometry(path, 48, GOV_ROPE_R, 16, false), mat);
+        const n = Math.max(0.4, mat.userData.ropeLen / GOV_ROPE_PITCH);
+        if (mat.map) mat.map.repeat.set(1, n);
+        if (mat.normalMap) mat.normalMap.repeat.set(1, n);
         m.castShadow = true;
         return m;
       };
       pitGrp.add(wrapTube(wrapArc(govWheelY, 1)));
       pitGrp.add(wrapTube(wrapArc(tensShvY, -1)));
 
-      // 카 연동측(작동) 로프 — 후면(Z-) 탄젠트, 카상부 safetyClamp를 관통.
+      // 카 연동측(작동) 로프 — 전면(Z+) 탄젠트, 카상부 safetyClamp를 관통.
+      // ★이 가닥이 앞쪽(+Z)이라 조속기 휠이 주도르래와 같은 방향으로 돈다.
+      //   (권상 로프도 카측 가닥이 주도르래 앞쪽 접점 — ui.js spinSheaves 부호 규칙)
+      //   GOV_TENS_Z 오프셋이 클램프 오프셋 + 홈반경으로 맞춰져 있어 z 값이 클램프와 일치한다.
       // 클램프에서 꺾이므로 상·하 2구간. 메시는 여기서 한 번만 만들고
       // refreshGovernorRope()는 위치·길이·기울기만 갱신한다.
-      govRopeSegs = [new THREE.Mesh(govRopeGeom, gRopeMat), new THREE.Mesh(govRopeGeom, gRopeMat)];
+      govRopeSegs = [new THREE.Mesh(govRopeGeom, makeGovRopeMat()), new THREE.Mesh(govRopeGeom, makeGovRopeMat())];
       govRopeSegs.forEach(m => { m.castShadow = true; pitGrp.add(m); });
-      govRopeData = { x: tensGovX, z: tensBaseZ - ropeR, topY: govWheelY, botY: tensShvY };
+      govRopeData = { x: tensGovX, z: tensBaseZ + ropeR, topY: govWheelY, botY: tensShvY };
       refreshGovernorRope();
 
       scene.add(pitGrp);

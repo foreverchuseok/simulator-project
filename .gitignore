@@ -1,5 +1,5 @@
 # ─── 앱 실행 파일과 공유 문서만 Git에 유지 ───
-# 공유 문서: README.md, AGENTS.md, CLAUDE.md, GEMINI.md, blender/BLENDER-WORKFLOW.md
+# 공유 문서: README.md, AGENTS.md, CLAUDE.md, GEMINI.md, blender/BLENDER-WORKFLOW.md, docs/DOOR-REBUILD.md, docs/CAR-REBUILD.md
 # 유지 에셋: assets/bg/*.png(코드 로드), assets/safety_gear.glb, models/gltf/*.glb, sound/
 
 # 로컬 참고용 화면 녹화·참고 영상 (앱 미로드)
@@ -15,6 +15,8 @@ MISC-SETTINGS-MEMO.md
 
 # AI·개발용 임시 스크린샷·PDF 추출·캡처 스크립트·작업 폴더
 .shot-*.png
+.shot-*/
+.vid_*.jpg
 .rv-*.png
 .pdf-*.png
 .claude-tmp*
