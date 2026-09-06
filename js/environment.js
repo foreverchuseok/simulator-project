@@ -1165,14 +1165,14 @@
        buildFlowerField() : 들꽃 + 씨앗 줄기 포인트.
     ------------------------------------------------------------------ */
     const FLAT_ZONES = [ // 지형 평탄화 부지 {cx, cz, hw, hd, blend}
-      { cx: 0,   cz: 1.2,   hw: 4.2,  hd: 5.2,  blend: 7 },   // 승강로 + 전면 포장
+      { cx: 2.1, cz: 5.8,   hw: 7.4,  hd: 7.2,  blend: 6 },   // 승강로 + 전면 계단/나선형 휠체어 램프 광장 부지 평탄화
       { cx: -17, cz: -28,   hw: 8.6,  hd: 6.4,  blend: 9 },   // koelsa2 캠퍼스 부지
       { cx: 17,  cz: -24.5, hw: 14.0, hd: 10.5, blend: 10 },  // 본관 타워 + 로비
       { cx: 17,  cz: -11,   hw: 20.0, hd: 6.2,  blend: 9 }    // 본관 전면 보도블록 광장
     ];
     const NO_GRASS_RECTS = [ // 풀잎 산포 제외 footprint {cx, cz, hw, hd}
       { cx: 0,   cz: -0.2,  hw: 3.6,  hd: 3.4 },   // 승강로 벽체
-      { cx: 0,   cz: 3.4,   hw: 3.6,  hd: 2.2 },   // 승강로 전면 포장
+      { cx: 2.1, cz: 6.5,   hw: 7.0,  hd: 6.0 },   // 승강로 전면 계단 및 나선형 휠체어 경사로 광장 전 구역
       { cx: -17, cz: -28,   hw: 7.6,  hd: 5.6 },   // 캠퍼스 패드
       { cx: 17,  cz: -24.5, hw: 13.0, hd: 10.2 },  // 본관 건물
       { cx: 17,  cz: -11,   hw: 19.7, hd: 6.1 }    // 본관 전면 보도블록 광장
@@ -1776,8 +1776,12 @@
 
       buildStreamAndRocks(g);
 
-      // 승강로 전면 포장 — 보도블록
-      createBox(S.SHAFT_W + S.WALL_T * 2 + 2.4, 0.03, 3.2, makePaverMaterial(5.2, 3.2), 0, Y0 + 0.04, S.SHAFT_D / 2 + 2.2, g);
+      // 승강로 전면 및 계단/나선형 휠체어 램프 진입 광장 포장 — 보도블록 확장 (폭 13.0m, 깊이 11.5m)
+      const paverW = 13.0;
+      const paverD = 11.5;
+      const paverCX = 2.10; // 계단 및 우측 나선 램프 중심
+      const paverCZ = S.SHAFT_D / 2 + paverD / 2 + 0.2;
+      createBox(paverW, 0.03, paverD, makePaverMaterial(paverW, paverD), paverCX, Y0 + 0.04, paverCZ, g);
 
       parent.add(g);
     }
@@ -1833,9 +1837,363 @@
       return mesh;
     }
 
+    function addTactileStrip(parent, cx, y, z, count = 4, size = 0.3) {
+      const startX = cx - (count - 1) * size / 2;
+      for (let k = 0; k < count; k++) {
+        addTactileBlock(parent, startX + k * size, y, z, size);
+      }
+    }
+
+    /**
+     * 1층 승강장 단차(1.72m) 해소 어셈블리:
+     * 1. 1층 로비 슬래브 하부 포디움 기초벽 (공중 뜸 차단 및 건물 대지 안착)
+     * 2. 전면 보행자 직통 계단 (폭 2.2m, 10단, 양측 스테인리스 핸드레일 + 상하 점자블록)
+     * 3. 우측 장애인 나선형 경사로 (전면 진입 후 로비 우측을 감아 오르는 현장형 나선 + 2단 핸드레일 + 하부 기둥)
+     * 4. 1층 로비 슬래브 외곽 추락방지 안전 난간
+     */
+    function buildLobbyApproachRampAndStairs(parent) {
+      const approachGrp = new THREE.Group();
+      approachGrp.name = 'lobbyApproachRampAndStairs';
+
+      const groundY = Y0 + 0.04;              // 지면 보도블록 상면 레벨 (≈ 0.04m)
+      const slabY   = FLOOR_Y[0];             // 1층 로비 슬래브 상면 레벨 (1.76m)
+      const slabBotY= slabY - 0.12;           // 1층 로비 슬래브 하면 (1.64m)
+      const deltaH  = slabY - groundY;        // 전체 단차 (약 1.72m)
+
+      const wallZ       = FRONT_WALL_INNER_Z + S.WALL_T / 2;
+      const totalWallW  = S.SHAFT_W + S.WALL_T * 2; // 3.89m
+      const lobbyDepth  = 1.5 + (S.SHAFT_D / 2 - FRONT_WALL_INNER_Z); // ≈ 2.02m
+      const lobbyFrontZ = wallZ + S.WALL_T / 2 + lobbyDepth; // 로비 슬래브 전면단 (≈ 3.51m)
+      const lobbyBackZ  = wallZ + S.WALL_T / 2;              // 로비 슬래브 후면단 (≈ 1.49m)
+      const lobbyCZ     = (lobbyFrontZ + lobbyBackZ) / 2;
+      const lobbyLeftX  = -totalWallW / 2;                   // -1.945m
+      const lobbyRightX = totalWallW / 2;                    // +1.945m
+
+      // 재질
+      const podiumMat   = lobbyFrontWallMats ? lobbyFrontWallMats(totalWallW, deltaH, lobbyDepth) : M.conc(0xcad0d8);
+      const concStepMat = M.conc(0xd5dadf);
+      const ssRailMat   = M.ss(0xd0d8e2);
+      const ssPostMat   = M.ss(0xb0b8c2);
+      const rampSlabMat = M.conc(0xc0c6ce);
+      const curbMat     = M.conc(0x8a9098);
+      const pillarMat   = M.paint(0x4a525d);
+
+      // ────────────────────────────────────────────────────────────────
+      // 1. 1층 로비 슬래브 하부 포디움 기초 (Podium Substructure)
+      //    공중에 떠 있던 1층 슬래브 아래 공간을 튼튼한 건축 기단부로 완벽 폐쇄
+      // ────────────────────────────────────────────────────────────────
+      const podiumH = slabBotY - groundY; // 약 1.60m
+      const podiumCY = groundY + podiumH / 2;
+      // 전면 기초벽
+      createBox(totalWallW, podiumH, 0.25, podiumMat, 0, podiumCY, lobbyFrontZ - 0.125, approachGrp);
+      // 좌측 기초벽
+      createBox(0.25, podiumH, lobbyDepth, podiumMat, lobbyLeftX + 0.125, podiumCY, lobbyCZ, approachGrp);
+      // 우측 기초벽 — 전면 도착부는 비워 램프가 승강장으로 들어가게 한다
+      const rightWallD = lobbyDepth * 0.52;
+      createBox(0.25, podiumH, rightWallD, podiumMat,
+        lobbyRightX - 0.125, podiumCY, lobbyBackZ + rightWallD / 2, approachGrp);
+      // 내부 기초 콘크리트 코어
+      createBox(totalWallW - 0.25, podiumH, lobbyDepth - 0.25, M.conc(0x8a929b), 0, podiumCY, lobbyCZ, approachGrp);
+
+      // ────────────────────────────────────────────────────────────────
+      // 2. 전면 보행자 진입 계단 (Pedestrian Staircase)
+      //    승강기 도어 중앙 정렬(X ∈ [-1.1m, +1.1m], 폭 2.2m), 10단 화강석 계단
+      // ────────────────────────────────────────────────────────────────
+      const stairW = 2.20;
+      const stairCX = 0.00;
+      const stepCount = 10;
+      const stepRise = deltaH / stepCount; // 0.172m
+      const stepTread = 0.30;             // 300mm
+
+      for (let s = 0; s < stepCount; s++) {
+        const stepTopY = slabY - (s + 1) * stepRise;
+        const stepFrontZ = lobbyFrontZ + (s + 1) * stepTread;
+        const curStepH = stepTopY - groundY + stepRise;
+        createBox(stairW, stepRise, stepTread, concStepMat,
+          stairCX, stepTopY + stepRise / 2, stepFrontZ - stepTread / 2, approachGrp);
+        if (curStepH - stepRise > 0.01) {
+          createBox(stairW, curStepH - stepRise, stepTread, M.conc(0x9aa2aa),
+            stairCX, groundY + (curStepH - stepRise) / 2, stepFrontZ - stepTread / 2, approachGrp);
+        }
+      }
+
+      // 계단 양측 마감 측벽 (Wing Walls)
+      const stairLen = stepCount * stepTread; // 3.0m
+      const stairEndZ = lobbyFrontZ + stairLen;
+      [-stairW / 2 - 0.08, stairW / 2 + 0.08].forEach(wx => {
+        createBox(0.16, deltaH + 0.15, stairLen, M.conc(0xcad0d8),
+          stairCX + wx, groundY + (deltaH + 0.15) / 2, (lobbyFrontZ + stairEndZ) / 2, approachGrp);
+      });
+
+      // 계단 양측 스테인리스 안전 핸드레일 (높이 900mm)
+      [-stairW / 2 + 0.05, stairW / 2 - 0.05].forEach(rx => {
+        const postCount = 4;
+        for (let p = 0; p <= postCount; p++) {
+          const t = p / postCount;
+          const px = stairCX + rx;
+          const pz = lobbyFrontZ + t * stairLen;
+          const py = slabY - t * deltaH;
+          const post = createCylinder(0.020, 0.020, 0.90, ssPostMat, px, py + 0.45, pz, approachGrp);
+          post.castShadow = true;
+        }
+        // 상단 핸드레일 파이프
+        const startPt = new THREE.Vector3(stairCX + rx, slabY + 0.90, lobbyFrontZ);
+        const endPt   = new THREE.Vector3(stairCX + rx, groundY + 0.90, stairEndZ);
+        const railCurve = new THREE.LineCurve3(startPt, endPt);
+        const railMesh = new THREE.Mesh(new THREE.TubeGeometry(railCurve, 16, 0.022, 12, false), ssRailMat);
+        approachGrp.add(railMesh);
+
+        // 중간 레일 (높이 450mm)
+        const midStart = new THREE.Vector3(stairCX + rx, slabY + 0.45, lobbyFrontZ);
+        const midEnd   = new THREE.Vector3(stairCX + rx, groundY + 0.45, stairEndZ);
+        const midCurve = new THREE.LineCurve3(midStart, midEnd);
+        const midMesh  = new THREE.Mesh(new THREE.TubeGeometry(midCurve, 16, 0.015, 10, false), ssRailMat);
+        approachGrp.add(midMesh);
+      });
+
+      // 계단 상단 및 하단 점자블록 띠
+      addTactileStrip(approachGrp, stairCX, slabY + 0.002, lobbyFrontZ - 0.20, 6, 0.3);
+      addTactileStrip(approachGrp, stairCX, groundY + 0.002, stairEndZ + 0.35, 6, 0.3);
+
+      // ────────────────────────────────────────────────────────────────
+      // 3. 우측 장애인 나선형 경사로 (Spiral Wheelchair Ramp)
+      //    계단 오른쪽 지면에서 전면을 가로지른 뒤, 로비 우측을 시계방향으로 감아 1층에 도착.
+      // ────────────────────────────────────────────────────────────────
+      const rampW = 1.20;
+      const rampThick = 0.12;
+      const topLandW = 1.28;
+
+      const rTop = 1.82;
+      const rGround = 2.28;
+      const spiralTurns = 0.76;
+      const spiralCX = lobbyRightX + topLandW - 0.12 + rTop;
+      const spiralCZ = lobbyFrontZ;
+      const thStart = Math.PI / 2;
+
+      function helixXZ(t) {
+        const th = thStart - t * spiralTurns * Math.PI * 2;
+        const r = rGround + t * (rTop - rGround);
+        return { x: spiralCX + r * Math.cos(th), z: spiralCZ + r * Math.sin(th), th };
+      }
+
+      const straightStartX = stairW / 2 + 0.68;
+      const helix0 = helixXZ(0);
+      const join = helixXZ(0.92);
+
+      const flatX0 = lobbyRightX - 0.20;
+      const flatX1 = join.x + 0.55;
+      const flatZ0 = lobbyBackZ + 0.06;
+      const flatZ1 = lobbyFrontZ + 0.20;
+      createBox(flatX1 - flatX0, 0.12, flatZ1 - flatZ0, lobbyMarbleFaceMats(flatX1 - flatX0, flatZ1 - flatZ0),
+        (flatX0 + flatX1) / 2, slabY - 0.06, (flatZ0 + flatZ1) / 2, approachGrp);
+
+      const straightSegs = 16;
+      const helixSegs = 60;
+      const rawPts = [];
+      for (let i = 0; i <= straightSegs; i++) {
+        const t = i / straightSegs;
+        rawPts.push({
+          x: straightStartX + t * (helix0.x - straightStartX),
+          z: helix0.z + 0.10 * (1 - t)
+        });
+      }
+      for (let i = 1; i <= helixSegs; i++) {
+        const h = helixXZ((i / helixSegs) * 0.92);
+        rawPts.push({ x: h.x, z: h.z });
+      }
+
+      const arc = [0];
+      for (let i = 1; i < rawPts.length; i++) {
+        arc.push(arc[i - 1] + Math.hypot(rawPts[i].x - rawPts[i - 1].x, rawPts[i].z - rawPts[i - 1].z));
+      }
+      const flatFrom = Math.floor(rawPts.length * 0.86);
+      const riseLen = arc[flatFrom] || arc[arc.length - 1];
+      const samples = rawPts.map((p, i) => ({
+        x: p.x,
+        y: i >= flatFrom ? slabY : groundY + (arc[i] / riseLen) * deltaH,
+        z: p.z
+      }));
+
+      function sweepFrames(pts) {
+        const worldUp = new THREE.Vector3(0, 1, 0);
+        return pts.map((p, i) => {
+          const prev = pts[Math.max(0, i - 1)];
+          const next = pts[Math.min(pts.length - 1, i + 1)];
+          const tangent = new THREE.Vector3(next.x - prev.x, next.y - prev.y, next.z - prev.z);
+          if (tangent.lengthSq() < 1e-10) tangent.set(1, 0, 0);
+          tangent.normalize();
+          const side = new THREE.Vector3().crossVectors(worldUp, tangent);
+          if (side.lengthSq() < 1e-10) side.set(1, 0, 0);
+          side.normalize();
+          const up = new THREE.Vector3().crossVectors(tangent, side).normalize();
+          return { p, tangent, side, up };
+        });
+      }
+
+      function makeSweepGeometry(pts, width, thick) {
+        const frames = sweepFrames(pts);
+        const pos = [];
+        const idx = [];
+        const hw = width / 2;
+        const ht = thick / 2;
+        frames.forEach(f => {
+          [[-hw, -ht], [hw, -ht], [hw, ht], [-hw, ht]].forEach(([a, b]) => {
+            pos.push(
+              f.p.x + f.side.x * a + f.up.x * b,
+              f.p.y + f.side.y * a + f.up.y * b,
+              f.p.z + f.side.z * a + f.up.z * b
+            );
+          });
+        });
+        for (let i = 0; i < frames.length - 1; i++) {
+          const a = i * 4;
+          const b = (i + 1) * 4;
+          for (let k = 0; k < 4; k++) {
+            const k1 = (k + 1) % 4;
+            idx.push(a + k, a + k1, b + k1, a + k, b + k1, b + k);
+          }
+        }
+        idx.push(0, 2, 1, 0, 3, 2);
+        const e = (frames.length - 1) * 4;
+        idx.push(e, e + 1, e + 2, e, e + 2, e + 3);
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        geo.setIndex(idx);
+        geo.computeVertexNormals();
+        return geo;
+      }
+
+      const rampMesh = new THREE.Mesh(makeSweepGeometry(samples, rampW, rampThick), rampSlabMat);
+      rampMesh.castShadow = true;
+      rampMesh.receiveShadow = true;
+      approachGrp.add(rampMesh);
+
+      const curbOff = rampW / 2 - 0.03;
+      const frames = sweepFrames(samples);
+      const helixLast = straightSegs + helixSegs;
+
+      function sideSignToward(f, tx, tz) {
+        const dPlus = (f.p.x + f.side.x - tx) ** 2 + (f.p.z + f.side.z - tz) ** 2;
+        const dMinus = (f.p.x - f.side.x - tx) ** 2 + (f.p.z - f.side.z - tz) ** 2;
+        return dPlus < dMinus ? 1 : -1;
+      }
+
+      function addRailPts(pts) {
+        if (pts.length < 2) return;
+        const topPts = pts.map(p => new THREE.Vector3(p.x, p.y + 0.85, p.z));
+        const botPts = pts.map(p => new THREE.Vector3(p.x, p.y + 0.65, p.z));
+        const topCurve = pts.length === 2 ? new THREE.LineCurve3(topPts[0], topPts[1]) : new THREE.CatmullRomCurve3(topPts, false, 'centripetal');
+        const botCurve = pts.length === 2 ? new THREE.LineCurve3(botPts[0], botPts[1]) : new THREE.CatmullRomCurve3(botPts, false, 'centripetal');
+        const segs = Math.max(8, pts.length * 2);
+        approachGrp.add(new THREE.Mesh(new THREE.TubeGeometry(topCurve, segs, 0.020, 10, false), ssRailMat));
+        approachGrp.add(new THREE.Mesh(new THREE.TubeGeometry(botCurve, segs, 0.015, 10, false), ssRailMat));
+        for (let i = 0; i < pts.length; i += 5) {
+          createCylinder(0.016, 0.016, 0.90, ssPostMat, pts[i].x, pts[i].y + 0.45, pts[i].z, approachGrp);
+        }
+        const last = pts[pts.length - 1];
+        createCylinder(0.016, 0.016, 0.90, ssPostMat, last.x, last.y + 0.45, last.z, approachGrp);
+      }
+
+      const innerCurb = [];
+      const outerCurb = [];
+      const innerPts = [];
+      const outerPts = [];
+      const lobbyOpenIdx = straightSegs + Math.floor(helixSegs * 0.70);
+      frames.forEach((f, i) => {
+        if (i > helixLast) return;
+        const innerSign = sideSignToward(f, spiralCX, spiralCZ);
+        innerCurb.push({
+          x: f.p.x + f.side.x * innerSign * curbOff,
+          y: f.p.y + 0.04,
+          z: f.p.z + f.side.z * innerSign * curbOff
+        });
+        innerPts.push({
+          x: f.p.x + f.side.x * innerSign * curbOff,
+          y: f.p.y,
+          z: f.p.z + f.side.z * innerSign * curbOff
+        });
+        if (i <= lobbyOpenIdx) {
+          outerCurb.push({
+            x: f.p.x - f.side.x * innerSign * curbOff,
+            y: f.p.y + 0.04,
+            z: f.p.z - f.side.z * innerSign * curbOff
+          });
+          outerPts.push({
+            x: f.p.x - f.side.x * innerSign * curbOff,
+            y: f.p.y,
+            z: f.p.z - f.side.z * innerSign * curbOff
+          });
+        }
+      });
+      approachGrp.add(new THREE.Mesh(makeSweepGeometry(outerCurb, 0.06, 0.06), curbMat));
+      approachGrp.add(new THREE.Mesh(makeSweepGeometry(innerCurb, 0.06, 0.06), curbMat));
+      addRailPts(outerPts);
+      addRailPts(innerPts);
+
+      const edgePts = [];
+      for (let i = 22; i <= helixSegs; i++) {
+        const t = (i / helixSegs) * 0.92;
+        const h = helixXZ(t);
+        const rEdge = (rGround + t * (rTop - rGround)) - rampW / 2 + 0.04;
+        const yi = i >= Math.floor(helixSegs * 0.86) ? slabY : groundY + (arc[straightSegs + i] / riseLen) * deltaH;
+        edgePts.push({
+          x: spiralCX + rEdge * Math.cos(h.th),
+          y: yi,
+          z: spiralCZ + rEdge * Math.sin(h.th)
+        });
+      }
+      edgePts.push({ x: lobbyRightX + 0.10, y: slabY, z: lobbyFrontZ + 0.12 });
+      edgePts.push({ x: lobbyRightX + 0.04, y: slabY, z: lobbyFrontZ - 0.02 });
+      addRailPts(edgePts);
+
+      [0.14, 0.32, 0.50, 0.68, 0.84].forEach(t => {
+        const idx = Math.round(t * helixLast);
+        const f = frames[idx];
+        const innerSign = sideSignToward(f, spiralCX, spiralCZ);
+        const px = f.p.x - f.side.x * innerSign * (rampW / 2 + 0.04);
+        const pz = f.p.z - f.side.z * innerSign * (rampW / 2 + 0.04);
+        const ph = Math.max(0.18, f.p.y - groundY);
+        createCylinder(0.040, 0.040, ph, pillarMat, px, groundY + ph / 2, pz, approachGrp);
+      });
+
+      const entry = samples[0];
+      createBox(1.50, rampThick, 1.35, rampSlabMat, entry.x - 0.15, groundY - rampThick / 2 + 0.01, entry.z + 0.15, approachGrp);
+      addTactileStrip(approachGrp, entry.x - 0.15, groundY + 0.002, entry.z + 0.55, 4, 0.3);
+
+      // ────────────────────────────────────────────────────────────────
+      // 4. 1층 로비 슬래브 외곽 추락방지 안전 난간
+      //    (전면 좌측 및 좌측단 테두리에 스테인리스 난간 설치)
+      // ────────────────────────────────────────────────────────────────
+      // (1) 전면 좌측 난간: X ∈ [lobbyLeftX, -stairW/2]
+      const frontRailLeftX0 = lobbyLeftX;
+      const frontRailLeftX1 = -stairW / 2;
+      for (let fx = frontRailLeftX0 + 0.1; fx <= frontRailLeftX1 - 0.05; fx += 0.40) {
+        createCylinder(0.018, 0.018, 0.90, ssPostMat, fx, slabY + 0.45, lobbyFrontZ - 0.03, approachGrp);
+      }
+      const frontRailCurve = new THREE.LineCurve3(
+        new THREE.Vector3(frontRailLeftX0, slabY + 0.90, lobbyFrontZ - 0.03),
+        new THREE.Vector3(frontRailLeftX1, slabY + 0.90, lobbyFrontZ - 0.03)
+      );
+      approachGrp.add(new THREE.Mesh(new THREE.TubeGeometry(frontRailCurve, 8, 0.020, 10, false), ssRailMat));
+
+      // (2) 좌측단 전장 난간: Z ∈ [lobbyBackZ, lobbyFrontZ]
+      for (let lz = lobbyBackZ + 0.2; lz <= lobbyFrontZ - 0.05; lz += 0.55) {
+        createCylinder(0.018, 0.018, 0.90, ssPostMat, lobbyLeftX + 0.03, slabY + 0.45, lz, approachGrp);
+      }
+      const leftRailCurve = new THREE.LineCurve3(
+        new THREE.Vector3(lobbyLeftX + 0.03, slabY + 0.90, lobbyBackZ),
+        new THREE.Vector3(lobbyLeftX + 0.03, slabY + 0.90, lobbyFrontZ)
+      );
+      approachGrp.add(new THREE.Mesh(new THREE.TubeGeometry(leftRailCurve, 10, 0.020, 10, false), ssRailMat));
+
+      parent.add(approachGrp);
+    }
+
     function buildFrontWallAndLobby() {
       if (wallGrp) scene.remove(wallGrp);
       wallGrp = new THREE.Group();
+      // 1층 승강장 단차 해소 (포디움 기단부, 보행자 직통 계단, 우측 나선형 휠체어 경사로)
+      buildLobbyApproachRampAndStairs(wallGrp);
       // 외면=석재 사진, 승강로 내면=콘크리트. 현판·코니스·문틀은 그대로 둔다.
       const terracottaMat = M.paint(0xa95032);
       const jambSs = M.silverHairline(0xc8d0d8, 0.28);
@@ -1940,7 +2298,6 @@
 
     function buildGuideRails() {
       railGrp = new THREE.Group();
-      const rMat = M.ss(0x4a5a6a);
 
       const chH = 0.1;
       const baseMat = M.paint(0x374151);
@@ -1951,237 +2308,123 @@
       // 균형추 레일 지지 채널
       createBox(S.CWT_W + 0.3, chH, 0.2, baseMat, 0, Y0 + chH / 2, CWT_CENTER_Z, railGrp);
 
-      const rh = TOTAL_H - 0.1 - chH;
-      const rY = Y0 + chH + rh / 2;
+      const startY = Y0 + chH; // 지지 채널 상단 (0.1m)
+      const rh = TOTAL_H - 0.1 - chH; // 레일 총 길이 (약 16.61m)
 
-      function drawRail(px, pz, isCwt, rotY) {
-        const g = new THREE.Group();
-        g.add(createBox(isCwt ? 0.03 : 0.034, rh, isCwt ? 0.07 : 0.082, rMat, 0, 0, 0, g)); // web
-        g.add(createBox(isCwt ? 0.1 : 0.118, rh, 0.014, rMat, 0, 0, isCwt ? 0.041 : 0.048, g)); // flange
-        g.position.set(px, rY, pz);
-        g.rotation.y = rotY;
-        return g;
+      const gltfLoader = new THREE.GLTFLoader();
+
+      // 레일 세그먼트 스택 함수 (5m 단위 모듈 스택 + 상단 마감 및 5m 단위 피시플레이트 조인트)
+      function createFullRail(gltfScene, posX, posZ, rotY, isCwt) {
+        const railCol = new THREE.Group();
+        railCol.position.set(posX, 0, posZ);
+        railCol.rotation.y = rotY;
+
+        const segLen = 5.0;
+        const count = Math.ceil(rh / segLen); // 16.61 / 5 = 4 세그먼트
+
+        for (let i = 0; i < count; i++) {
+          const segY = startY + i * segLen;
+          const isTop = (i === count - 1);
+          const seg = gltfScene.clone(true);
+
+          if (isTop) {
+            // 최상단 세그먼트: 남은 높이에 맞춰 레일 본체만 스케일 조정, 피시플레이트는 숨김
+            const remH = rh - i * segLen;
+            const sY = remH / segLen;
+            seg.position.set(0, segY, 0);
+            seg.traverse(child => {
+              if (child.name && child.name.startsWith('FP_')) {
+                child.visible = false; // 상단 슬래브 위 조인트는 불필요
+              } else if (child.name && child.name.startsWith('T_Rail_')) {
+                child.scale.set(1, sY, 1);
+              }
+            });
+          } else {
+            seg.position.set(0, segY, 0);
+          }
+          railCol.add(seg);
+        }
+        return railCol;
       }
 
-      // [수정] 카 측 레일 방향 90도 회전 (웹이 안쪽을 바라보도록)
-      // 좌측 레일(-Math.PI / 2): 웹이 +X 방향을 향함
-      railGrp.add(drawRail(-S.CAR_BG / 2, carRailZ, false, -Math.PI / 2));
-      // 우측 레일(Math.PI / 2): 웹이 -X 방향을 향함
-      railGrp.add(drawRail(S.CAR_BG / 2, carRailZ, false, Math.PI / 2));
+      // 1. 카 가이드레일 13K 로드 및 배치 (좌/우 2개)
+      gltfLoader.load('models/gltf/guide_rail_13k.glb', (gltf) => {
+        const carRailScene = gltf.scene;
+        carRailScene.traverse(o => {
+          if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
+        });
 
-      // 균형추 측 레일 (후면, 마주보게 회전)
-      railGrp.add(
-        drawRail(-S.CWT_W / 2, CWT_CENTER_Z, true, -Math.PI / 2),
-        drawRail(S.CWT_W / 2, CWT_CENTER_Z, true, Math.PI / 2)
-      );
+        // 좌측 카 레일 (헤드가 +X 카 중심을 봄, rotation.y = 0)
+        const leftCarRail = createFullRail(carRailScene, -S.CAR_BG / 2, carRailZ, 0, false);
+        // 우측 카 레일 (헤드가 -X 카 중심을 봄, rotation.y = Math.PI)
+        const rightCarRail = createFullRail(carRailScene, S.CAR_BG / 2, carRailZ, Math.PI, false);
+
+        railGrp.add(leftCarRail, rightCarRail);
+      }, undefined, (err) => {
+        console.error('[GuideRail 13K Load Error]:', err);
+      });
+
+      // 2. 균형추 가이드레일 8K 로드 및 배치 (후면 좌/우 2개, 벽이 없어 공중에 뜸)
+      gltfLoader.load('models/gltf/guide_rail_8k.glb', (gltf) => {
+        const cwtRailScene = gltf.scene;
+        cwtRailScene.traverse(o => {
+          if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
+        });
+
+        // 균형추 좌측 레일 (헤드가 +X 균형추 중심을 봄, rotation.y = 0)
+        const leftCwtRail = createFullRail(cwtRailScene, -S.CWT_W / 2, CWT_CENTER_Z, 0, true);
+        // 균형추 우측 레일 (헤드가 -X 균형추 중심을 봄, rotation.y = Math.PI)
+        const rightCwtRail = createFullRail(cwtRailScene, S.CWT_W / 2, CWT_CENTER_Z, Math.PI, true);
+
+        railGrp.add(leftCwtRail, rightCwtRail);
+      }, undefined, (err) => {
+        console.error('[GuideRail 8K Load Error]:', err);
+      });
+
+      // 3. 레일 브라켓 어셈블리 로드 및 배치 (현장 실무 기준 2.7m 간격, 벽이 있는 카 좌측만 설치)
+      gltfLoader.load('models/gltf/rail_bracket.glb', (gltf) => {
+        const bktScene = gltf.scene;
+        bktScene.traverse(o => {
+          if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
+        });
+
+        // 2.7m 간격 브라켓 높이 6단 배열
+        // 1단: 하부 리미트 스위치 마운트(Y=1.68~2.28m) 간섭을 피해 피트 상단 Y=1.35m에 설치
+        // 2~6단: 2.7m 피치 균일 설치 (Y = 1.35, 4.05, 6.75, 9.45, 12.15, 14.85)
+        const bktHeights = [1.35, 4.05, 6.75, 9.45, 12.15, 14.85];
+
+        bktHeights.forEach(by => {
+          const bkt = bktScene.clone(true);
+          // 좌측 카 레일 배면(-S.CAR_BG / 2)에 부착 -> -X 방향으로 뻗어 좌측 콘크리트 벽면에 밀착
+          bkt.position.set(-S.CAR_BG / 2, by, carRailZ);
+          bkt.userData = { type: 'rail-bracket', side: 'left', y: by };
+          railGrp.add(bkt);
+        });
+      }, undefined, (err) => {
+        console.error('[Rail Bracket Load Error]:', err);
+      });
 
       scene.add(railGrp);
     }
 
+    /* ==========================================================================
+       buildShaftLandingDevices — 승강로 층 인식용 착상 장치 (카 완성 후 재디자인 예정)
+       ========================================================================== */
     function buildShaftLandingDevices() {
-      const landingDeviceGrp = new THREE.Group();
-      // 레일 좌표 기준 (buildGuideRails 동일)
-      const rightRailX = S.CAR_BG / 2;   // +0.875
-      const railZ      = CAR_CTR_Z + 0.04;  // 레일 중심 Z (카 중심 추종)
-      const sensorZ    = CAR_CTR_Z + 0.10;  // 센서/베인 Z — 카 차폐판(로컬 0.10)과 정렬
-      const bracketMat = M.ss(0x5a6575);
-
       landingDevices.length = 0;
 
       for (let fIdx = 0; fIdx < FLOORS; fIdx++) {
         const triggerY = FLOOR_Y[fIdx];
-        const deviceY  = triggerY + S.CAR_H / 2; // 카 정위치 시 차폐판 중심 Y
-
-        /* ────────────────────────────────────────────
-           우측 레일: ㄱ자 브라켓 + ㄷ자 Landing Switch
-           브라켓 arm1: 레일 외면(X) → +X방향 (카 경로 밖으로)
-           브라켓 arm2: arm1 끝 → +Z방향 (railZ→sensorZ 꺾임)
-           센서 ㄷ: 개구부가 카(-X 방향)를 바라봄, Y갭에 차폐판 수직 진입
-        ──────────────────────────────────────────── */
-        const rOuterX  = rightRailX + 0.017; // 레일 웹 우측 외면
-        const rSensorX = rightRailX + 0.18;  // 센서 감지점 X (카 외벽 대비 +24cm clearance)
-
-        // arm1 (X방향)
-        const arm1L    = rSensorX - rOuterX;
-        const arm1mesh = createBox(arm1L, 0.035, 0.035, bracketMat,
-          rOuterX + arm1L / 2, deviceY, railZ, landingDeviceGrp);
-        arm1mesh.userData = { type: 'bracket', floor: fIdx, side: 'right', arm: 1 };
-
-        // arm2 (Z방향 꺾임)
-        const arm2L    = sensorZ - railZ;
-        const arm2mesh = createBox(0.035, 0.035, arm2L, bracketMat,
-          rSensorX, deviceY, railZ + arm2L / 2, landingDeviceGrp);
-        arm2mesh.userData = { type: 'bracket', floor: fIdx, side: 'right', arm: 2 };
-
-        // ㄷ자 센서 블록 — 개구부(-X)가 카를 정면으로 바라봄
-        const sg      = new THREE.Group();
-        const sMat    = DEBUG_SENSOR ? M.emit(0x00ff44, 1.6) : M.paint(0x5c3a1e); // 갈색
-        const aLen    = 0.08;   // 암 길이 (X방향, 카 쪽으로 뻗음)
-        const gHalf   = 0.065;  // 갭 반경 (Y방향, 차폐판 두께 12mm 여유 충분)
-        const aThick  = 0.014;  // 암 두께
-        const sDepth  = 0.06;   // 센서 Z방향 깊이
-        // 뒷판: +X쪽 (카 반대방향 끝)
-        createBox(aThick, gHalf * 2 + aThick * 2, sDepth, sMat,
-          aLen + aThick / 2, 0, 0, sg);
-        // 상부 암
-        createBox(aLen, aThick, sDepth, sMat,  aLen / 2,  gHalf + aThick / 2, 0, sg);
-        // 하부 암
-        createBox(aLen, aThick, sDepth, sMat,  aLen / 2, -gHalf - aThick / 2, 0, sg);
-        sg.userData = { type: 'landing-switch', floor: fIdx, side: 'right' };
-        sg.position.set(rSensorX, deviceY, sensorZ);
-        landingDeviceGrp.add(sg);
-
-        if (DEBUG_SENSOR) {
-          landingDeviceGrp.add(new THREE.BoxHelper(sg, 0x00ff44));
-          const axes = new THREE.AxesHelper(0.1); // 감지 방향 시각화
-          axes.position.set(rSensorX, deviceY, sensorZ);
-          landingDeviceGrp.add(axes);
-        }
-
-        landingDevices.push({ floor: fIdx, type: 'landing', mesh: sg, triggerY: triggerY });
-
+        // 층 감지 논리 데이터는 유지하되, 시각적 메시는 카 재공사 후 새 디자인으로 재부착
+        landingDevices.push({ floor: fIdx, type: 'landing', triggerY: triggerY });
       }
-
-      railGrp.add(landingDeviceGrp);
     }
 
     /* ==========================================================================
-       buildLimitSwitches — 안전용 물리 리미트 스위치 뭉치 (디자인 업그레이드)
-       위치: 승강로 좌측 레일 최상단·최하단
-       구성: 감속(Slowdown) → 리미트(Limit) → 파이널(Final) 3종 × 2개소
+       buildLimitSwitches — 안전용 물리 리미트 스위치 뭉치 (재설계 예정으로 임시 제거)
        ========================================================================== */
     function buildLimitSwitches() {
-      const limGrp    = new THREE.Group();
-      const leftRailX = -S.CAR_BG / 2;         // -0.875
-      const lOuterX   = leftRailX - 0.017;      // -0.892
-      const lSwitchX  = leftRailX - 0.18;       // -1.055 (스위치 본체 X)
-      const railZ     = CAR_CTR_Z + 0.04;       // 카 중심 추종
-      const sensorZ   = CAR_CTR_Z + 0.10;
-      const bktMat    = M.ss(0x5a6575);
-      const swSp      = 0.22;                   // 스위치 수직 간격 220mm
-      const camH      = S.CAR_H * 0.85;
-
-      // 사진 기반 디자인 제원
-      const rLocX     = 0.075;    // 본체 중심에서 롤러까지 X 거리 (카 방향)
-      const rLocYBase = 0.04;     // 롤러 암의 Y축 상승/하강 폭
-      const bodyMat   = M.ss(0x7a8494); // 회색 금속 본체
-      const armMat    = M.ss(0x9ca3af);
-      const boltMat   = M.ss(0xb8c0cc);
-      const rollerR   = 0.015;
-      const rollerThk = 0.012;
-
-      // 상/하부 종단 정위치 시 캠의 타격 면 모서리 Y 좌표 산출
-      // 하부: 캠 하단 모서리 / 상부: 캠 상단 모서리
-      [
-        { dir:  1, label: 'top',    edgeY: FLOOR_Y[FLOORS - 1] + S.CAR_H / 2 + camH / 2 },
-        { dir: -1, label: 'bottom', edgeY: FLOOR_Y[0] + S.CAR_H / 2 - camH / 2 },
-      ].forEach(({ dir, label, edgeY }) => {
-
-        // 사진 구조 반영: 상부는 암이 위로 뻗고, 하부는 암이 아래로 뻗음
-        const rLocY = rLocYBase * dir;
-
-        // ★ 역산: 리미트(중앙) 롤러 중심 World Y = edgeY → swY + rLocY = edgeY, swY=cy
-        const cy = edgeY - rLocY;
-
-        // ── ㄱ자 마운팅 브라켓 2쌍 (상/하 ±0.30m) ──────────────────────────
-        const arm1L = lOuterX - lSwitchX;
-        const arm2L = sensorZ - railZ;
-        [-0.30, 0.30].forEach(yOff => {
-          createBox(arm1L, 0.025, 0.025, bktMat,
-            lSwitchX + arm1L / 2, cy + yOff, railZ, limGrp)
-            .userData = { type: 'limit-bracket', floor: label };
-          createBox(0.025, 0.025, arm2L, bktMat,
-            lSwitchX, cy + yOff, railZ + arm2L / 2, limGrp)
-            .userData = { type: 'limit-bracket', floor: label };
-        });
-
-        // ── 수직 마운팅 레일 ────────────────────────────────────────────────
-        createBox(0.025, 0.70, 0.025, bktMat, lSwitchX, cy, sensorZ, limGrp)
-          .userData = { type: 'limit-mount-rail', floor: label };
-
-        // ── 스위치 3개 (dir=+1: 아래→위 감속·리미트·파이널) ───────────────
-        [
-          { yOff: -dir * swSp, func: 'slowdown',    col: 0xff8800 },
-          { yOff: 0,           func: 'limit',        col: 0xff2200 },
-          { yOff:  dir * swSp, func: 'final-limit',  col: 0xaa0000 },
-        ].forEach(sw => {
-          const swY = cy + sw.yOff;
-          const sg  = new THREE.Group();
-
-          // ① 본체: 회색 금속 하우징
-          createBox(0.042, 0.092, 0.052, bodyMat, 0, 0, 0, sg)
-            .userData = { type: 'switch-body' };
-
-          // 전면 커버 볼트 4개 (+X 면 모서리 근처)
-          const bx = 0.022, by = 0.034, bz = 0.020;
-          [[bx, by, bz], [bx, by, -bz], [bx, -by, bz], [bx, -by, -bz]].forEach(p => {
-            const bolt = new THREE.Mesh(new THREE.SphereGeometry(0.0045, 8, 6), boltMat);
-            bolt.position.set(p[0], p[1], p[2]);
-            bolt.userData = { type: 'cover-bolt' };
-            sg.add(bolt);
-          });
-
-          // 역할 표시 버튼 (전면 하단)
-          const btn = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.006, 0.006, 0.011, 10), M.paint(sw.col));
-          btn.rotation.z = Math.PI / 2;
-          btn.position.set(0.023, -0.040, 0);
-          btn.userData = { type: 'indicator-button', function: sw.func };
-          sg.add(btn);
-
-          // ② 대각선 롤러 암 (피봇 → 롤러 방향, 상·하 대칭)
-          const pivotX = 0.018;
-          const pivotY = 0.006 * dir;
-          const dx     = rLocX - pivotX;
-          const dy     = rLocY - pivotY;
-          const armLen = Math.max(0.04, Math.hypot(dx, dy) - rollerR);
-          const ang    = Math.atan2(dy, dx);
-          const arm    = createBox(armLen, 0.006, 0.010, armMat,
-            pivotX + Math.cos(ang) * armLen * 0.5,
-            pivotY + Math.sin(ang) * armLen * 0.5,
-            0, sg);
-          arm.rotation.z = ang;
-          arm.userData = { type: 'roller-arm-diagonal' };
-
-          // ③ 검은 우레탄 롤러 (Z축 관통 — 카 상·하 이동 시 회전)
-          const roller = new THREE.Mesh(
-            new THREE.CylinderGeometry(rollerR, rollerR, rollerThk, 16), M.paint(0x151515));
-          roller.rotation.x = Math.PI / 2;
-          roller.position.set(rLocX, rLocY, 0);
-          roller.userData = { type: 'roller', function: sw.func };
-          sg.add(roller);
-
-          const axle = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.003, 0.003, rollerThk + 0.004, 8), M.ss(0x9ca3af));
-          axle.rotation.x = Math.PI / 2;
-          axle.position.set(rLocX, rLocY, 0);
-          axle.userData = { type: 'roller-axle' };
-          sg.add(axle);
-
-          sg.userData = { type: 'limit-switch', floor: label, function: sw.func };
-          sg.position.set(lSwitchX, swY, sensorZ);
-          limGrp.add(sg);
-
-          const rollerWorldX = lSwitchX + rLocX;
-          const rollerWorldY = swY + rLocY;
-
-          if (DEBUG_SENSOR) {
-            limGrp.add(new THREE.BoxHelper(sg, sw.col));
-            const rSph = new THREE.Mesh(
-              new THREE.SphereGeometry(0.007, 8, 6),
-              new THREE.MeshBasicMaterial({ color: 0x00ff88, wireframe: true }));
-            rSph.position.set(rollerWorldX, rollerWorldY, sensorZ);
-            limGrp.add(rSph);
-            const rAx = new THREE.AxesHelper(0.1);
-            rAx.position.set(rollerWorldX, rollerWorldY, sensorZ);
-            limGrp.add(rAx);
-          }
-
-          landingDevices.push({ floor: label, type: sw.func, mesh: sg, triggerY: swY });
-        });
-      });
-
-      railGrp.add(limGrp);
+      // 리미트 및 파이널 스위치 재설계 예정 — 임시 비활성화 스텁
     }
 
     function buildMachineRoom() {

@@ -6,11 +6,367 @@
        ========================================================================== */
     function buildCarCabin() {
       carGrp = new THREE.Group();
-      carGrp.name = 'carGrp_stub';
+      carGrp.name = 'carGrp';
       carGrp.userData.safetyGear = null;
       carGrp.position.y = FLOOR_Y[0] + S.CAR_H / 2;
       carGrp.position.z = CAR_CTR_Z;
       scene.add(carGrp);
+
+      const W = S.CAR_W;   // 2.40m
+      const D = S.CAR_D;   // 2.53125m
+      const H = S.CAR_H;   // 2.355m
+      const BG = S.CAR_BG; // 2.625m
+
+      // ── 공통 재질 ──
+      const frmMat     = M.paint(0x2c3e50); // 고장력 구조용 강재 (다크 인더스트리얼 슬레이트 블루)
+      const frmDkMat   = M.paint(0x1a252f); // 고하중 베이스 플레이트 / 브라켓 강재
+      const silvMat    = M.ss(0xc4cbd4);    // 가공 금속 (타이로드, 가이드 베이스)
+      const boltMat    = M.ss(0x8a939e);    // M16/M8 볼트·너트
+      const goldMat    = M.gold();          // 아연도금/황동 와셔·핀
+      const springMat  = M.ss(0xe2e8f0);    // 고장력 스프링강
+      const babbittMat = M.paint(0x212d3b); // 단조강 바빗 소켓 바디
+      const zincMat    = M.ss(0xd6dade);    // 바빗합금 주입면
+
+      // 안전 난간대 재질 (도면 103~104p & 124932.png 고시인성 황색)
+      const yelGuardMat = M.paint(0xf5b800); // 베이스 가드 성형 강판
+      const yelPipeMat  = M.paint(0xe6a800); // 안전 핸드레일 파이프
+
+      // 가이드 슈 재질 (도면 95p, 99p)
+      const shoeHousingMat = M.paint(0x926127); // 주철 슈 하우징 (갈색/골드)
+      const shoeLinerMat   = M.paint(0x15803d); // 저마찰 U-라이너 (그린)
+      const oilerMat       = M.glass();         // 반투명 급유통
+      const oilCapMat      = M.paint(0x1e3a2f); // 급유통 마개
+
+      // 플랫폼 구조재 (도면 93~94p)
+      const pltMat         = M.paint(0x374151); // 플랫폼 사각 채널빔
+      const subFloorMat    = M.paint(0x71717a); // 하부 아연도금 강판
+
+      /* =========================================================================
+         1. 카 프레임 체대 (Car Sling / Stile & Crosshead & Safety Plank)
+         부품설계.pdf 89~92p, 99p
+         ========================================================================= */
+      const carFrameGrp = new THREE.Group();
+      carFrameGrp.name = 'carFrameGrp';
+      carGrp.add(carFrameGrp);
+
+      const railBladeZ = 0.04;               // 카 로컬 가이드레일 날(블레이드) 중심 Z
+      const stileX = BG / 2 - 0.055;         // ±1.2575 (레일 날 바로 안쪽)
+      const chLen  = BG - 0.04;              // 2.585m (크로스헤드 및 플랭크 빔 길이)
+      const chY    = H / 2 + 0.36;           // 톱빔 중심 Y (+1.5375)
+      const chH    = 0.14;                   // ㄷ자 채널 높이 140mm
+      const plankY = -H / 2 - 0.16;          // 하부 세이프티 플랭크 중심 Y (-1.3375)
+
+      // ── (1) 좌/우 수직 기둥 (Car Stiles / 종형 세로 ㄷ자 채널) ──
+      const stileH = (chY + chH / 2) - (plankY - 0.08); // 약 2.995m
+      const stileMidY = (chY + chH / 2 + plankY - 0.08) / 2;
+
+      [-1, 1].forEach(sign => {
+        const sx = sign * stileX;
+        const fxc = sign * (stileX - 0.035);
+
+        // ㄷ자 채널: 웹(Web) + 전·후 플랜지(Flanges)
+        createBox(0.014, stileH, 0.16, frmMat, sx, stileMidY, railBladeZ, carFrameGrp); // 웹
+        createBox(0.06,  stileH, 0.014, frmMat, fxc, stileMidY, railBladeZ - 0.073, carFrameGrp); // 전면 플랜지
+        createBox(0.06,  stileH, 0.014, frmMat, fxc, stileMidY, railBladeZ + 0.073, carFrameGrp); // 후면 플랜지
+
+        // 상부 크로스헤드 체결 거싯 플레이트 & M16 볼트 (도면 92p)
+        createBox(0.016, 0.22, 0.19, frmDkMat, sx - sign * 0.008, chY, railBladeZ, carFrameGrp);
+        [-0.05, 0.05].forEach(dy => {
+          [-0.06, 0, 0.06].forEach(dz => {
+            const b = createCylinder(0.012, 0.012, 0.024, boltMat, sx - sign * 0.018, chY + dy, railBladeZ + dz, carFrameGrp);
+            b.rotation.z = Math.PI / 2;
+          });
+        });
+
+        // 하부 세이프티 디바이스 체결 거싯 플레이트 & 12개 M16 볼트 (도면 91p)
+        createBox(0.016, 0.28, 0.19, frmDkMat, sx - sign * 0.008, plankY, railBladeZ, carFrameGrp);
+        [-0.09, -0.03, 0.03, 0.09].forEach(dy => {
+          [-0.05, 0, 0.05].forEach(dz => {
+            const b = createCylinder(0.012, 0.012, 0.024, boltMat, sx - sign * 0.018, plankY + dy, railBladeZ + dz, carFrameGrp);
+            b.rotation.z = Math.PI / 2;
+          });
+        });
+
+        // 카 천장 임시 고정 앵글 (도면 100~101p)
+        createBox(0.05, 0.04, 0.28, frmMat, sx - sign * 0.025, H / 2 - 0.04, railBladeZ, carFrameGrp);
+      });
+
+      // ── (2) 상부 크로스헤드 빔 (Top Beam / Double C-Channels - 도면 92p) ──
+      // 1:1 권상 로프(Z=0)를 가운데 두고 전·후 2본의 평행 C채널 배치
+      const chFwdZ = 0.070, chAftZ = -0.070;
+      // 전면 C채널
+      createBox(chLen, chH, 0.014, frmMat, 0, chY, chFwdZ + 0.020, carFrameGrp); // 웹
+      createBox(chLen, 0.014, 0.045, frmMat, 0, chY + chH / 2 - 0.007, chFwdZ - 0.005, carFrameGrp); // 상단 플랜지
+      createBox(chLen, 0.014, 0.045, frmMat, 0, chY - chH / 2 + 0.007, chFwdZ - 0.005, carFrameGrp); // 하단 플랜지
+      // 후면 C채널
+      createBox(chLen, chH, 0.014, frmMat, 0, chY, chAftZ - 0.020, carFrameGrp); // 웹
+      createBox(chLen, 0.014, 0.045, frmMat, 0, chY + chH / 2 - 0.007, chAftZ + 0.005, carFrameGrp); // 상단 플랜지
+      createBox(chLen, 0.014, 0.045, frmMat, 0, chY - chH / 2 + 0.007, chAftZ + 0.005, carFrameGrp); // 하단 플랜지
+
+      // 크로스헤드 양단 엔드플레이트
+      createBox(0.020, chH + 0.06, 0.22, frmDkMat, -chLen / 2, chY, 0, carFrameGrp);
+      createBox(0.020, chH + 0.06, 0.22, frmDkMat,  chLen / 2, chY, 0, carFrameGrp);
+
+      // 크로스헤드 경사 보강 브레이스 암 (Arms)
+      [-1, 1].forEach(sign => {
+        const arm = createBox(0.06, 0.42, 0.04, frmMat, sign * (stileX - 0.16), chY - 0.16, 0, carFrameGrp);
+        arm.rotation.z = -sign * 0.45;
+      });
+
+      // ── (3) 하부 세이프티 플랭크 빔 (Safety Plank / Bottom Channel Beam - 도면 91p) ──
+      createBox(chLen, 0.16, 0.10, frmMat, 0, plankY, railBladeZ, carFrameGrp);
+      createBox(chLen, 0.016, 0.16, frmDkMat, 0, plankY - 0.08, railBladeZ, carFrameGrp); // 하단 완충 타격 플레이트
+
+      /* =========================================================================
+         2. 1:1 주 로프 바빗 로프 소켓 어셈블리 (5개소 직결 히치 - 도면 104p 마킹 응용)
+         refreshRopes() 접점: local Y = H / 2 + 0.68, Z = 0, X = -0.06 + i * 0.03
+         ========================================================================= */
+      const hitchBedY = chY + chH / 2 + 0.012; // H / 2 + 0.442
+
+      // 히치 베드 마운트 플레이트 (ㄷ자 채널 상부 가로질러 결속)
+      createBox(0.42, 0.024, 0.22, frmDkMat, 0, hitchBedY, 0, carFrameGrp);
+      [-0.17, 0.17].forEach(bx => {
+        [-0.07, 0.07].forEach(bz => {
+          createCylinder(0.011, 0.011, 0.035, boltMat, bx, hitchBedY + 0.01, bz, carFrameGrp);
+          createCylinder(0.015, 0.015, 0.005, goldMat, bx, hitchBedY + 0.013, bz, carFrameGrp);
+        });
+      });
+
+      // 5개 1:1 바빗 소켓 및 스프링 타이로드 어셈블리
+      const socketMat = M.ss(0x232d38); // 단조강 건메탈 소켓
+      const springCoilMat = M.paint(0x1e293b); // 스프링 코일 블랙/스틸
+
+      for (let i = 0; i < 5; i++) {
+        const rx = -0.06 + i * 0.03;
+
+        // (a) M20 고장력 인장 타이로드 볼트 (히치 베드 관통 ~ 소켓 하단)
+        createCylinder(0.007, 0.007, 0.20, silvMat, rx, hitchBedY + 0.09, 0, carFrameGrp);
+
+        // (b) 하부 스프링 시트 와셔 & 너트
+        createCylinder(0.018, 0.018, 0.008, goldMat, rx, hitchBedY + 0.016, 0, carFrameGrp);
+        createCylinder(0.014, 0.014, 0.014, boltMat, rx, hitchBedY + 0.027, 0, carFrameGrp);
+
+        // (c) 진동 완충용 고장력 코일 스프링 (Damper Spring - 입체 코일 링 표현)
+        createCylinder(0.013, 0.013, 0.070, silvMat, rx, hitchBedY + 0.070, 0, carFrameGrp); // 내부 로드 가이드
+        for (let s = 0; s < 5; s++) {
+          const sy = hitchBedY + 0.040 + s * 0.014;
+          createCylinder(0.018, 0.018, 0.007, springMat, rx, sy, 0, carFrameGrp); // 코일 와인딩 링
+        }
+
+        // (d) 상부 스프링 시트 와셔 & 더블 록 너트 (Double Jam Nuts)
+        createCylinder(0.019, 0.019, 0.008, goldMat, rx, hitchBedY + 0.112, 0, carFrameGrp);
+        createCylinder(0.014, 0.014, 0.012, boltMat, rx, hitchBedY + 0.122, 0, carFrameGrp);
+        createCylinder(0.014, 0.014, 0.012, boltMat, rx, hitchBedY + 0.134, 0, carFrameGrp);
+
+        // (e) 단조 바빗 소켓 몸통 (Babbitt Socket Body - 원뿔형 테이퍼 주물 바디)
+        // 하단 폭 36mm → 상단 폭 22mm 테이퍼 주물 바디. 상단 칼라 끝이 정확히 H / 2 + 0.68에 접촉
+        const socketH = 0.100;
+        const socketY = (H / 2 + 0.68) - socketH / 2; // H / 2 + 0.63
+        createCylinder(0.011, 0.018, socketH, socketMat, rx, socketY, 0, carFrameGrp);
+
+        // 소켓 상단 리세스 림 & 바빗합금(Zinc alloy) 충진 마감
+        createCylinder(0.012, 0.012, 0.012, socketMat, rx, H / 2 + 0.674, 0, carFrameGrp);
+        createCylinder(0.009, 0.009, 0.004, zincMat, rx, H / 2 + 0.680, 0, carFrameGrp);
+
+        // 소켓 상부 안전 와이어 클립 (Rope Clip / U-Bolt Clamp)
+        createBox(0.018, 0.014, 0.016, silvMat, rx, H / 2 + 0.702, 0, carFrameGrp);
+        createCylinder(0.003, 0.003, 0.024, silvMat, rx, H / 2 + 0.702, 0, carFrameGrp);
+      }
+
+      /* =========================================================================
+         3. 상·하부 가이드 슈 4개소 (도면 95p, 99p)
+         가이드레일 날 중심: X = ±BG / 2 (±1.3125), Z = +0.04
+         ========================================================================= */
+      function createGuideShoeAssembly(parent, posX, posY, posZ, isUpper) {
+        const shoe = new THREE.Group();
+        shoe.position.set(posX, posY, posZ);
+        const sign = posX > 0 ? 1 : -1;
+
+        // 슈 어댑터 마운트 베이스 (도면 95p-1)
+        const baseH = 0.020;
+        createBox(0.18, baseH, 0.22, silvMat, -sign * 0.03, isUpper ? -baseH / 2 : baseH / 2, 0, shoe);
+        // 장공 슬롯 및 마운트 볼트
+        [-0.07, 0.07].forEach(dz => {
+          createCylinder(0.012, 0.012, 0.025, boltMat, -sign * 0.08, isUpper ? 0.005 : -0.005, dz, shoe);
+        });
+
+        // 가이드 슈 주철 본체 (U채널형)
+        const bodyY = isUpper ? 0.065 : -0.065;
+        createBox(0.10, 0.11, 0.14, shoeHousingMat, -sign * 0.02, bodyY, 0, shoe);
+
+        // 저마찰 녹색 가이드 슈 라이너 (5mm 세팅 틈새로 레일 날 감쌈, 도면 95p-2)
+        createBox(0.024, 0.12, 0.065, shoeLinerMat, sign * 0.038, bodyY, 0, shoe);
+
+        // 조정 볼트 & 잠금 너트 (도면 95p 셋팅 틈새 5mm 조정 너트)
+        const adjBolt = createCylinder(0.006, 0.006, 0.05, silvMat, -sign * 0.06, bodyY, 0, shoe);
+        adjBolt.rotation.z = Math.PI / 2;
+
+        if (isUpper) {
+          // 상단 자동 급유기 (오일 컵 & 마개 - PDF 13p / 95p)
+          createCylinder(0.022, 0.022, 0.065, oilerMat, -sign * 0.03, 0.155, 0, shoe);
+          createCylinder(0.025, 0.025, 0.014, oilCapMat, -sign * 0.03, 0.192, 0, shoe);
+        }
+
+        parent.add(shoe);
+        return shoe;
+      }
+
+      // 상부 가이드 슈 2세트 (톱빔 좌/우 상단)
+      createGuideShoeAssembly(carFrameGrp, -stileX, chY + chH / 2 + 0.015, railBladeZ, true);
+      createGuideShoeAssembly(carFrameGrp,  stileX, chY + chH / 2 + 0.015, railBladeZ, true);
+
+      // 하부 가이드 슈 2세트 (세이프티 플랭크 좌/우 하단 - 도면 99p)
+      createGuideShoeAssembly(carFrameGrp, -stileX, plankY - 0.08 - 0.015, railBladeZ, false);
+      createGuideShoeAssembly(carFrameGrp,  stileX, plankY - 0.08 - 0.015, railBladeZ, false);
+
+      /* =========================================================================
+         4. 하부 세이프티 기어 및 조속기 연동 (Safety Gear GLB 로드 - 도면 91p, 96~98p)
+         assets/safety_gear.glb
+         ========================================================================= */
+      const safetyGearGrp = new THREE.Group();
+      carGrp.add(safetyGearGrp);
+
+      new THREE.GLTFLoader().load('assets/safety_gear.glb', (gltf) => {
+        const g = gltf.scene;
+        g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+        safetyGearGrp.add(g);
+        const pick = n => g.getObjectByName(n);
+        carGrp.userData.safetyGear = {
+          shaft:   pick('shaft'),
+          liftL:   pick('liftL'),
+          liftR:   pick('liftR'),
+          springs: ['springL0', 'springL1', 'springR0', 'springR1'].map(pick).filter(Boolean),
+          wedges:  ['wedgeL0', 'wedgeL1', 'wedgeR0', 'wedgeR1'].map(pick).filter(Boolean),
+          clamp:   pick('clamp')
+        };
+        carGrp.userData.safetyGear.wedges.forEach(w => { w.userData.z0 = w.position.z; });
+        if (typeof refreshGovernorRope === 'function') refreshGovernorRope();
+      }, undefined, (err) => console.error('[safety_gear.glb] 로드 실패:', err));
+
+      // 조속기 로프 카 상부 고정 브라켓 (우측 톱빔 상단 홀 관통 - 도면 96p-1)
+      createBox(0.06, 0.05, 0.12, frmMat, stileX + 0.07, chY + chH / 2 + 0.025, -0.15, carFrameGrp);
+      createCylinder(0.014, 0.014, 0.06, silvMat, stileX + 0.07, chY + chH / 2 + 0.03, -0.15, carFrameGrp);
+
+      // 액츄에이터 레버 풀 바 (Actuator Lever Pull Bar - 도면 96p-2)
+      createBox(0.015, 0.40, 0.025, silvMat, stileX + 0.07, plankY + 0.12, -0.15, carFrameGrp);
+      // 조속기 로프 연결 심블 & 와이어 클립 (도면 98p)
+      createCylinder(0.016, 0.016, 0.035, goldMat, stileX + 0.07, plankY - 0.02, -0.15, carFrameGrp);
+      [-0.05, -0.08].forEach(dy => {
+        createBox(0.022, 0.014, 0.018, silvMat, stileX + 0.07, plankY + dy, -0.15, carFrameGrp);
+      });
+
+      /* =========================================================================
+         5. 카 플랫폼 베이스 프레임 (Platform Frame - 도면 93~94p)
+         세이프티 플랭크 상부에 안착, 향후 바닥 판재·도어 실(Sill)·에이프런의 기준면 형성
+         ========================================================================= */
+      const platformGrp = new THREE.Group();
+      carGrp.add(platformGrp);
+
+      const pltFloorY = -H / 2; // -1.1775 (카 바닥 기준면)
+      const pltH = 0.085;       // 플랫폼 채널 높이 85mm
+      const pltMidY = pltFloorY - pltH / 2;
+
+      // 외곽 C채널 프레임 (전·후·좌·우 4변)
+      createBox(W, pltH, 0.04, pltMat, 0, pltMidY,  D / 2 - 0.02, platformGrp); // 전면
+      createBox(W, pltH, 0.04, pltMat, 0, pltMidY, -D / 2 + 0.02, platformGrp); // 후면
+      createBox(0.04, pltH, D - 0.08, pltMat, -W / 2 + 0.02, pltMidY, 0, platformGrp); // 좌측
+      createBox(0.04, pltH, D - 0.08, pltMat,  W / 2 - 0.02, pltMidY, 0, platformGrp); // 우측
+
+      // Z방향 하부 종통 보강 채널 6본 (도면 93p)
+      const stringerX = [-0.85, -0.51, -0.17, 0.17, 0.51, 0.85];
+      stringerX.forEach(sx => {
+        createBox(0.045, pltH - 0.01, D - 0.08, pltMat, sx, pltMidY, 0, platformGrp);
+      });
+
+      // 하부 아연도금 강판 서브팬 (Sub-floor Pan Plate - 도면 94p)
+      createBox(W - 0.02, 0.010, D - 0.02, subFloorMat, 0, pltFloorY - 0.005, 0, platformGrp);
+
+      // 전면 실(Sill) 서포트 채널 (향후 도어 실 장착면)
+      createBox(S.DOOR_W + 0.20, 0.05, 0.05, frmDkMat, 0, pltFloorY - 0.03, D / 2 + 0.015, platformGrp);
+
+      // 대각 무릎 브레이스 (Knee Braces — 플랫폼 모서리 하부 ↔ 스타일 하단 결속)
+      const braceTopY = pltFloorY - pltH; // 플랫폼 채널 하단면에 부착 (바닥 상단 노출 방지)
+      [[-1, 1], [1, 1], [-1, -1], [1, -1]].forEach(([sx, sz]) => {
+        const px = sx * (W / 2 - 0.15), pz = sz * (D / 2 - 0.15);
+        const bx = sx * (stileX - 0.03), bz = railBladeZ;
+        const by = plankY + 0.08;
+        const dx = bx - px, dy = by - braceTopY, dz = bz - pz;
+        const len = Math.hypot(dx, dy, dz);
+        const strut = createBox(0.032, len, 0.032, frmMat, (px + bx) / 2, (braceTopY + by) / 2, (pz + bz) / 2, platformGrp);
+        strut.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(dx, dy, dz).normalize());
+      });
+
+      /* =========================================================================
+         6. 카 상부 추락방지 안전 난간대 (Top Safety Handrail)
+         도면 103~104p & 사용자 스크린샷 124932.png, 1249321.png
+         ========================================================================= */
+      const handrailGrp = new THREE.Group();
+      carGrp.add(handrailGrp);
+
+      // ── (1) 황색 베이스 가드 (Base Guard - 도면 103p, M16 볼트 고정) ──
+      const bgTopY = chY + chH / 2; // H / 2 + 0.43
+      // 톱빔 상단 고정 베이스 가드 브라켓
+      createBox(chLen - 0.20, 0.10, 0.025, yelGuardMat, 0, bgTopY + 0.05, -0.10, handrailGrp); // 후면 베이스
+      createBox(0.025, 0.10, 0.50, yelGuardMat, -(stileX - 0.10), bgTopY + 0.05, 0.15, handrailGrp); // 좌측 베이스
+      createBox(0.025, 0.10, 0.50, yelGuardMat,  (stileX - 0.10), bgTopY + 0.05, 0.15, handrailGrp); // 우측 베이스
+
+      // 베이스 가드 M16 볼트 체결열 (도면 103p)
+      [-0.70, -0.35, 0.35, 0.70].forEach(bx => {
+        createCylinder(0.014, 0.014, 0.02, boltMat, bx, bgTopY + 0.10, -0.10, handrailGrp);
+      });
+
+      // ── (2) 안전 파이프 난간 구조 (Safety Pipe Handrails - 도면 104p & 124932.png) ──
+      // 상부 탑레일(+0.90m), 중간 미드레일(+0.48m), 발끝막이판 토보드(+0.06m)
+      const railH = 0.90;                                // 상단 난간 높이
+      const midH  = 0.48;                                // 중간 바 높이
+      const railTopY = H / 2 + railH;                    // 카 천장 기준 +0.90m
+      const railMidY = H / 2 + midH;
+      const toeBoardY = H / 2 + 0.05;
+
+      const hrW = W - 0.30;                              // 난간 폭 2.10m
+      const hrD = D - 0.40;                              // 난간 깊이 2.13m
+      const hrRearZ = -D / 2 + 0.18;                     // 후면 난간 Z
+      const hrLeftX = -W / 2 + 0.15, hrRightX = W / 2 - 0.15; // 좌/우 난간 X
+      const hrFrontZ = hrRearZ + hrD;                    // 전면 개구부 측 Z
+
+      // (a) 수직 지주 포스트 (Vertical Posts - 7개소)
+      const postLocations = [
+        [hrLeftX,  hrRearZ],          // 후면 좌측 모서리
+        [hrRightX, hrRearZ],          // 후면 우측 모서리
+        [0,        hrRearZ],          // 후면 중앙
+        [hrLeftX,  (hrRearZ + hrFrontZ) / 2], // 좌측 중간
+        [hrRightX, (hrRearZ + hrFrontZ) / 2], // 우측 중간
+        [hrLeftX,  hrFrontZ],         // 좌측 전면 끝단
+        [hrRightX, hrFrontZ]          // 우측 전면 끝단
+      ];
+
+      postLocations.forEach(([px, pz]) => {
+        // 사각 파이프 지주 (40x40)
+        createBox(0.038, railH, 0.038, yelPipeMat, px, H / 2 + railH / 2, pz, handrailGrp);
+        // 하단 마운트 플랜지 & 볼트
+        createBox(0.08, 0.012, 0.08, yelGuardMat, px, H / 2 + 0.006, pz, handrailGrp);
+      });
+
+      // (b) 상부 핸드레일 (Top Rails - 후면, 좌측, 우측 3면)
+      createBox(hrW, 0.038, 0.038, yelPipeMat, 0, railTopY, hrRearZ, handrailGrp); // 후면
+      createBox(0.038, 0.038, hrD, yelPipeMat, hrLeftX,  railTopY, (hrRearZ + hrFrontZ) / 2, handrailGrp); // 좌측
+      createBox(0.038, 0.038, hrD, yelPipeMat, hrRightX, railTopY, (hrRearZ + hrFrontZ) / 2, handrailGrp); // 우측
+
+      // (c) 중간 가로대 (Mid Rails - 후면, 좌측, 우측 & M8 볼트 결합 - 도면 104p)
+      createBox(hrW, 0.032, 0.032, yelPipeMat, 0, railMidY, hrRearZ, handrailGrp); // 후면
+      createBox(0.032, 0.032, hrD, yelPipeMat, hrLeftX,  railMidY, (hrRearZ + hrFrontZ) / 2, handrailGrp); // 좌측
+      createBox(0.032, 0.032, hrD, yelPipeMat, hrRightX, railMidY, (hrRearZ + hrFrontZ) / 2, handrailGrp); // 우측
+
+      // M8 볼트 조립 디테일 (도면 104p 상세도)
+      postLocations.forEach(([px, pz]) => {
+        createCylinder(0.008, 0.008, 0.046, boltMat, px, railMidY, pz, handrailGrp);
+        createCylinder(0.008, 0.008, 0.046, boltMat, px, railTopY, pz, handrailGrp);
+      });
+
+      // (d) 발끝막이판 (Toe Boards / Kick Plates - 100mm 고시인성 황색 판재)
+      createBox(hrW, 0.10, 0.014, yelGuardMat, 0, toeBoardY, hrRearZ, handrailGrp); // 후면
+      createBox(0.014, 0.10, hrD, yelGuardMat, hrLeftX,  toeBoardY, (hrRearZ + hrFrontZ) / 2, handrailGrp); // 좌측
+      createBox(0.014, 0.10, hrD, yelGuardMat, hrRightX, toeBoardY, (hrRearZ + hrFrontZ) / 2, handrailGrp); // 우측
     }
 
     function buildPassenger() {
@@ -209,8 +565,10 @@
       const SILL_GROOVE_W = 0.014;
       const SILL_GROOVE_D = 0.016;
       const DOOR_HALL_Z   = FRONT_WALL_INNER_Z - 0.022;
-      const hatchPanelZ   = (trackCtrZ) => DOOR_HALL_Z - HATCH_DT / 2 - trackCtrZ;
       const SILL_Z        = DOOR_HALL_Z - HATCH_DT / 2;
+      // 도면 174p: C레일 트랙 중심 = 행거판 플랜지 = 도어 패널 = 승장 실 1번 홈 단일 수직 PLUMB 축
+      const HATCH_PLUMB_Z = SILL_Z;
+      const hatchPanelZ   = (trackCtrZ) => SILL_Z - trackCtrZ;
       const SILL_HALL_EDGE  = 0.0275;  // 홀 쪽 — 기존 55mm 실과 동일
       const SILL_GROOVE1_Z  = 0;       // 1번 홈 (문짝 아래)
       const SILL_GROOVE2_Z  = -0.026;  // 2번 홈 (승강로 쪽 보강)
@@ -486,8 +844,8 @@
         const hcGrp = new THREE.Group();
         const doorH = S.DOOR_H;
 
-        const pianoZ = FRONT_INNER_Z + CAR_DOOR_T;
-        const trackCtrZ = pianoZ - TRACK_OFF;
+        // 도면 174p: C레일 트랙 중심 = 승장 도어 및 승장 실 단일 PLUMB 축 (HATCH_PLUMB_Z)
+        const trackCtrZ = HATCH_PLUMB_Z;
         const wallLocalZ = FRONT_WALL_INNER_Z - trackCtrZ;
 
         const railY = doorH + 0.145;
@@ -906,6 +1264,7 @@
       const hpPinMat     = new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.85, roughness: 0.25 }); // 황동 접점 핀
       const hpBoltMat    = new THREE.MeshStandardMaterial({ color: 0xc8d2dc, metalness: 0.80, roughness: 0.25 }); // 아연도금 볼트/너트
       const hpSpringMat  = new THREE.MeshStandardMaterial({ color: 0xd0d5da, metalness: 0.75, roughness: 0.25 }); // 인장 스프링 스틸
+      const hpDarkMat    = new THREE.MeshStandardMaterial({ color: 0x1f2329, roughness: 0.80 }); // 슬롯/음영 매트 블랙
 
       /* 텐셔너 감김 — 본선과 같은 makeGovRopeMat (은색 연선 텍스처).
          좁은 홈에서 6연선 로브를 밀어 넣으면 회색 덩어리로 보이므로 단면은 원통이다. */
@@ -977,12 +1336,19 @@
           grp.add(pMesh);
         }
 
-        // 2. 하단 도어 패널 체결 플랜지 & M8 볼트 2세트 (홀/+Z 쪽으로 뻗어 도어 상단에 앉는다)
-        const flapZ = hatchPanelZ(g.trackCtrZ);
-        createBox(0.380, 0.0035, 0.032, hpPlateMat, 0, g.caseCY - 0.120, flapZ, grp);
+        // 2. 도면 174p 하단 일체형 34mm L-플랜지 & M8 직결 볼트 2세트 (도어 상단과 완벽 일체화)
+        const flapZ = hatchPanelZ(g.trackCtrZ); // 0 (단일 PLUMB 축)
+        const flapY = g.caseCY - 0.120 - 0.0035 / 2;
+        // 도어 상단을 덮는 34mm 수평 플랜지
+        createBox(0.380, 0.0035, 0.034, hpPlateMat, 0, flapY, flapZ, grp);
+        // 수직 행거판과 하단 플랜지를 잇는 절곡 코너 연결부
+        if (Math.abs(plateZ - flapZ) > 0.002) {
+          createBox(0.380, 0.0035, Math.abs(plateZ - flapZ), hpPlateMat, 0, flapY, (plateZ + flapZ) / 2, grp);
+        }
+        // 상단 M8 체결 볼트 머리 & 하단 사각 너트 2세트
         [-0.120, 0.120].forEach(bx => {
-          createCylinder(0.006, 0.006, 0.004, hpBoltMat, bx, g.caseCY - 0.116, flapZ, grp);
-          createBox(0.013, 0.006, 0.013, hpBoltMat, bx, g.caseCY - 0.124, flapZ, grp);
+          createCylinder(0.006, 0.006, 0.004, hpBoltMat, bx, flapY + 0.0035, flapZ, grp);
+          createBox(0.013, 0.005, 0.013, hpBoltMat, bx, flapY - 0.0045, flapZ, grp);
         });
 
         if (isHookSide) {
@@ -1057,6 +1423,18 @@
           const tipX = rBaseX - 0.125; // 턱 선단 X (-0.235)
           const tipY = g.caseCY - 0.015;
 
+          // 비상 삼각키 연동 회전 피벗 그룹 (pX, pY 중심 회전 시 후크 4~5mm 리프트)
+          const hookPivotGrp = new THREE.Group();
+          hookPivotGrp.name = 'HookPivotGrp';
+          hookPivotGrp.position.set(pX, pY, 0);
+
+          const hookMoving = new THREE.Group();
+          hookMoving.name = 'HookMoving';
+          hookMoving.position.set(-pX, -pY, 0);
+          hookPivotGrp.add(hookMoving);
+          grp.add(hookPivotGrp);
+          grp.userData.hookPivot = hookPivotGrp;
+
           const hShape = new THREE.Shape();
           hShape.moveTo(pX + 0.015, pY);
           hShape.lineTo(pX + 0.010, pY + 0.024);
@@ -1076,11 +1454,11 @@
           });
           const hMesh = new THREE.Mesh(hGeom, ilGoldZincMat);
           hMesh.position.z = plateZ - 0.008;
-          grp.add(hMesh);
+          hookMoving.add(hMesh);
 
           // 후크 피벗 리벳 및 리벳 핀 2개소 (실사 001752.png)
           [tipX + 0.015, tipX + 0.050].forEach(rx => {
-            const rvt = createCylinder(0.0022, 0.0022, 0.007, hpBoltMat, rx, tipY + 0.002, plateZ - 0.006, grp);
+            const rvt = createCylinder(0.0022, 0.0022, 0.007, hpBoltMat, rx, tipY + 0.002, plateZ - 0.006, hookMoving);
             rvt.rotation.x = Math.PI / 2;
           });
 
@@ -1089,9 +1467,9 @@
           const spkY = pY + 0.024;
           const spkZ = plateZ - 0.006;
           // 중심 조절 볼트 심봉
-          createCylinder(0.0022, 0.0022, 0.038, hpBoltMat, spkX, spkY + 0.018, spkZ, grp);
+          createCylinder(0.0022, 0.0022, 0.038, hpBoltMat, spkX, spkY + 0.018, spkZ, hookMoving);
           // 하단 스프링 시트 와셔
-          createCylinder(0.0055, 0.0055, 0.0025, hpBoltMat, spkX, spkY + 0.0015, spkZ, grp);
+          createCylinder(0.0055, 0.0055, 0.0025, hpBoltMat, spkX, spkY + 0.0015, spkZ, hookMoving);
           // 다단 토러스 코일 스프링 (8회 감김)
           const coilCount = 8;
           const coilH = 0.022;
@@ -1100,14 +1478,14 @@
             const torus = new THREE.Mesh(new THREE.TorusGeometry(0.0048, 0.00095, 8, 20), hpSpringMat);
             torus.position.set(spkX, cy, spkZ);
             torus.rotation.x = Math.PI / 2 + 0.08;
-            grp.add(torus);
+            hookMoving.add(torus);
           }
           // 상단 스프링 누름 와셔 & M6 조절 더블 너트
-          createCylinder(0.0055, 0.0055, 0.0020, hpBoltMat, spkX, spkY + 0.026, spkZ, grp);
+          createCylinder(0.0055, 0.0055, 0.0020, hpBoltMat, spkX, spkY + 0.026, spkZ, hookMoving);
           [spkY + 0.030, spkY + 0.035].forEach(ny => {
             const nut = new THREE.Mesh(new THREE.CylinderGeometry(0.0045, 0.0045, 0.0035, 6), hpBoltMat);
             nut.position.set(spkX, ny, spkZ);
-            grp.add(nut);
+            hookMoving.add(nut);
           });
 
           // 얇고 넓은 사각 흰색 절연 슈(테이퍼 노즈) + 황동 접점 브리지 (실사 001821.png, 특허 부호 10)
@@ -1127,15 +1505,16 @@
           });
           const sMesh = new THREE.Mesh(sGeom, ilWhiteMat);
           sMesh.position.set(shoeX, shoeY, hookSwZ - 0.008);
-          grp.add(sMesh);
+          hookMoving.add(sMesh);
 
           // 커버 후방 결합 지지턱
-          createBox(0.006, 0.012, 0.006, ilWhiteMat, shoeX + 0.009, shoeY - 0.006, hookSwZ, grp);
+          createBox(0.006, 0.012, 0.006, ilWhiteMat, shoeX + 0.009, shoeY - 0.006, hookSwZ, hookMoving);
 
           // (B) 커버 하단 황동 접점 브리지 판 (도어 닫힘 시 앞·뒤 2열 4개 접점 리벳을 상부에서 덮음)
-          createBox(0.018, 0.0014, 0.014, ilContactMat, shoeX - 0.002, g.covCY, hookSwZ, grp);
+          createBox(0.018, 0.0014, 0.014, ilContactMat, shoeX - 0.002, g.covCY, hookSwZ, hookMoving);
 
-          // (5) 좌측 대각선 해정 레버 암 (실사 0017521.png 빨간 마킹) 및 하단 긴 수직 연장 바
+          // (5) 좌측 대각선 해정 레버 암 (실사 0017521.png 빨간 마킹) 및 수직 일직선 연동 바
+          const linkBarZ = -0.024; // 대각선 암 ~ 도어 배면 가이드 ~ 삼각키 캠을 관통하는 단일 수직면
           const dShape = new THREE.Shape();
           dShape.moveTo(pX - 0.010, pY - 0.005);
           dShape.lineTo(pX - 0.010, pY + 0.010);
@@ -1144,22 +1523,43 @@
           dShape.closePath();
           const dGeom = new THREE.ExtrudeGeometry(dShape, { depth: 0.004, bevelEnabled: false });
           const dMesh = new THREE.Mesh(dGeom, ilGoldZincMat);
-          dMesh.position.z = plateZ - 0.012;
-          grp.add(dMesh);
+          dMesh.position.z = linkBarZ - 0.002;
+          hookMoving.add(dMesh);
 
           // 대각선 암 체결 볼트 2개 (실사 001752.png 좌측 볼트)
           [-0.008, 0.008].forEach(dx => {
-            const cb = createCylinder(0.0035, 0.0035, 0.008, hpBoltMat, pX - 0.010 + dx, pY + 0.002, plateZ - 0.010, grp);
+            const cb = createCylinder(0.0035, 0.0035, 0.008, hpBoltMat, pX - 0.010 + dx, pY + 0.002, linkBarZ, hookMoving);
             cb.rotation.x = Math.PI / 2;
           });
 
-          // 하단 긴 수직 연장 바 (비상 삼각키 캠 연동 평철 바, 실사 0017521.png, 002051.png)
-          createBox(0.024, 0.320, 0.004, ilGoldZincMat, pX + 0.075, g.caseCY - 0.220, plateZ - 0.014, grp);
-          // 연장 바 결합 볼트 2개
+          // 하단 긴 수직 연장 바 (비상 삼각키 캠 연동 평철 바 — 꺾임 없는 수직 일직선 Straight Flat Bar, 도면 177p, 실사 112754.png)
+          const barX     = pX + 0.075; // -0.035
+          const barTopY  = g.caseCY - 0.055;
+          const barBotY  = 2.012; // 2.0m 삼각키 캠 드라이브 핀 하단까지 정밀 연장
+
+          // (1) 완전 일직선 수직 평철 링크 바 (Straight Link Bar: Y = barTopY ~ barBotY, 단일 Z = linkBarZ)
+          const barLen   = barTopY - barBotY;
+          const barCY    = (barTopY + barBotY) / 2;
+          const linkBar  = createBox(0.022, barLen, 0.004, ilGoldZincMat, barX, barCY, linkBarZ, hookMoving);
+          linkBar.userData = { type: 'interlock-link-bar' };
+
+          // 상단 대각선 암 결합 볼트 2개
           [-0.070, -0.090].forEach(by => {
-            const lb = createCylinder(0.004, 0.004, 0.010, hpBoltMat, pX + 0.075, g.caseCY + by, plateZ - 0.014, grp);
+            const lb = createCylinder(0.004, 0.004, 0.010, hpBoltMat, barX, g.caseCY + by, linkBarZ, hookMoving);
             lb.rotation.x = Math.PI / 2;
           });
+
+          // 도어 패널 상단 수직 바 이탈방지 가이드 브라켓 (Y = 2.08m 부근, 도어 패널 배면에 볼트 고정)
+          const guideY = 2.080;
+          createBox(0.038, 0.016, 0.006, hpSteelMat, barX, guideY, linkBarZ + 0.003, grp);
+          [-0.013, 0.013].forEach(gx => {
+            const gb = createCylinder(0.0025, 0.0025, 0.008, hpBoltMat, barX + gx, guideY, linkBarZ + 0.006, grp);
+            gb.rotation.x = Math.PI / 2;
+          });
+
+          // 하단 삼각키 캠 핀 장공 슬롯 (비상 개방 시 수직 슬라이딩 가이드)
+          const slot = createBox(0.008, 0.022, 0.005, hpDarkMat, barX, 2.026, linkBarZ, hookMoving);
+          slot.userData = { type: 'cam-pin-slot' };
         } else {
           // ── 화면 우측 행거판 (left 그룹, 월드 -X): SPRING HANGER + 연동 로프 텐셔너 + 실물 7계열 보조접점 수놈 핀 L브라켓 ──
           // 도어 중앙 방향은 로컬 +X 방향임!
@@ -1365,6 +1765,111 @@
         const stickerX = pX + (isHookSide ? -0.16 : 0.16);
         sticker.position.set(stickerX, 1.45, zHall + 0.001);
         grp.add(sticker);
+
+        // 8. 비상 삼각키 어셈블리 (승강장 바닥 기준 약 2.0m 높이 법정 검사기준 준수, 도면 177p, 실사 112754.png/112837.png)
+        if (isHookSide) {
+          const triY = 2.000; // 법정 검사기준 설치 높이 2.0m
+          // 인터록 수직 링크 바 X 위치: rBaseX(-0.110) + 0.075 = -0.035
+          const barX = -0.035;
+          const camRad = 35 * Math.PI / 180;
+          const camLen = 0.045;
+          const triX = barX - camLen * Math.cos(camRad); // ≈ -0.07186
+          const pinY = triY + camLen * Math.sin(camRad); // ≈ 2.0258
+
+          const triKeyGrp = new THREE.Group();
+          triKeyGrp.name = 'EmergencyTriangleKey';
+          triKeyGrp.position.set(triX, triY, 0);
+
+          // (1) 승강장 외측 크롬 메탈 베젤 & 비상 삼각키 홀 (zHall 의장면 고대비 실물 리빌드)
+          // 1-1. 고광택 크롬 메탈 및 딥 블랙 리세스 포켓 재질
+          const chromeMat = new THREE.MeshStandardMaterial({
+            color: 0x909caa, metalness: 0.92, roughness: 0.16
+          });
+          const darkPocketMat = new THREE.MeshStandardMaterial({
+            color: 0x101215, roughness: 0.96
+          });
+
+          // 1-2. 외측 크롬 베젤 링 (외경 Ø28mm, 내경 Ø17mm, 돌출 2.2mm)
+          const rOut = 0.014;
+          const rIn  = 0.0085;
+          const bezelShape = new THREE.Shape();
+          bezelShape.absarc(0, 0, rOut, 0, Math.PI * 2, false);
+          const bezelHole = new THREE.Path();
+          bezelHole.absarc(0, 0, rIn, 0, Math.PI * 2, true);
+          bezelShape.holes.push(bezelHole);
+
+          const bezelGeom = new THREE.ExtrudeGeometry(bezelShape, {
+            depth: 0.0022, bevelEnabled: true, bevelThickness: 0.0006, bevelSize: 0.0006, bevelSegments: 3
+          });
+          const bezelMesh = new THREE.Mesh(bezelGeom, chromeMat);
+          bezelMesh.position.set(0, 0, zHall + 0.0002);
+          triKeyGrp.add(bezelMesh);
+
+          // 외곽 미세 음영 림 (도어 판과의 외곽 테두리 경계 콘트라스트 강화)
+          const rimTorus = new THREE.Mesh(new THREE.TorusGeometry(rOut, 0.0007, 6, 32), darkPocketMat);
+          rimTorus.position.set(0, 0, zHall + 0.0003);
+          triKeyGrp.add(rimTorus);
+
+          // 1-3. 깊이감 있는 내부 원형 블랙 리세스 포켓 (Ø17mm, 열쇠 삽입 홈)
+          const pocket = createCylinder(rIn, rIn, 0.0020, darkPocketMat, 0, 0, zHall + 0.0010, triKeyGrp);
+          pocket.rotation.x = Math.PI / 2;
+
+          // 1-4. 3D 입체 정삼각 황동 키 코어 스핀들 (변 9mm, 높이 2.4mm 골드 프리즘)
+          const triR = 0.0052; // 외접원 반경 (한 변 약 9.0mm)
+          const triShape = new THREE.Shape();
+          for (let i = 0; i < 3; i++) {
+            const ang = Math.PI / 2 + i * (Math.PI * 2 / 3);
+            const tx = Math.cos(ang) * triR;
+            const ty = Math.sin(ang) * triR;
+            if (i === 0) triShape.moveTo(tx, ty);
+            else triShape.lineTo(tx, ty);
+          }
+          triShape.closePath();
+
+          const triGeom = new THREE.ExtrudeGeometry(triShape, {
+            depth: 0.0024, bevelEnabled: true, bevelThickness: 0.0004, bevelSize: 0.0004, bevelSegments: 2
+          });
+          const triCore = new THREE.Mesh(triGeom, ilContactMat);
+          triCore.position.set(0, 0, zHall + 0.0008);
+          triKeyGrp.add(triCore);
+
+          // (2) 도어 패널 관통 황동 바디 (두께 32mm 관통)
+          const bodyLen = dt + 0.004;
+          const body = createCylinder(0.008, 0.008, bodyLen, ilContactMat, 0, 0, zCtr, triKeyGrp);
+          body.rotation.x = Math.PI / 2;
+
+          // (3) 승강로 측 고무 와셔 & 체결 육각 너트 2개 (도면 177p)
+          const nutZ = zHoist - 0.004;
+          const rubberW = createCylinder(0.012, 0.012, 0.0025, rubberMat, 0, 0, zHoist - 0.0015, triKeyGrp);
+          rubberW.rotation.x = Math.PI / 2;
+          const hexNut1 = createCylinder(0.011, 0.011, 0.004, hpBoltMat, 0, 0, nutZ, triKeyGrp);
+          hexNut1.rotation.x = Math.PI / 2;
+          const hexNut2 = createCylinder(0.0105, 0.0105, 0.003, hpBoltMat, 0, 0, nutZ - 0.004, triKeyGrp);
+          hexNut2.rotation.x = Math.PI / 2;
+
+          // (4) 승강로 측 회전 캠 레버 (Cam Lever, pX+0.075 수직 링크 바와 연결)
+          const camPivot = new THREE.Group();
+          camPivot.name = 'CamPivot';
+          camPivot.position.set(0, 0, zHoist - 0.008);
+          camPivot.rotation.z = camRad;
+
+          // 캠 레버 바 (황동/골드 크로메이트)
+          createBox(camLen, 0.014, 0.004, ilGoldZincMat, camLen / 2, 0, 0, camPivot);
+          const camHub = createCylinder(0.009, 0.009, 0.0045, ilGoldZincMat, 0, 0, 0, camPivot);
+          camHub.rotation.x = Math.PI / 2;
+          const camTip = createCylinder(0.007, 0.007, 0.0045, ilGoldZincMat, camLen, 0, 0, camPivot);
+          camTip.rotation.x = Math.PI / 2;
+
+          // 캠 끝단 드라이브 핀 (수직 링크 바의 장공 슬롯에 결합)
+          const drivePin = createCylinder(0.0035, 0.0035, 0.010, hpBoltMat, camLen, 0, 0, camPivot);
+          drivePin.rotation.x = Math.PI / 2;
+          const pinCap = createCylinder(0.006, 0.006, 0.003, hpBoltMat, camLen, 0, -0.005, camPivot);
+          pinCap.rotation.x = Math.PI / 2;
+
+          triKeyGrp.add(camPivot);
+          grp.add(triKeyGrp);
+          grp.userData.triKey = { group: triKeyGrp, camPivot, triX, triY, pinY, barX };
+        }
       }
 
       for (let i = 0; i < FLOORS; i++) {
@@ -1402,6 +1907,33 @@
       }
 
     }
+
+    /* ── 비상 삼각키 회전 및 승장 인터록 해정 연동 제어 함수 ──
+       - fIdx: 대상 층 인덱스 (0: 1층, 1: 2층 ...)
+       - ratio: 0.0 (완전 잠김) ~ 1.0 (비상 해정 완료)
+       - 부품설계.pdf 177p~179p 규격 반영:
+         1) 도어 배면 캠 레버 회전: 35° -> 85° (+50° 회전)
+         2) 수직 평철 링크 바 연동 -> 대각선 암 틸트 -> 후크 래치 4~5mm 상승 및 접점 브리지 분리 */
+    function setEmergencyKey(fIdx = 0, ratio = 0) {
+      if (!hatchDoors || !hatchDoors[fIdx] || !hatchDoors[fIdx].right) return;
+      const rGrp = hatchDoors[fIdx].right;
+      const tri  = rGrp.userData.triKey;
+      const hp   = rGrp.userData.hookPivot;
+      if (!tri || !tri.camPivot) return;
+
+      const clampedRatio = Math.max(0, Math.min(1, ratio));
+      // (1) 삼각키 캠 레버 회전: 35° ~ 85°
+      const initAng = 35 * Math.PI / 180;
+      const maxDelta = 50 * Math.PI / 180;
+      tri.camPivot.rotation.z = initAng + clampedRatio * maxDelta;
+
+      // (2) 인터록 후크 래치 리프트: 턱 선단 4.75mm 상승 (PDF 179p 규격 4~5mm)
+      // 피벗 기준 tipX(-0.125m)가 시계방향(-Z 회전) 시 +Y로 0.125 * 0.038 ≈ 4.75mm 상승
+      if (hp) {
+        hp.rotation.z = -clampedRatio * 0.038;
+      }
+    }
+    window.setEmergencyKey = setEmergencyKey;
 
 
     function buildCounterWeight() {
