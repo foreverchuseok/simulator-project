@@ -53,6 +53,7 @@
        감고 도는 한 바퀴짜리 회로라, 한쪽이 +X 로 가면 반대쪽은 같은 양만큼
        -X 로 끌려간다. 그래서 두 문짝이 엉키지 않고 항상 대칭으로 개폐된다.
        도어 행정만으로 마디 길이·풀리각·클로저 스프링 길이를 역산한다.
+       텐셔너 창에서 바깥으로 나오는 짧은 감김은 행거판 고정 튜브다.
        카 도어 오퍼레이터는 미설치. 원본: js/archive/doors.js
        ────────────────────────────────────────────────────────────── */
     function setRopeSpan(mesh, x0, x1, y, z) {
@@ -72,12 +73,12 @@
       setRopeSpan(k.seg.upL, k.pulLX, ax - k.aHalf, k.upY, k.upZ);
       setRopeSpan(k.seg.upR, ax + k.aHalf, k.pulRX, k.upY, k.upZ);
 
-      // 하부 가닥: 좌풀리 ↔ 타공창 텐셔너 좌단(전산볼트) / 텐셔너 우단(스프링) ↔ 우풀리.
-      // 두 끝은 월드 -X 행거판의 타공창 "안"에서 끊긴다. 예전처럼 행거판 좌·우 끝단
-      // (left±0.190)에서 끊으면 두 마디가 판 위에서 겹쳐 그려져 금속면 앞에 로프가 드러났다.
+      /* 하부 가닥 본선: 우단 풀리 ↔ 텐셔너 풀리 우측 뒤 접선 /
+         텐셔너 풀리 좌측 뒤 접선 ↔ 좌단 풀리. 본선 Y·Z 는 k.loY / k.loZ 그대로.
+         창으로 나와 스프링에 물리는 짧은 구간·상단홈↔하단홈 높이차는 행거판 고정 튜브. */
       const bx = h.left.position.x;
-      setRopeSpan(k.seg.loL, k.pulLX, bx + k.bL, k.loY, k.loZ);
-      setRopeSpan(k.seg.loR, bx + k.bR, k.pulRX, k.loY, k.loZ);
+      setRopeSpan(k.seg.loL, k.pulLX, bx + k.bL, k.loY, k.loZ); // 화면 오른쪽 본선 → 풀리 뒤 상단 홈
+      setRopeSpan(k.seg.loR, bx + k.bR, k.pulRX, k.loY, k.loZ); // 풀리 뒤 하단 홈 → 화면 왼쪽 본선
 
       // 풀리 회전 = 로프가 지나간 거리 / 홈 반지름 (상부 가닥이 +X 로 가면 시계방향)
       const spin = -(h.right.position.x - h.right.userData.cx) / k.ropeR;
@@ -107,6 +108,24 @@
         ctx.fillText(text, 128, 36);
         ind.texture.needsUpdate = true;
       });
+    }
+
+    /* ── 도어 안전 스티커 텍스처 (실사 PNG) ──
+       hand.png = 손대지 마시오 / lean.png = 기대면 추락 위험 */
+    let _hatchStickerMats = null;
+    function getStickerMats() {
+      if (_hatchStickerMats) return _hatchStickerMats;
+      const loader = new THREE.TextureLoader();
+      function makeMat(path) {
+        const tex = loader.load(path);
+        tex.encoding = THREE.sRGBEncoding;
+        return new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false });
+      }
+      _hatchStickerMats = {
+        L: makeMat('assets/bg/hand.png'),
+        R: makeMat('assets/bg/lean.png')
+      };
+      return _hatchStickerMats;
     }
 
     let sillSupportGrp = null;
@@ -158,7 +177,7 @@
         const supX = flangeX + 0.0045;
         createBox(0.0035, 0.095, 0.044, ssMat, supX, -0.055, flangeZ, brkGrp);
 
-        // 2-2. 상단 수평 실 안착 플랜지 (실/실앵글을 얹는 상단 받침면: 44mm x 4.0mm x 46mm)
+        // 2-2. 상단 수평 실 안착 플랜지 (승장 실을 얹는 상단 받침면: 44mm x 4.0mm x 46mm)
         createBox(0.044, 0.004, 0.046, ssMat, flangeX - 0.018, -0.007, flangeZ, brkGrp);
         // 상단 체결 볼트 홀 표현
         createBox(0.010, 0.001, 0.010, darkSsMat, flangeX - 0.018, -0.005, flangeZ, brkGrp);
@@ -179,47 +198,106 @@
         parent.add(brkGrp);
       }
 
-      // ── 승장 실(Hall Sill) 어셈블리 생성 함수 (도면 170, 171페이지 15.4 승장 실 설치 반영) ──
-      const sillMat   = new THREE.MeshStandardMaterial({ color: 0xd8e0e8, metalness: 0.65, roughness: 0.32 }); // 알루미늄/스텐 압출 실
-      const grooveMat = new THREE.MeshStandardMaterial({ color: 0x2e353d, metalness: 0.45, roughness: 0.70 }); // 도어 가이드 슈 홈 내부
-      const ribMat    = new THREE.MeshStandardMaterial({ color: 0xc4cdd8, metalness: 0.70, roughness: 0.28 }); // 상면 미끄럼방지 리브
-      const sillLen   = S.DOOR_W + 0.22;  // 전체 실 길이 1.72m (개구부 1.50m + 좌우 여유 110mm)
-      const sillH     = 0.026;            // 실 높이 26mm
-      const sillD     = 0.092;            // 실 전후 깊이 92mm
-      const sillCZ    = FRONT_WALL_INNER_Z - sillD / 2; // 실 서포트 받침면 중심 Z
+      // ── 승장 이중실 + 도어 Z 계약 ──
+      /* 1번 홈: 기존 승장 실 (문짝 아래). 2번 홈: 승강로 쪽 보강실.
+         일반 슈는 1번, 문짝당 보강슈 1개는 2번을 탄다 (450J 이탈 방지).
+         홀 쪽 가장자리는 그대로 두고 승강로(−Z)로만 살짝 넓힌다. */
+      const HATCH_DT      = 0.032;
+      const DOOR_MEET_GAP = 0.005;
+      const sillH         = 0.022;
+      const sillLen       = S.DOOR_W + 0.22;
+      const SILL_GROOVE_W = 0.014;
+      const SILL_GROOVE_D = 0.016;
+      const DOOR_HALL_Z   = FRONT_WALL_INNER_Z - 0.022;
+      const hatchPanelZ   = (trackCtrZ) => DOOR_HALL_Z - HATCH_DT / 2 - trackCtrZ;
+      const SILL_Z        = DOOR_HALL_Z - HATCH_DT / 2;
+      const SILL_HALL_EDGE  = 0.0275;  // 홀 쪽 — 기존 55mm 실과 동일
+      const SILL_GROOVE1_Z  = 0;       // 1번 홈 (문짝 아래)
+      const SILL_GROOVE2_Z  = -0.026;  // 2번 홈 (승강로 쪽 보강)
+      const SILL_SHAFT_EDGE = -0.048;  // 승강로로 살짝 확장
+      const ribMat = new THREE.MeshStandardMaterial({ color: 0xc4cdd8, metalness: 0.70, roughness: 0.28 });
+      const sillAlum = new THREE.MeshStandardMaterial({ color: 0xc8d0d8, metalness: 0.78, roughness: 0.26 });
+      const grooveMat = new THREE.MeshStandardMaterial({ color: 0x2a3038, metalness: 0.40, roughness: 0.70 });
 
       function createHallSill(fy, parent) {
-        const sillGrp = new THREE.Group();
+        const g = new THREE.Group();
+        const gw = SILL_GROOVE_W;
+        const gd = SILL_GROOVE_D;
+        const hallEdge = SILL_HALL_EDGE;
+        const shaftEdge = SILL_SHAFT_EDGE;
+        const bodyD = hallEdge - shaftEdge;
+        const bodyZ = (hallEdge + shaftEdge) / 2;
 
-        // 1. 승장 실 압출 알루미늄 베이스 몸체 (상면 Y = fy, 바닥 Y = fy - sillH)
-        createBox(sillLen, sillH, sillD, sillMat, 0, -sillH / 2, 0, sillGrp);
+        const bodyH = sillH - gd;
+        createBox(sillLen, bodyH, bodyD, sillAlum, 0, -gd - bodyH / 2, bodyZ, g);
 
-        // 2. 상면 도어 가이드 슈 주행 홈 (2열 슬롯 홈)
-        [-0.022, 0.018].forEach(gz => {
-          // 홈 내부 음영 (폭 8.5mm, 깊이 12mm)
-          createBox(sillLen, 0.012, 0.0085, grooveMat, 0, -0.006, gz, sillGrp);
+        function addGroove(gz) {
+          createBox(sillLen, 0.0025, gw, grooveMat, 0, -gd + 0.00125, gz, g);
+        }
+        function addFlange(z0, z1) {
+          const d = z1 - z0;
+          if (d < 0.003) return;
+          createBox(sillLen, gd, d, sillAlum, 0, -gd / 2, (z0 + z1) / 2, g);
+        }
+
+        const g1h = SILL_GROOVE1_Z + gw / 2, g1s = SILL_GROOVE1_Z - gw / 2;
+        const g2h = SILL_GROOVE2_Z + gw / 2, g2s = SILL_GROOVE2_Z - gw / 2;
+        addFlange(g1h, hallEdge);
+        addFlange(g2h, g1s);
+        addFlange(shaftEdge, g2s);
+        addGroove(SILL_GROOVE1_Z);
+        addGroove(SILL_GROOVE2_Z);
+
+        const ribZ0 = g1h + 0.004;
+        for (let i = 0; i < 4; i++) {
+          createBox(sillLen, 0.0010, 0.0016, ribMat, 0, 0.0005, ribZ0 + i * 0.0045, g);
+        }
+
+        g.position.set(0, fy, SILL_Z);
+        parent.add(g);
+
+        const lobbyInnerZ = FRONT_WALL_INNER_Z + S.WALL_T;
+        const sillHallWorld = SILL_Z + SILL_HALL_EDGE;
+        const fillD = lobbyInnerZ - sillHallWorld;
+        if (fillD > 0.02) {
+          createBox(sillLen, 0.12, fillD, M.conc(0xd2cbc0), 0, fy - 0.06, sillHallWorld + fillD / 2, parent);
+        }
+      }
+
+      /* ── 승장 토가드(실 커버) ──
+         실 서포트 5곳 앞에 결합. 수직 270mm, 하단은 벽(+Z) 쪽으로 굽힘.
+         검사기준 에이프런과 같은 디테일: 수평면 대비 60° 이상 아랫방향, 굽힘 길이 ≥20mm. */
+      const TOE_H = 0.270;
+      const TOE_T = 0.0024;
+      const TOE_BEND = 0.035;
+      const toeMat = M.ss(0xb6bec6);
+
+      function createToeGuard(fy, parent) {
+        const g = new THREE.Group();
+        const plateZ = 0;
+        const topY = 0;
+        createBox(sillLen, TOE_H, TOE_T, toeMat, 0, topY - TOE_H / 2, plateZ, g);
+        [-1, 1].forEach(s => {
+          createBox(0.012, TOE_H, 0.016, toeMat, s * (sillLen / 2 - 0.006), topY - TOE_H / 2, plateZ + 0.008, g);
         });
-
-        // 3. 상면 미끄럼 방지 세로 리브 라인 (헤어라인 널링)
-        [-0.038, -0.002, 0.038].forEach(rz => {
-          createBox(sillLen, 0.0012, 0.002, ribMat, 0, 0.0006, rz, sillGrp);
-        });
-
-        // 4. 승강장 실 전면 코(Nose) 모서리 모따기 및 하단 보강 립
-        createBox(sillLen, 0.003, 0.003, ribMat, 0, -0.0015, -sillD / 2 + 0.0015, sillGrp);
-        createBox(sillLen, 0.008, 0.004, sillMat, 0, -sillH - 0.004, -sillD / 2 + 0.002, sillGrp);
-
-        // 5. 실 서포트 5개 위치 체결 M8 볼트/너트 세트
+        const tilt = Math.PI / 6;
+        const bend = createBox(sillLen, TOE_BEND, TOE_T, toeMat, 0, 0, 0, g);
+        bend.rotation.x = -tilt;
+        const botY = topY - TOE_H;
+        bend.position.set(
+          0,
+          botY - (TOE_BEND / 2) * Math.cos(tilt),
+          plateZ + (TOE_BEND / 2) * Math.sin(tilt)
+        );
         bracketPositions.forEach(bx => {
-          // 상면 카운터싱크 체결 볼트 헤드
-          const bHead = createCylinder(0.0055, 0.0055, 0.002, boltMat, bx, 0.0005, 0.018, sillGrp);
-          // 하단 실 서포트 플랜지 결합 너트
-          createBox(0.013, 0.006, 0.013, boltMat, bx, -sillH - 0.007, 0.018, sillGrp);
+          [-0.055, -0.095].forEach(dy => {
+            const b = createCylinder(0.0042, 0.0042, 0.008, boltMat, bx, dy, plateZ - 0.0035, g);
+            b.rotation.x = Math.PI / 2;
+            createBox(0.011, 0.011, 0.002, boltMat, bx, dy, plateZ - 0.007, g);
+          });
         });
-
-        // 위치 설정 및 부모 그룹에 추가
-        sillGrp.position.set(0, fy, sillCZ);
-        parent.add(sillGrp);
+        g.position.set(0, fy - 0.004, SILL_Z + SILL_SHAFT_EDGE - TOE_T / 2);
+        parent.add(g);
       }
 
       // ── 삼방틀(Jamb / 잠) 및 트랜섬 어셈블리 생성 함수 (도면 171, 172, 173페이지 15.5 잠 설치 반영) ──
@@ -337,15 +415,16 @@
       const CASE_D = 0.035;       // 174p C형 케이스 깊이 (35mm)
       const TRACK_OFF = 0.069;    // 174p 피아노선 → 트랙센터 수직거리 (69mm)
 
-      /* ── Z 레이어 원본: 연동 로프는 "행거판 뒤"에서 달린다 ──
+      /* ── Z 레이어 원본: 연동 로프 본선은 "행거판 뒤"에서 달린다 ──
          양단 풀리를 작게 잡으면 상·하 가닥이 행거판 높이 안쪽(inboard)으로 들어온다.
-         그래서 행거판 솔리드 금속면 앞에서는 상·하 어느 가닥도 보이면 안 된다.
-         로프가 눈에 드러나는 곳은 딱 두 군데다.
+         그래서 행거판 솔리드 금속면 앞에서는 상·하 본선이 보이면 안 된다.
+         로프가 눈에 드러나는 곳은 세 군데다.
            (a) 두 행거판 사이·바깥의 열린 헤더 구간 (C레일 웹을 배경으로 노출)
-           (b) 화면 우측 행거판의 사각 타공창 안 (안쪽에서 바깥으로 나오는 텐셔너)
-         상·하 가닥이 같은 평면을 쓰므로 Z 분리가 아니라 "판이 앞을 막는다"가 규약이다. */
+           (b) 화면 우측 행거판 가운데 풀리창 — 안쪽 본선이 2열 홈 롤러를 타고 바깥으로 나옴
+           (c) 같은 판의 좌·우 고정 구멍 — 바깥으로 나온 끝이 스프링 고정대에 물림
+         상·하 본선은 같은 평면을 쓴다. 바깥으로 나오는 짧은 구간만 판 앞에 있다. */
       const CASE_LIP_Z = -(CASE_D / 2) + 0.002;  // C형 케이스 전면 립
-      const HP_PLATE_Z = CASE_LIP_Z - 0.005;     // 행거 플레이트 전면 중심 Z
+      const HP_PLATE_Z = CASE_LIP_Z - 0.005;     // 행거 플레이트 전면 중심 Z (승강로에서 보이는 면)
       /* 로프 주행면은 행거판 뒤 12mm. 8mm 로 잡으면 활짝 열렸을 때 행거판 바깥변이
          풀리를 덮는데도 풀리 앞 플랜지(반두께 11mm)가 판 앞면을 1.25mm 뚫고 나온다.
          "판 반두께 1.75mm + 풀리 반두께 11mm" 보다 깊게 물려야 완전히 가려진다. */
@@ -368,8 +447,26 @@
       const RA_OFF  = 0.020;   // 월드 +X 행거판 로컬 x — 상부 가닥 클램프 고정단 중심
       const RA_HALF = 0.052;   // 클램프 고정단 어셈블리 반길이 (로프 가닥이 끊기는 구간)
       const RB_OFF  = -0.020;  // 월드 -X 행거판 로컬 x — 타공창 롤러 텐셔너 중심
-      const RB_L    = -0.095;  // 텐셔너 좌단(로컬 -X) 로프 결합점 — 전산볼트 끝단, 타공창 안
-      const RB_R    = +0.082;  // 텐셔너 우단(로컬 +X) 로프 결합점 — 스프링 고정단, 타공창 안
+      /* 하부 가닥 본선이 끊기는 두 점 (월드 -X 행거판 로컬 x).
+         본선은 풀리 뒤(안쪽) 접선에서 끊긴다. 창으로 나와 스프링에 물리는 짧은 구간은
+         행거판에 붙인 고정 튜브다. 예전 ±0.082/0.095 는 본선을 고정대까지 끌어
+         롤러를 안 쓰고 판 뒤를 가로지르는 것처럼 보였다. */
+      const RB_L    =  0.000;  // 풀리 뒤(안쪽) 접선 — 상단 홈으로 진입
+      const RB_R    = +0.002;  // 풀리 뒤 접선에서 2mm — 하단 홈으로 진입 (마디 겹침 방지)
+
+      /* ── 텐셔너(2열 홈 수평 풀리) 제원 — 행거판 타공창 위치의 단일 원본 ──
+         행거판 메쉬 중심이 월드 caseCY-0.040 이므로 로컬 Y = 월드Y - caseCY + 0.040.
+         하부 가닥/상단 홈의 로컬 Y 가 TP_LY = 0.040 - ROPE_R = 18mm 다. */
+      /* ★로프 중심이 앉는 피치 반지름(TP_GR)과 홈 바닥(TP_HR)·플랜지(TP_FR)를 분리한다.
+         셋을 한 값으로 뭉뚱그리면 플랜지가 로프보다 커져서 감김이 원판 속에 파묻혀
+         "끊긴 엘보" 처럼 보인다. TP_HR = 피치 - 로프반지름, TP_FR = 로프 바깥면 + 1mm. */
+      const TP_GR    = 0.008;            // 로프 중심 피치 반지름
+      const TP_HR    = 0.0048;           // 홈 바닥(허브) 반지름
+      const TP_FR    = 0.0122;           // 플랜지 반지름
+      const TP_DY    = 0.012;            // 상단 홈 ↔ 하단 홈 높이차
+      const TP_LY    = 0.040 - ROPE_R;   // 행거판 로컬 좌표계에서의 상단 홈 높이
+      const TP_ROD_X = RB_OFF - 0.039;   // 화면 오른쪽 고정 구멍 중심 (로컬 −X)
+      const TP_SPR_X = RB_OFF + 0.039;   // 화면 왼쪽 고정 구멍 중심 (로컬 +X)
       const doorRopeGeo = makeRopeGeometry(ROPE_RD, GOV_ROPE_PITCH, 12, 12); // 단위길이 1m 공유
 
       /* 폐문 스프링용 헬릭스 튜브 — 원점에서 +X 로 단위길이 1m.
@@ -794,6 +891,7 @@
           createSillSupport(bx, fy, sillSupportGrp);
         });
         createHallSill(fy, sillSupportGrp);
+        createToeGuard(fy, sillSupportGrp);
         createJambAssembly(fy, sillSupportGrp);
         headerByFloor.push(createHangerCaseAssembly(fy, sillSupportGrp));
       }
@@ -809,6 +907,24 @@
       const hpBoltMat    = new THREE.MeshStandardMaterial({ color: 0xc8d2dc, metalness: 0.80, roughness: 0.25 }); // 아연도금 볼트/너트
       const hpSpringMat  = new THREE.MeshStandardMaterial({ color: 0xd0d5da, metalness: 0.75, roughness: 0.25 }); // 인장 스프링 스틸
 
+      /* 텐셔너 감김 — 본선과 같은 makeGovRopeMat (은색 연선 텍스처).
+         좁은 홈에서 6연선 로브를 밀어 넣으면 회색 덩어리로 보이므로 단면은 원통이다. */
+      function makeRopeTube(grp, pts) {
+        const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
+        const tg = new THREE.TubeGeometry(curve, 48, ROPE_RD * 0.9, 12, false);
+        const mat = makeGovRopeMat();
+        const len = curve.getLength();
+        mat.userData.ropeLen = len;
+        mat.userData.ropeUvAlongU = true;
+        const n = Math.max(0.4, len / GOV_ROPE_PITCH);
+        if (mat.map) mat.map.repeat.set(n, 1);
+        if (mat.normalMap) mat.normalMap.repeat.set(n, 1);
+        const tube = new THREE.Mesh(tg, mat);
+        tube.castShadow = true;
+        grp.add(tube);
+        return tube;
+      }
+
       /* ── 실물 7계열 행거 플레이트 어셈블리 (side: +1 = 화면 좌측 패널/right 그룹/걸쇠측, -1 = 화면 우측 패널/left 그룹/수놈핀측) ── */
       function buildHangerAssembly(grp, side, cx, g) {
         const plateZ = HP_PLATE_Z;
@@ -820,7 +936,9 @@
           // 화면 좌측 패널 (right 그룹): 솔리드 플레이트 (후면 로프 차폐)
           createBox(0.380, 0.160, 0.0035, hpPlateMat, 0, g.caseCY - 0.040, plateZ, grp);
         } else {
-          // 화면 우측 패널 (left 그룹): 중앙 텐셔너/수평풀리 노출용 실제 관통 사각 타공창 윈도우 (실사 0130551.png)
+          /* 화면 우측 패널 (left 그룹): 타공창 3개.
+             가운데 = 2열 홈 롤러, 좌·우 = 연동로프 스프링 고정대 (설치도면·실사 202356).
+             본선은 판 뒤, 롤러를 타고 판 앞(승강로 쪽)으로 나와 고정된다. */
           const pShape = new THREE.Shape();
           pShape.moveTo(-0.190, -0.080);
           pShape.lineTo(0.190, -0.080);
@@ -828,21 +946,30 @@
           pShape.lineTo(-0.190, 0.080);
           pShape.closePath();
 
-          /* 사각 타공 윈도우 홀 (실제 관통 구멍: 폭 184mm x 높이 60mm)
-             창 중심은 텐셔너가 아니라 "상·하 가닥 중간"(= g.caseCY)에 맞춘다.
-             그래야 판 뒤로 숨어 온 상부 가닥(caseCY+ROPE_R)과 하부 가닥/텐셔너
-             (caseCY-ROPE_R)가 이 구멍 하나로 같이 들여다보인다.
-             창 윗변은 판 윗변(로컬 +0.080)에서 10mm 남기고 끝난다 — 실사와 동일. */
-          const hole = new THREE.Path();
-          const hY = 0.040; // 플레이트 중심(caseCY-0.040) 기준 로컬 Y → 월드 g.caseCY
-          const hX0 = RB_OFF - 0.094, hX1 = RB_OFF + 0.090;
-          const hY0 = hY - 0.030,     hY1 = hY + 0.030;
-          hole.moveTo(hX0, hY0);
-          hole.lineTo(hX1, hY0);
-          hole.lineTo(hX1, hY1);
-          hole.lineTo(hX0, hY1);
-          hole.closePath();
-          pShape.holes.push(hole);
+          /* 창 사각형(행거판 로컬 좌표)을 userData 에 남긴다 — tools/verify_relay_rope.mjs 가
+             하드코딩 대신 이 값을 읽어서 "상부 가닥이 어느 창에도 안 걸리는지" 를 검사한다. */
+          grp.userData.windows = [];
+          grp.userData.tens = {
+            rbOff: RB_OFF, gr: TP_GR, fr: TP_FR, dy: TP_DY, ly: TP_LY,
+            rodX: TP_ROD_X, sprX: TP_SPR_X
+          };
+          const addWin = (x0, x1, y0, y1) => {
+            const hole = new THREE.Path();
+            hole.moveTo(x0, y0);
+            hole.lineTo(x1, y0);
+            hole.lineTo(x1, y1);
+            hole.lineTo(x0, y1);
+            hole.closePath();
+            pShape.holes.push(hole);
+            grp.userData.windows.push({ x0, x1, y0, y1 });
+          };
+          const wUpY = TP_LY;          // 상단 홈 로컬 Y
+          const wLoY = TP_LY - TP_DY;  // 하단 홈 로컬 Y
+          const wMidY = (wLoY + wUpY) / 2;
+          /* 설치도면: 가로로 구멍 3개. 가운데가 조금 크고 좌·우 고정 구멍이 바로 옆. */
+          addWin(RB_OFF - 0.021, RB_OFF + 0.021, wLoY - 0.014, wUpY + 0.020);
+          addWin(TP_ROD_X - 0.012, TP_ROD_X + 0.012, wMidY - 0.018, wMidY + 0.018);
+          addWin(TP_SPR_X - 0.012, TP_SPR_X + 0.012, wMidY - 0.018, wMidY + 0.018);
 
           const pGeom = new THREE.ExtrudeGeometry(pShape, { depth: 0.0035, bevelEnabled: false });
           const pMesh = new THREE.Mesh(pGeom, hpPlateMat);
@@ -850,11 +977,12 @@
           grp.add(pMesh);
         }
 
-        // 2. 하단 도어 패널 체결 플랜지 & M8 볼트 2세트
-        createBox(0.380, 0.0035, 0.032, hpPlateMat, 0, g.caseCY - 0.120, plateZ - 0.016, grp);
+        // 2. 하단 도어 패널 체결 플랜지 & M8 볼트 2세트 (홀/+Z 쪽으로 뻗어 도어 상단에 앉는다)
+        const flapZ = hatchPanelZ(g.trackCtrZ);
+        createBox(0.380, 0.0035, 0.032, hpPlateMat, 0, g.caseCY - 0.120, flapZ, grp);
         [-0.120, 0.120].forEach(bx => {
-          createCylinder(0.006, 0.006, 0.004, hpBoltMat, bx, g.caseCY - 0.116, plateZ - 0.016, grp);
-          createBox(0.013, 0.006, 0.013, hpBoltMat, bx, g.caseCY - 0.124, plateZ - 0.016, grp);
+          createCylinder(0.006, 0.006, 0.004, hpBoltMat, bx, g.caseCY - 0.116, flapZ, grp);
+          createBox(0.013, 0.006, 0.013, hpBoltMat, bx, g.caseCY - 0.124, flapZ, grp);
         });
 
         if (isHookSide) {
@@ -1044,81 +1172,96 @@
           const shLug = createCylinder(0.004, 0.004, 0.014, boltMat, -0.060, shY + 0.021, 0, grp);
           shLug.rotation.z = Math.PI / 2;
 
-          /* (1) 실사 일체형 연동 로프 텐셔너 어셈블리 (실사 111111.png, 000500.png, 000712.png)
-             화면 우측(로컬 -X): 긴 전산볼트 고정단 (우측 붉은 로프가 상단 풀리 홈으로 진입)
-             중앙: 가로로 누운 2열 홈 흑색 수평 풀리 (XZ 수평면 회전, 상단홈 ↔ 하단홈 180° 감김)
-             화면 좌측(로컬 +X): 수평 인장 코일 스프링 가동단 (하단 풀리 홈에서 나온 푸른 로프가 좌측으로 이동) */
-          const tensY = g.caseCY - ROPE_R;   // 연동 로프 하부 가닥 높이
-          const rZ = ROPE_LO_Z;              // 하부 로프 및 텐셔너 기준 Z평면 (행거판 후면 매립 / 타공창으로만 노출)
-          const pulZ = rZ;
+          /* (1) 연동 로프 텐셔너 — 2열 홈 수평 풀리 + 판 앞 좌·우 스프링 고정대.
+             본선은 판 뒤(안쪽). 롤러를 타고 승강로 쪽(판 앞)으로 나와 고정된다.
+             상단 홈 → 화면 오른쪽 구멍, 하단 홈 → 화면 왼쪽 구멍. */
+          const upGY = tensY;               // 상단 홈 = 하부 본선 높이
+          const loGY = tensY - TP_DY;       // 하단 홈
+          /* 풀리를 창 두께에 앉힌다. 뒤 접선 = 본선면, 앞 접선 = 판 앞(바깥). */
+          const pulZ = plateZ + 0.004;
+          const zFace = plateZ - 0.007;     // 고정대·바깥 로프가 앉는 면
 
-          // (A) 행거판 매립 윈도우 내부 후면 마운트 브라켓 (C레일 내부 후면 지지)
-          createBox(0.060, 0.060, 0.003, hpSteelMat, RB_OFF, tensY, pulZ + 0.008, grp);
+          /* (A) 풀리 후면 마운트 — 창 정면을 가리지 않게 풀리 뒤에만 둔다. */
+          createBox(0.028, 0.048, 0.0025, hpSteelMat, RB_OFF, tensY - 0.006, pulZ + 0.014, grp);
 
-          // (B) [화면 우측 / 로컬 -X] 장력 조절 긴 전산볼트 & 더블 육각 너트 (실사 111111.png 우측 붉은선)
-          const trX0 = RB_OFF - 0.020;  // 풀리 상단홈 연결 슬리브
-          const trX1 = RB_OFF + RB_L;   // 전산볼트 끝단 = 좌풀리에서 온 하부 가닥(loL) 결합점
-          // 전산볼트 본체 (M6 Threaded Rod)
-          createCylinder(0.0025, 0.0025, trX0 - trX1, hpBoltMat, (trX0 + trX1) / 2, tensY, rZ, grp).rotation.z = Math.PI / 2;
-          // 로프 끝을 무는 압착 슬리브 (loL 이 여기서 끊긴다)
-          createCylinder(0.0045, 0.0045, 0.012, hpBoltMat, trX1 + 0.006, tensY, rZ, grp).rotation.z = Math.PI / 2;
-          // 풀리 상단 홈 연결 압착 슬리브 소켓
-          createCylinder(0.0040, 0.0040, 0.010, hpBoltMat, trX0 - 0.005, tensY, rZ, grp).rotation.z = Math.PI / 2;
-          // 슬리브에서 풀리 상단 홈으로 진입하는 로프 세그먼트 (붉은선)
-          createCylinder(0.0016, 0.0016, 0.018, hpSpringMat, RB_OFF - 0.010, tensY + 0.004, rZ, grp).rotation.z = Math.PI / 2;
-          // 우측 타공창 지지 탭
-          createBox(0.0035, 0.032, 0.016, hpPlateMat, RB_OFF - 0.062, tensY, rZ, grp);
-          // 지지 탭 양쪽 더블 육각 조절 너트 & 와셔 2세트 (실사 111111.png 우측 너트)
-          [RB_OFF - 0.056, RB_OFF - 0.068].forEach(nx => {
-            createCylinder(0.0055, 0.0055, 0.0012, hpBoltMat, nx, tensY, rZ, grp).rotation.z = Math.PI / 2;
-            const hx = new THREE.Mesh(new THREE.CylinderGeometry(0.0045, 0.0045, 0.004, 6), hpBoltMat);
-            hx.position.set(nx, tensY, rZ);
-            hx.rotation.z = Math.PI / 2;
-            grp.add(hx);
-          });
+          // (B) [중앙] 가로로 누운 2열 홈 흑색 수평 풀리 (수직축 회전)
+          createCylinder(TP_FR, TP_FR, 0.0025, hpRollerMat, RB_OFF, upGY + 0.0055, pulZ, grp);
+          createCylinder(TP_HR, TP_HR, 0.0230, hpRollerMat, RB_OFF, tensY - 0.006,  pulZ, grp);
+          createCylinder(TP_HR + 0.0020, TP_HR + 0.0020, 0.0020, hpRollerMat,
+            RB_OFF, tensY - 0.006, pulZ, grp);
+          createCylinder(TP_FR, TP_FR, 0.0025, hpRollerMat, RB_OFF, loGY - 0.0055, pulZ, grp);
+          createCylinder(0.0030, 0.0030, 0.040, hpBoltMat, RB_OFF, tensY - 0.006, pulZ, grp);
+          createCylinder(0.0060, 0.0060, 0.0020, hpBoltMat, RB_OFF, tensY + 0.0100, pulZ, grp);
+          const tpNut = new THREE.Mesh(new THREE.CylinderGeometry(0.0048, 0.0048, 0.0040, 6), hpBoltMat);
+          tpNut.position.set(RB_OFF, tensY + 0.0135, pulZ);
+          grp.add(tpNut);
 
-          // (C) [중앙] 가로로 누운 2열 홈 흑색 수평 풀리 (실사 111111.png 중앙)
-          // 2열 홈 풀리 본체 (상단 플랜지/상단홈/중앙리브/하단홈/하단플랜지)
-          createCylinder(0.020, 0.020, 0.0025, hpRollerMat, RB_OFF, tensY + 0.008, pulZ, grp);
-          createCylinder(0.015, 0.015, 0.0050, hpRollerMat, RB_OFF, tensY + 0.004, pulZ, grp); // 상단 로프홈 (우측 전산볼트와 결합)
-          createCylinder(0.020, 0.020, 0.0025, hpRollerMat, RB_OFF, tensY, pulZ, grp);        // 중앙 리브
-          createCylinder(0.015, 0.015, 0.0050, hpRollerMat, RB_OFF, tensY - 0.004, pulZ, grp); // 하단 로프홈 (좌측 스프링과 결합)
-          createCylinder(0.020, 0.020, 0.0025, hpRollerMat, RB_OFF, tensY - 0.008, pulZ, grp);
-          // 중심 피벗 핀 & 상단 M8 육각 볼트·와셔
-          createCylinder(0.0035, 0.0035, 0.026, hpBoltMat, RB_OFF, tensY, pulZ, grp);
-          createCylinder(0.0060, 0.0060, 0.0020, hpBoltMat, RB_OFF, tensY + 0.011, pulZ, grp);
-          const topNut = new THREE.Mesh(new THREE.CylinderGeometry(0.0048, 0.0048, 0.004, 6), hpBoltMat);
-          topNut.position.set(RB_OFF, tensY + 0.014, pulZ);
-          grp.add(topNut);
-          // 풀리 감김 로프 반원 궤적 (180° Wrap)
-          const wrapRope = new THREE.Mesh(new THREE.TorusGeometry(0.015, 0.0016, 8, 20, Math.PI), hpSpringMat);
-          wrapRope.position.set(RB_OFF, tensY, pulZ);
-          wrapRope.rotation.x = Math.PI / 2;
-          grp.add(wrapRope);
-
-          // (D) [화면 좌측 / 로컬 +X] 수평 인장 코일 스프링부 (실사 111111.png 좌측 푸른선)
-          const spX0 = RB_OFF + RB_R;  // 스프링 바깥 고정단 = 우풀리에서 온 하부 가닥(loR) 결합점
-          const spX1 = RB_OFF + 0.038; // 스프링 안쪽 슬리브 (풀리 하단홈 연결)
-          // 스프링 지지 앵글 탭 & M6 체결 볼트 — 로프 끝을 무는 압착 슬리브가 여기 붙는다
-          createBox(0.0035, 0.028, 0.016, hpPlateMat, spX0 + 0.004, tensY, rZ, grp);
-          createCylinder(0.0045, 0.0045, 0.012, hpBoltMat, spX0 - 0.006, tensY, rZ, grp).rotation.z = Math.PI / 2;
-          createCylinder(0.0035, 0.0035, 0.008, hpBoltMat, spX0 + 0.006, tensY, rZ, grp).rotation.z = Math.PI / 2;
-          // 중심 가이드 핀
-          createCylinder(0.0020, 0.0020, spX0 - spX1, hpBoltMat, (spX0 + spX1) / 2, tensY, rZ, grp).rotation.z = Math.PI / 2;
-          // 실버 인장 코일 스프링 (12회 감김)
-          const spCoils = 12;
-          for (let i = 0; i < spCoils; i++) {
-            const cx = spX1 + 0.003 + (i + 0.5) * (spX0 - spX1 - 0.006) / spCoils;
-            const torus = new THREE.Mesh(new THREE.TorusGeometry(0.0052, 0.0011, 8, 18), hpSpringMat);
-            torus.position.set(cx, tensY, rZ);
-            torus.rotation.y = Math.PI / 2;
-            grp.add(torus);
+          /* 판 앞 L브라켓 + 전산볼트 + 압축 스프링 + 더블 너트.
+             outerSign −1 = 화면 오른쪽(스프링이 더 −X), +1 = 화면 왼쪽. */
+          function addFaceTensioner(holeX, y, outerSign) {
+            const tabX = holeX + outerSign * 0.010;
+            createBox(0.022, 0.028, 0.003, hpSteelMat, holeX, y, plateZ - 0.0035, grp);
+            createBox(0.0035, 0.028, 0.014, hpPlateMat, tabX, y, zFace - 0.002, grp);
+            [-0.008, 0.008].forEach(dy => {
+              createCylinder(0.003, 0.003, 0.008, hpBoltMat, holeX, y + dy, plateZ - 0.006, grp)
+                .rotation.x = Math.PI / 2;
+            });
+            const rodInX  = holeX - outerSign * 0.016;
+            const rodOutX = holeX + outerSign * 0.036;
+            createCylinder(0.0025, 0.0025, Math.abs(rodOutX - rodInX), hpBoltMat,
+              (rodInX + rodOutX) / 2, y, zFace, grp).rotation.z = Math.PI / 2;
+            const sleeveX = holeX - outerSign * 0.011;
+            createCylinder(0.0045, 0.0045, 0.010, hpBoltMat, sleeveX, y, zFace, grp)
+              .rotation.z = Math.PI / 2;
+            const sp0 = tabX + outerSign * 0.005;
+            const sp1 = tabX + outerSign * 0.026;
+            for (let i = 0; i < 8; i++) {
+              const torus = new THREE.Mesh(new THREE.TorusGeometry(0.0050, 0.0010, 8, 16), hpSpringMat);
+              torus.position.set(sp0 + (i + 0.5) * (sp1 - sp0) / 8, y, zFace);
+              torus.rotation.y = Math.PI / 2;
+              grp.add(torus);
+            }
+            const nutX = sp1 + outerSign * 0.005;
+            createCylinder(0.0065, 0.0065, 0.0014, hpBoltMat, nutX - outerSign * 0.003, y, zFace, grp)
+              .rotation.z = Math.PI / 2;
+            [0, 0.006].forEach(dx => {
+              const hx = new THREE.Mesh(new THREE.CylinderGeometry(0.0055, 0.0055, 0.0045, 6), hpBoltMat);
+              hx.position.set(nutX + outerSign * dx, y, zFace);
+              hx.rotation.z = Math.PI / 2;
+              grp.add(hx);
+            });
+            return sleeveX;
           }
-          // 스프링 내측 스웨이지 압착 슬리브 소켓 + 체결 너트
-          createBox(0.006, 0.010, 0.010, hpBoltMat, spX1 + 0.002, tensY, rZ, grp);
-          createCylinder(0.0040, 0.0040, 0.010, hpBoltMat, spX1 - 0.005, tensY, rZ, grp).rotation.z = Math.PI / 2;
-          // 슬리브에서 풀리 하단 홈으로 진입하는 로프 세그먼트 (푸른선)
-          createCylinder(0.0016, 0.0016, 0.018, hpSpringMat, RB_OFF + 0.010, tensY - 0.004, rZ, grp).rotation.z = Math.PI / 2;
+          const rodSleeveX = addFaceTensioner(TP_ROD_X, upGY, -1);
+          const sprSleeveX = addFaceTensioner(TP_SPR_X, loGY, +1);
+
+          /* 홈 원주만 찍는다. 끝점을 고정대까지 한 스플라인에 넣으면
+             CatmullRom 이 원을 벗어나 롤러 옆을 가로지른다. */
+          function wrapGroove(yA, yB, a0, a1, sleeveX, sleeveY) {
+            const n = 32;
+            const arc = [];
+            for (let i = 0; i <= n; i++) {
+              const t = i / n;
+              const a = a0 + (a1 - a0) * t;
+              const y = yA + (yB - yA) * Math.min(1, t / 0.18);
+              arc.push(new THREE.Vector3(
+                RB_OFF + TP_GR * Math.cos(a), y, pulZ + TP_GR * Math.sin(a)));
+            }
+            makeRopeTube(grp, arc);
+            const end = arc[n];
+            makeRopeTube(grp, [
+              end,
+              new THREE.Vector3(
+                end.x * 0.55 + sleeveX * 0.45,
+                end.y * 0.55 + sleeveY * 0.45,
+                end.z * 0.55 + zFace * 0.45),
+              new THREE.Vector3(sleeveX, sleeveY, zFace)
+            ]);
+          }
+          /* 상단 홈: 뒤 → 좌 → 앞(카메라) → 우. 정면에서 홈이 와이어로 덮인다. */
+          wrapGroove(upGY, upGY, Math.PI / 2, -Math.PI, rodSleeveX, upGY);
+          /* 하단 홈: 뒤 → 우 → 앞 → 좌. 뒤쪽에서 높이만 내린다. */
+          wrapGroove(upGY, loGY, Math.PI / 2, Math.PI * 2, sprSleeveX, loGY);
 
           // (2) 실물 7계열 보조접점 수놈 핀 L자형 장공 브라켓 (우측 행거판 중앙단 +X에 완전히 볼트 결합)
           const bBaseX = 0.190;
@@ -1145,6 +1288,85 @@
         }
       }
 
+      /* ── 승장 도어 패널 어셈블리 (도면 175p, 176p) ──
+         - 상단: 행거 플레이트 하단 L자 플랜지에 탭 플레이트 & 조절 심 라이너(Liner)로 M8 체결
+         - 본체: 프리미엄 실버 헤어라인 스테인리스 도어 패널 (폭 775mm x 높이 dh x 두께 32mm)
+         - 중앙 에지: 닫힘 시 손끼임 방지 5mm 간격 및 흑색 고무 완충 스트립
+         - 후면(승강로 측): 세로 보강 C채널 2줄 (폭 50mm, 높이 dh * 0.94)
+         - 하단: 1번 실 가이드 슈 2개소 + 2번 실 보강슈(문짝당 1개, 승강로 쪽으로 돌출)
+         - 의장면(홀 쪽): 손대지 마시오 / 기대면 추락 위험 안전 스티커 */
+      function buildHatchDoorPanel(grp, side, cx, g) {
+        const dw = S.DOOR_W / 2 + 0.025; // 패널 폭 775mm (유효 개구폭 1500mm + 중앙 오버랩)
+        const dt = HATCH_DT;
+        const halfGap = DOOR_MEET_GAP / 2;
+        /* 홀 의장면 = +Z (DOOR_HALL_Z). 승강로 후면 = −Z (DOOR_HALL_Z - dt). */
+        const zCtr = hatchPanelZ(g.trackCtrZ);
+        const zHall = zCtr + dt / 2;
+        const zHoist = zCtr - dt / 2;
+        const zShoe = (SILL_Z + SILL_GROOVE1_Z) - g.trackCtrZ;
+        const zReinf = (SILL_Z + SILL_GROOVE2_Z) - g.trackCtrZ;
+
+        // 높이: 도어 하단은 실 상면에서 5mm(0.005) 위, 도어 상단은 행거 플랜지 바로 아래
+        const topY = g.caseCY - 0.120 - 0.0035;
+        const botY = 0.005;
+        const dh = topY - botY;
+        const yCtr = (topY + botY) / 2;
+
+        const isHookSide = side > 0; // side > 0: 화면 왼쪽 패널 (right 그룹, 월드 +X) = 로비에서 왼쪽
+        const pX = side < 0
+          ? (cx - halfGap - dw / 2)
+          : (-cx + halfGap + dw / 2);
+
+        const panMat = M.ss(0xdfe4ec);
+        const ribMat = M.ss(0x9aa2aa);
+        const linerMat = hpPlateMat;
+        const rubberMat = M.paint(0x181a1d);
+
+        // 1. 메인 도어 패널 본체
+        createBox(dw, dh, dt, panMat, pX, yCtr, zCtr, grp);
+
+        // 2. 상단 탭 플레이트 & 조절 심 라이너 2개소 (도면 175p 3번)
+        [-0.120, 0.120].forEach(bx => {
+          createBox(0.048, 0.0030, 0.030, linerMat, bx, g.caseCY - 0.1218, zCtr, grp);
+          createBox(0.040, 0.0080, 0.024, hpBoltMat, bx, g.caseCY - 0.1275, zCtr, grp);
+        });
+
+        // 3. 중앙 맞물림 에지 & 흑색 고무 완충 스트립
+        if (isHookSide) {
+          createBox(0.004, dh - 0.020, 0.008, rubberMat, -cx + halfGap, yCtr, zCtr, grp);
+        }
+
+        // 4. 패널 후면(승강로 측, −Z) 세로 보강 C채널 2줄
+        [-dw * 0.22, dw * 0.22].forEach(rbx => {
+          createBox(0.050, dh * 0.94, 0.014, ribMat, pX + rbx, yCtr, zHoist - 0.007, grp);
+        });
+
+        // 5. 하단 가이드 슈 — 1번 실 홈
+        [-dw * 0.30, dw * 0.30].forEach(gx => {
+          createBox(0.045, 0.022, SILL_GROOVE_W - 0.002, ribMat, pX + gx, botY - 0.012, zShoe, grp);
+        });
+
+        // 6. 가이드 보강슈 (문짝당 1개) — 문에서 승강로로 살짝 빼서 2번 실 홈을 탄다
+        const shoeMat = M.ss(0x6a727c);
+        const neckZ = (zHoist + zReinf) / 2;
+        const neckD = Math.abs(zHoist - zReinf);
+        createBox(0.050, 0.028, 0.0035, shoeMat, pX, botY + 0.012, zHoist - 0.0018, grp);
+        createBox(0.038, 0.008, neckD, shoeMat, pX, botY + 0.002, neckZ, grp);
+        createBox(0.038, 0.022, SILL_GROOVE_W - 0.002, shoeMat, pX, botY - 0.012, zReinf, grp);
+        [-0.012, 0.012].forEach(bx => {
+          const b = createCylinder(0.0028, 0.0028, 0.007, hpBoltMat, pX + bx, botY + 0.012, zHoist - 0.005, grp);
+          b.rotation.x = Math.PI / 2;
+        });
+
+        // 7. 승강장 홀 의장면(+Z) 안전 스티커 — 로비에서 왼쪽=손대지마시오, 오른쪽=기대지마시오
+        const mats = getStickerMats();
+        const stickerMat = isHookSide ? mats.L : mats.R;
+        const sticker = new THREE.Mesh(new THREE.PlaneGeometry(0.130, 0.130), stickerMat);
+        const stickerX = pX + (isHookSide ? -0.16 : 0.16);
+        sticker.position.set(stickerX, 1.45, zHall + 0.001);
+        grp.add(sticker);
+      }
+
       for (let i = 0; i < FLOORS; i++) {
         const fy = FLOOR_Y[i];
         const left = new THREE.Group();
@@ -1159,6 +1381,10 @@
         // 좌측 패널(화면 우측, 월드 -X, left 그룹, side = -1) 및 우측 패널(화면 좌측, 월드 +X, right 그룹, side = +1)
         buildHangerAssembly(left,  -1, cx, g);
         buildHangerAssembly(right, +1, cx, g);
+
+        // 승장 도어 패널 장착 (도면 175p, 176p)
+        buildHatchDoorPanel(left,  -1, cx, g);
+        buildHatchDoorPanel(right, +1, cx, g);
 
         scene.add(left);
         scene.add(right);

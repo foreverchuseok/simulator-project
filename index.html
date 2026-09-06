@@ -779,8 +779,13 @@
         const len = m.userData.ropeLen;
         if (len) {
           const n = Math.max(0.4, len / GOV_ROPE_PITCH);
-          if (m.map) m.map.repeat.set(1, n);
-          if (m.normalMap) m.normalMap.repeat.set(1, n);
+          if (m.userData.ropeUvAlongU) {
+            if (m.map) m.map.repeat.set(n, 1);
+            if (m.normalMap) m.normalMap.repeat.set(n, 1);
+          } else {
+            if (m.map) m.map.repeat.set(1, n);
+            if (m.normalMap) m.normalMap.repeat.set(1, n);
+          }
         }
         m.needsUpdate = true;
       });
