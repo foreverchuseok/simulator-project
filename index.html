@@ -642,6 +642,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
   <script src="js/config.js"></script>
   <script src="js/environment.js"></script>
+  <script src="js/hall-interlock.js"></script>
   <script src="js/elevator.js"></script>
   <script src="js/ui.js"></script>
 
@@ -949,6 +950,7 @@
 
     function renderLoop() {
       requestAnimationFrame(renderLoop);
+      HallInterlock.updateAll(hatchDoors);
       // 시브 자전은 여기서 시간 기반으로 흉내내지 않는다.
       // 카가 실제로 움직인 만큼만 ui.js spinSheaves(deltaY)가 4개 시브를 돌린다
       // (방향·속도가 로프와 물리적으로 일치하고, 카가 멈추면 시브도 즉시 멈춘다).

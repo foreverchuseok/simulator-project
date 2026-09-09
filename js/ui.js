@@ -115,14 +115,20 @@
       // 점검 운전 중에는 도어 오퍼레이터 회로가 차단된다 (착상 위치가 아닐 수 있음)
       if (insMode) { updateStatus('v-door', '점검운전 중 — 도어 조작 불가', '#f0883e'); return; }
       if (gsap.isTweening(carDoorL.position) || moving || estop) return;
+      // GLB extras supply the release angle; wait for that contract before moving.
+      if (!hatchDoors[curFloor]?.interlock?.ready) return;
       currentState = ELEVATOR_STATE.DOOR_OPENING;
       doorOpen = true; updateStatus('v-door', '열리는 중', '#f0883e'); clearTimeout(autoTimer);
       currentState = ELEVATOR_STATE.DOOR_OPEN;
       const h = hatchDoors[curFloor];
-      // 인터록 해정: 클러치가 적층 롤러를 물고 록 레버를 젖힘(-z = 후크 끝 들림) → 접점 분리
-      if (h && h.hook) gsap.to(h.hook.rotation, { z: -0.30, duration: 0.28, ease: 'power1.out' });
-      // 삼각키 레버 시각 연동(소폭) — 비상해제 표현은 최소
-      if (h && h.triKey) gsap.to(h.triKey.rotation, { z: -0.08, duration: 0.28, ease: 'power1.out' });
+      /* 인터록 해정: 클러치가 록 레버를 젖힌다.
+         사각 턱이 걸쇠 네모 포켓에 8mm 물려 있으므로 그만큼 + 도면 179p 여유 4mm 를
+         들어 올려야 실제로 빠진다. 각도는 elevator.js 의 래치 계약에서 온다. */
+      if (h && h.hook) {
+        const liftRad = h.latch.liftRad;
+        gsap.killTweensOf(h.hook.rotation);
+        gsap.to(h.hook.rotation, { z: -liftRad, duration: 0.22, ease: 'power1.out' });
+      }
       snd.doorOpen.currentTime = 0; snd.doorOpen.play();
       gsap.to(carDoorL.position, { x: carDoorL.userData.ox, duration: 1.15, ease: 'power2.out', delay: 0.22 });
       gsap.to(carDoorR.position, {
@@ -155,11 +161,8 @@
         x: carDoorR.userData.cx, duration: 0.95, ease: 'power2.inOut',
         onUpdate: () => spinDoorDrive(h),
         onComplete: () => {
-          doorOpen = false; updateStatus('v-door', '닫힘', '#3fb950'); if (cb) cb();
+          doorOpen = false; updateStatus('v-door', '닫힘', '#3fb950');
           currentState = ELEVATOR_STATE.IDLE;
-          // 인터록 재잠금: 후크 복귀 → 접점 브리지 삽입 (회로 폐성)
-          if (h && h.hook) gsap.to(h.hook.rotation, { z: 0, duration: 0.25, ease: 'power1.in' });
-          if (h && h.triKey) gsap.to(h.triKey.rotation, { z: 0, duration: 0.25, ease: 'power1.in' });
         }
       });
       // 승장 행거판 — 연동로프·풀리·폐문 스프링은 이 트윈에 물려 같이 갱신한다
@@ -167,8 +170,23 @@
         gsap.to(h.left.position, { x: h.left.userData.cx, duration: 0.95, ease: 'power2.inOut' });
         gsap.to(h.right.position, {
           x: h.right.userData.cx, duration: 0.95, ease: 'power2.inOut',
-          onUpdate: () => spinDoorDrive(h), onComplete: () => spinDoorDrive(h)
+          onUpdate: () => spinDoorDrive(h),
+          onComplete: () => {
+            spinDoorDrive(h);
+            // 인터록 재잠금: 도어 닫힘 정위치에서 후크 낙하 체결 및 접점 브리지 도킹
+            if (h.hook) {
+              gsap.killTweensOf(h.hook.rotation);
+              gsap.to(h.hook.rotation, {
+                z: 0, duration: 0.20, ease: 'power1.in',
+                onComplete: () => { if (cb) cb(); }
+              });
+            } else {
+              if (cb) cb();
+            }
+          }
         });
+      } else {
+        if (cb) cb();
       }
     }
 

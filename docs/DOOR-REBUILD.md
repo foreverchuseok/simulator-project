@@ -216,6 +216,50 @@ Claude Code, Google Antigravity, Cursor는 도어 작업을 시작하기 전에 
 
 코드 위치: `js/elevator.js` `createHangerCaseAssembly()`, 갱신은 `spinDoorDrive()`.
 
+## 인터록 래치 계약 — Keeper 사각 턱 ↔ Hook 네모 포켓 (에이전트 필수)
+
+부품설계.pdf **178p(인터록 닫힘) / 179p(인터록 열림)** 와 사용자 지시(2026-09-08)가 원본이다.
+걸쇠(Hook)는 "가운데가 네모로 뚫린 평철 바"이고, Keeper 의 사각 턱이 **그 네모 안으로 떨어져** 물린다.
+네모 없이 턱 옆에 사선 덩어리만 붙이면 아무것도 물지 못한다 (예전 형상이 그랬다).
+
+계약값 하나만 있고, `createHangerCaseAssembly()` 안에서 만들어 `geom.latch` 로 넘긴다.
+**걸쇠는 행거 케이스(고정측), Keeper 는 행거판(문측)** 이라 서로 다른 그룹에서 만들어진다.
+양쪽에 숫자를 따로 적으면 Z 는 맞는데 Y 가 1.6mm 떠서 "닫혔는데 안 물린" 상태가 다시 난다.
+
+| 항목 | 값 | 근거 |
+|---|---|---|
+| 사각 턱 -X 면 월드 X | **+0.100** | 180p 롤러중심 152mm − 178p 52mm |
+| 사각 턱 폭 | 6mm | 178p |
+| 걸림 깊이 (네모 입구 아래) | **8±1mm** | 178p |
+| 개방측(+X) 여유 | **4.5mm** | 178p `4~5mm` — 문이 열리려 하면 여기까지만 가고 막힌다 |
+| 착석측(-X) 여유 | 0.5mm | |
+| 해정 후 턱↔걸쇠 틈 | **4±1mm** | 179p |
+| 해정 리프트 / 회전각 | 12mm / **13.2°** (`liftRad = 0.012/0.052`) | 걸림 8 + 틈 4 |
+| 래치 Z 평면 | `HP_LATCH_Z` 단일값 | Keeper 판(5mm)이 네모(7mm) 안에 든다 |
+
+`h.latch.liftRad` 를 `js/ui.js` `openDoors()` 와 `setEmergencyKey()` 가 읽는다.
+**예전 0.086 rad(4.5mm)은 8mm 물림을 못 뽑는다.** 각도를 코드에 직접 적지 말 것.
+
+★**함정 1 — 고정 걸쇠의 X 여유창은 `0.086 ~ 0.1225` 뿐이다.**
+-X 는 인터록 스위치 박스 투명 커버(≤ +0.084), +X 는 **문과 함께 움직이는** 골드 베이스
+플레이트(≥ +0.1245)와 릴리즈 롤러(≥ +0.128)다. 걸쇠나 리드인 램프를 이 밖으로 뻗으면
+문이 열릴 때 고정 부품을 뚫고 지나간다. 리드인은 별도 램프가 아니라 **바 X 범위 안의 웨지**로 넣는다.
+
+★**함정 2 — `Box3.setFromObject` 로 물림을 재지 말 것.** Keeper 암은 회전하는 Extrude 메시라
+AABB 가 수 mm 부풀고, 회전시켜도 최저점이 턱이 아닌 피벗 쪽 모서리로 바뀐다.
+걸림 깊이는 마커 노드 `hallLatchPocket`(네모 입구) / `hallLatchKeeperLip`(턱 하단)의
+**월드 좌표**로 잰다. 회전 후에는 `scene.updateMatrixWorld(true)` 를 먼저 부른다.
+
+검증:
+
+- `python -m http.server 8777` 후 `node tools/verify_interlock_latch.mjs 8777 <층인덱스>`.
+  걸림 8mm / 해정 틈 4mm / 개방측 4.5mm / Z 동일평면 + **고정 걸쇠 ↔ 문측 부품 관통 0건**이 전부 PASS 여야 한다.
+- 그림 검증: `node tools/shot_interlock.mjs 8777 1` → `.shot-interlock/latch_*.png`.
+  `latch_up` 에서 네모 안에 골드 사각 턱이 박혀 있어야 하고,
+  `latch_up_open` 에서는 턱이 빠지고 네모가 비어야 한다.
+
+코드 위치: `js/elevator.js` `createHangerCaseAssembly()` (2-2 걸쇠), `buildHangerAssembly()` (4 Keeper).
+
 ## 인터록 좌·우 X 규약 (에이전트 필수)
 
 원본(`js/archive/doors.js`)이 정한 월드 X 배치를 그대로 이어간다.

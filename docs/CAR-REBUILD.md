@@ -16,9 +16,22 @@ Claude Code, Google Antigravity, Cursor는 카 작업을 시작하기 전에 이
   - 좌/우 수직 기둥(Car Stiles / 종형 세로 ㄷ자 채널): 상부 거싯 6-볼트, 하부 거싯 12-볼트 체결열, 천장 임시 고정 앵글 브라켓.
   - 하부 세이프티 디바이스(Safety Plank): 하부 채널빔, 완충 타격 플레이트.
   - 추락방지 안전장치: `assets/safety_gear.glb` 로드 및 `carGrp.userData.safetyGear` 인터페이스 복원 (수평 샤프트, 좌우 웨지 블록, U스프링, 조속기 로프 클램프 암).
-  - 상·하부 가이드 슈 4개소: 가이드레일 날(`Z = +0.04m`)에 5mm 틈새로 결합되는 U자 라이너, 주철 하우징, 상단 자동 오일 급유통.
+  - 상·하부 슬라이딩 가이드슈 4개소: `models/gltf/car_guide_shoe.glb`. 관통 U자 라이너, 주철형 하우징, 장공 어댑터, 조정볼트·잠금너트·고무 스토퍼, 상부 급유통. 도면의 5mm는 스토퍼 세팅 간격이며 레일 운전 간극이 아니다.
   - 카 플랫폼 베이스 프레임: 외곽 4변 C채널, 하부 종통 보강 채널 6본, 하부 강판 서브팬, 전면 실 서포트 채널, 하부 무릎 대각 브레이스.
   - 카 상부 안전 난간대: 톱빔 상단 고시인성 황색 베이스 가드, 3면 안전 파이프 난간(탑레일 900mm, 미드레일 480mm & M8 볼트, 토보드 100mm, 7개 수직 지주).
+
+### 가이드슈 GLB 계약 (2026-09-08)
+
+- 생성: `blender/scripts/car_guide_shoe.py`. 레일 단면은 기존 `guide_rail_13k.glb`의 `T_Rail_13K` POSITION에서 읽는다. 레일 변경 후에는 슈도 다시 생성·검증한다.
+- 미터 단위, glTF Y-up, 원점은 레일 뒷면과 장착면의 교점. 날은 로컬 +X로 향한다. `T(x,y,z)=(x,-z,y)`로 Blender에 만든 뒤 기본 glTF 축 변환으로 내보낸다. scale은 1이다.
+- 부모는 `carGrp → carFrameGrp → CarGuideShoe_{L|R}_{Upper|Lower}`이다. X는 `±S.CAR_BG/2`, 카 로컬 Z는 `0.04`. 우측은 Y축 180도, 하부 모델은 X축 180도로 회전하며 `Oiler`를 숨긴다.
+- 상부 Y는 크로스헤드 상면 `chY+chH/2`. 하부 Y는 안전기 하부 캡 밑면 `plankY-0.145`로, `tools/build_safety_glb.mjs`의 캡 중심 `baseY-0.135`와 두께 `0.020`에 대응한다. 안전기 캡 변경 시 이 마운트도 함께 확인한다.
+- 노드: `GuideShoeRoot`, `Adapter`, `Housing`, `Liner`, `Retainers`, `Fasteners`, `RubberStop`, `Adjuster`, `Oiler`. 별도 가동 애니메이션 없이 카 부모를 따라 이동한다.
+- 안내 길이 120mm는 참고 도면 기반이다. 레일 측면·끝면의 0.5mm는 시각화용 간극이며 실제 설치·검사 허용값을 주장하지 않는다. 상세 두께·체결부는 기존 구조에 맞춘 교육용 재구성으로, 제작도면이나 인증 제품 복제품은 아니다.
+- `assets/safety_gear.glb`는 수정하지 않았다. 로더가 기존 하부 가이드슈 박스 4개의 정확한 크기·중심을 확인해 숨긴다. 안전기 샤프트·웨지·스프링 노드와 피벗은 유지한다.
+- 검증: `node tools/verify_car_guide_shoe.mjs`. 4개 배치, 레일 날 통과, 안전기 참조, 운행 중 상대 위치, 데스크톱·모바일 캡처를 확인한다. 캡처는 `.shot-guide-shoe/`에 저장한다.
+- 재생성: `& 'C:\Program Files\Blender Foundation\Blender 5.2\blender.exe' -b -P blender/scripts/car_guide_shoe.py`.
+- 검증 스크립트는 임시 로컬 HTTP 서버와 새 Chromium 세션을 사용한다. 앱의 CDN 라이브러리에 접근할 수 있어야 하며, 실패 시 네트워크·콘솔 오류를 함께 출력한다. 기존 배경의 `toNonIndexed` 중복 변환과 캡처의 GPU `ReadPixels` 경고는 별도 기록하고, 다른 경고와 실제 오류는 실패 처리한다.
 
 아직 미복원(재공사 대기):
 
