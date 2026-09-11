@@ -737,29 +737,9 @@
       const hcDarkMat = new THREE.MeshStandardMaterial({ color: 0x22262c, metalness: 0.50, roughness: 0.60 });
       const ropeMat   = new THREE.MeshStandardMaterial({ color: 0x8a929c, metalness: 0.80, roughness: 0.30 });
 
-      /* 인터록 스위치 박스 재질 (PLAN 1단계 — 층마다 새로 만들지 않고 공유) */
-      const ilClearMat = new THREE.MeshStandardMaterial({
-        color: 0xdce6ee, transparent: true, opacity: 0.16,
-        roughness: 0.12, metalness: 0.10, depthWrite: false, side: THREE.DoubleSide
-      });
-      const ilAcrylicMat = new THREE.MeshStandardMaterial({
-        color: 0xb8d4e4, transparent: true, opacity: 0.18,
-        roughness: 0.06, metalness: 0.12, depthWrite: false, side: THREE.DoubleSide
-      });
-      const ilBrkMat     = new THREE.MeshStandardMaterial({ color: 0xa8b2bd, metalness: 0.65, roughness: 0.40 });
-      /* 걸쇠(Hook) 전용 — 골드 크로메이트 Keeper 와 대비되게 한 톤 진한 아연도금 스틸 */
-      const ilHookMat    = new THREE.MeshStandardMaterial({ color: 0x7d8791, metalness: 0.82, roughness: 0.30 });
-      const ilBaseMat    = new THREE.MeshStandardMaterial({ color: 0x2b3038, metalness: 0.05, roughness: 0.70 });
-      const ilContactMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.85, roughness: 0.25 });
-      const ilWhiteMat   = new THREE.MeshStandardMaterial({ color: 0xf7f4ee, metalness: 0.02, roughness: 0.48 });
-      const ilWireY = new THREE.MeshStandardMaterial({ color: 0xd4ac0d, metalness: 0.15, roughness: 0.55 });
-      const ilWireR = new THREE.MeshStandardMaterial({ color: 0xc0392b, metalness: 0.15, roughness: 0.55 });
-      const ilWireB = new THREE.MeshStandardMaterial({ color: 0x2e5aa8, metalness: 0.15, roughness: 0.55 });
-      const ilWireG = new THREE.MeshStandardMaterial({ color: 0x3d8c3a, metalness: 0.12, roughness: 0.52 });
-      const ilWireW = new THREE.MeshStandardMaterial({ color: 0xe8e6e0, metalness: 0.10, roughness: 0.60 });
-      const ilSpringMat = new THREE.MeshStandardMaterial({ color: 0xd0d5da, metalness: 0.75, roughness: 0.25 });
-      const ilCableMat  = new THREE.MeshStandardMaterial({ color: 0x1c1c1c, metalness: 0.25, roughness: 0.72 });
-      const ilShrinkMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.10, roughness: 0.65 });
+      // Existing key body and door-closer spring still use these materials.
+      const ilContactMat = M.gold();
+      const ilSpringMat = M.ss(0xd0d5da);
 
       const hcW = 2 * (ox + HP_W / 2 + 0.075); // 행거 케이스 전폭 ≈ 2.82m (도어 행정에서 역산)
       const CASE_H = 0.104;       // 174p C형 케이스 높이 (104mm)
@@ -776,7 +756,6 @@
          상·하 본선은 같은 평면을 쓴다. 바깥으로 나오는 짧은 구간만 판 앞에 있다. */
       const CASE_LIP_Z = -(CASE_D / 2) + 0.002;  // C형 케이스 전면 립
       const HP_PLATE_Z = CASE_LIP_Z - 0.005;     // 행거 플레이트 전면 중심 Z (승강로에서 보이는 면)
-      const HP_LATCH_Z = HP_PLATE_Z - 0.008;     // 도면 178p 인터록 단일 체결 Z면 (Keeper & Hook 완벽 일체)
       /* 로프 주행면은 행거판 뒤 12mm. 8mm 로 잡으면 활짝 열렸을 때 행거판 바깥변이
          풀리를 덮는데도 풀리 앞 플랜지(반두께 11mm)가 판 앞면을 1.25mm 뚫고 나온다.
          "판 반두께 1.75mm + 풀리 반두께 11mm" 보다 깊게 물려야 완전히 가려진다. */
@@ -1032,8 +1011,6 @@
       const ilGoldZincMat= new THREE.MeshStandardMaterial({ color: 0xaa8c32, metalness: 0.80, roughness: 0.30 }); // 인터록 모듈 전용 진한 골드 크로메이트
       const hpSteelMat   = new THREE.MeshStandardMaterial({ color: 0x8e97a3, metalness: 0.70, roughness: 0.35 }); // 구조용 스틸
       const hpRollerMat  = new THREE.MeshStandardMaterial({ color: 0x1f242b, metalness: 0.30, roughness: 0.60 }); // 블랙 고무/우레탄 롤러
-      const hpWhiteRimMat= new THREE.MeshStandardMaterial({ color: 0xe8eef5, metalness: 0.20, roughness: 0.50 }); // 백색 림
-      const hpPinMat     = new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.85, roughness: 0.25 }); // 황동 접점 핀
       const hpBoltMat    = new THREE.MeshStandardMaterial({ color: 0xc8d2dc, metalness: 0.80, roughness: 0.25 }); // 아연도금 볼트/너트
       const hpSpringMat  = new THREE.MeshStandardMaterial({ color: 0xd0d5da, metalness: 0.75, roughness: 0.25 }); // 인장 스프링 스틸
       const hpDarkMat    = new THREE.MeshStandardMaterial({ color: 0x1f2329, roughness: 0.80 }); // 슬롯/음영 매트 블랙
@@ -1318,7 +1295,7 @@
         // 8. 비상 삼각키 어셈블리 (승강장 바닥 기준 약 2.0m 높이 법정 검사기준 준수, 도면 177p, 실사 112754.png/112837.png)
         if (isHookSide) {
           const triY = 2.000; // 법정 검사기준 설치 높이 2.0m
-          // 인터록 수직 링크 바 X 위치: pX(-0.173) + 0.075 = -0.098m
+          // Temporary X; HallInterlock aligns it to the exported link pin after load.
           const barX = -0.098;
           const camRad = 35 * Math.PI / 180;
           const camLen = 0.045;
@@ -1446,7 +1423,7 @@
         const h = {
           left,
           right,
-          hook: right.userData.hookPivot, // 실제 인터록 걸쇠 회전 피벗 그룹 연결 (도어 개폐 FSM 연동)
+          hook: null, // HallInterlock.attach supplies the stable GSAP pivot wrapper.
           latch: g.latch,                 // 래치 계약 (ui.js 가 해정 각도 liftRad 를 여기서 읽는다)
           triKey: right.userData.triKey ? right.userData.triKey.camPivot : null,
           relPulley: headerByFloor[i].relPulley,
