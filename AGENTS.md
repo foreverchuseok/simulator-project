@@ -13,6 +13,7 @@
 - Blender 작업 절차는 `blender/BLENDER-WORKFLOW.md`를 참고한다.
 - 도어 재공사 중: `docs/DOOR-REBUILD.md`와 원본 `js/archive/doors.js`를 먼저 읽는다. 승장 헤더는 같은 문서의 **행거 케이스 계약**이 우선이다.
 - 카 재공사 중: `docs/CAR-REBUILD.md`와 원본 `js/archive/car.js`를 먼저 읽는다. 카 그룹 위치·로프·균형추는 유지한다. 전면부터 부품만 다시 올린다.
+- 이동케이블·종단 리미트 스위치(파이널·리미트·강제감속) 작업은 `docs/TRAVEL-CABLE-TERMINAL.md`를 먼저 읽는다. 좌우 배치와 공용 수치는 `index.html`의 **종단 안전장치 · 이동케이블 공용 계약** 블록이 유일한 원본이다.
 - `index.html`에 아카이브 파일을 연결하지 않는다. 스티커 PNG(`assets/bg/hand.png`, `lean.png`)와 `assets/safety_gear.glb`는 삭제하지 않는다.
 
 ## 2. 실제 업무 방식
@@ -123,7 +124,7 @@ const deviceY = FLOOR_Y[fIdx] + S.CAR_H / 2;
 - 실제 운행 FSM은 `currentState`와 `ELEVATOR_STATE`가 기준이다.
 - 상태: `IDLE`, `MOVING`, `DOOR_OPENING`, `DOOR_OPEN`, `DOOR_CLOSING`, `ESTOP`.
 - `moving`, `doorOpen`, `estop`, `curFloor`가 현재 운행 흐름에서 함께 사용된다.
-- `elevatorState`의 감속·리미트 플래그는 현재 선언만 있고 운행 FSM에는 연결되지 않았다. 구현된 센서 동작으로 오해하지 않는다.
+- `elevatorState`의 감속·리미트 플래그(`slowdownActive`, `limitActive`, `finalLimitActive`)는 `refreshTerminalDevices()`가 카 캠이 레일 고정 스위치 6개를 밟는 상태로 채운다. 다만 이 플래그를 읽는 운행 FSM 로직은 아직 없다. 운행이 이 값으로 제어된다고 오해하지 않는다.
 - 기존 FSM, 로프 갱신, 센서 배치를 요청 없이 변경하지 않는다.
 - 도어 형상은 재공사 중이다. `buildCarDoors()`는 빈 그룹 스텁이다. `buildHatchDoors()`는 실·삼방틀·행거 케이스를 이미 올린다. 빈 스텁으로 오해하지 않는다.
 - 승장 헤더 구조는 고정이다: **양단 벽 브라켓 → C레일**. 행거판·롤러·인터록은 지금은 화면에 올리지 않는다. 상세는 `docs/DOOR-REBUILD.md` 행거 케이스 계약.
@@ -147,6 +148,7 @@ const deviceY = FLOOR_Y[fIdx] + S.CAR_H / 2;
 - 일반 화면 작업은 Live Server에서 하드 리프레시 후 확인한다.
 - Blender 작업은 Python 실행과 GLB 내보내기 성공을 확인한다.
 - 필요하면 `blender/scripts/render_governor.py`로 정면·사선 렌더를 확인한다.
+- 이동케이블·종단 안전장치는 `node tools/verify_travel_cable.mjs`로 수치와 스크린샷을 함께 확인한다.
 - 형상 변경은 최소한 위치, 회전, 스케일, 간극, 가동부 피벗을 확인한다.
 - 동작 변경은 운행, 도어, 로프, 조속기 트립·복귀 중 영향 범위를 확인한다.
 - 문서만 수정한 작업은 링크, 파일명, 함수명과 Git diff를 확인한다.

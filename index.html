@@ -643,6 +643,8 @@
   <script src="js/config.js"></script>
   <script src="js/environment.js"></script>
   <script src="js/hall-interlock.js"></script>
+  <script src="js/car-panels.js"></script>
+  <script src="js/leveling-sensors.js"></script>
   <script src="js/elevator.js"></script>
   <script src="js/ui.js"></script>
 
@@ -690,6 +692,7 @@
     // 승강로 전면벽 내측 Z — 카 전면에서 ~200mm (문 구역 전체 깊이). 전면벽·삼방틀·로비 정렬 기준
     const FRONT_ZONE_D = 0.20;
     const FRONT_WALL_INNER_Z = CAR_FRONT_Z + FRONT_ZONE_D;          // ≈1.2125
+    const HALL_SILL_SHAFT_Z = FRONT_WALL_INNER_Z - 0.022 - 0.032 / 2 - 0.048; // 승장 실 승강로측 끝, 카 실 간극 공용
 
     // 우측 카 가이드 레일 중심 X — 조속기/피트 인장추 (레일면에서 벽 쪽으로 동일 이격, 로프 수직 유지)
     const CAR_RAIL_REF_X = S.CAR_BG / 2;
@@ -703,6 +706,114 @@
        조속기가 주도르래와 같은 방향으로 돈다 (ui.js spinSheaves 부호 규칙 참조).
        이 값을 바꾸면 클램프가 무는 가닥이 바뀌어 조속기 회전 방향이 뒤집힌다. */
     const GOV_TENS_Z = CAR_CTR_Z - 0.52;
+
+    /* ══════════════════════════════════════════════════════════════════════
+       종단 안전장치 · 이동케이블 공용 계약 — MR_설계.pdf 137~138p, 부품설계.pdf 184~204p
+       승강로측(레일 고정 리미트 스위치 6개·해치 행거)은 environment.js 가,
+       카측(스타일 캠 판·카 행거)은 elevator.js 가 만든다.
+       두 파일이 같은 수치를 각자 하드코딩하지 않도록 원본은 여기 한 곳뿐이다.
+       상세 설명은 docs/TRAVEL-CABLE-TERMINAL.md.
+
+       기계실형 배치: 이동케이블은 제어반 방향인 좌측(-X)으로 배치한다.
+       조속기·파이널 리미트·강제감속 위치는 유지하고 케이블 Z 레인을 분리한다.
+       ══════════════════════════════════════════════════════════════════════ */
+    const CAR_RAIL_X = S.CAR_BG / 2;          // 카 가이드레일 중심 X (±)
+    const CAR_RAIL_Z = CAR_CTR_Z + 0.04;      // 카 가이드레일 배면 중심 Z (buildGuideRails 원본)
+    /* 좌측 카 레일 브라켓 취부 높이 (현장 2.7m 피치). buildGuideRails 가 배치하고,
+       buildLimitSwitches 는 캠·자석판 암이 이 단과 겹치지 않도록 피해 간다. */
+    const RAIL_BRACKET_Y = [1.35, 4.05, 6.75, 9.45, 12.15, 14.85];
+    const RAIL_BRACKET_BAND = 0.13;           // 브라켓 1단이 차지하는 Y 반높이 + 암 여유
+
+    /* ── 16.8 CAM ASSY / FLS ASSY (MR_설계.pdf 137~138p, 책 135~136p) — 좌측(-X) 레일, 스위치 방식 ──
+       캠은 카 스타일에 붙는 파이프 3본(감속·리미트·파이널, 길이·Z 레인 다름)이고,
+       리미트 스위치 6개는 레일 클립으로 승강로에 고정한다(environment.js buildLimitSwitches).
+       피트부터 순서: 하부 파이널(DFL) → 하부 리미트(DLS) → 하부 강제감속(DSD)
+                      … 상부 강제감속(USD) → 상부 리미트(ULS) → 상부 파이널(UFL).
+       레버는 XY 평면에서 돌고(피벗축 = Z), 롤러가 카 캠에 −X 로 눌리며 열린다.
+       하강 시 캠 하단이, 상승 시 캠 상단이 먼저 스위치를 밟는다. */
+    const FLS_Z          = CAR_RAIL_Z - 0.34;      // 캠·스위치 공용 Z 레인 (레일 후면측)
+    const FLS_LEVER_L    = 0.050;                  // 고정축~롤러축 48~52mm (부품설계 194p) 중앙값
+    const FLS_ROLLER_R   = 0.030;                  // 레버 롤러 반지름
+    const FLS_TRIP_ANGLE = 60 * Math.PI / 180;     // 동작각 50~70° (부품설계 197p) 중앙값
+    const FLS_LEAD       = 0.060;                  // 캠 양단 절곡(리드인) 길이
+    const FLS_PIVOT_X    = -(CAR_RAIL_X - 0.020);  // 레버 고정축 X (레일 배면에서 20mm 카 쪽)
+    // 캠 면 X — 동작각에서 역산. 롤러가 완전히 눌렸을 때 롤러의 카 쪽 면 = 캠 면
+    const FLS_CAM_FACE_X = FLS_PIVOT_X + FLS_LEVER_L * Math.cos(FLS_TRIP_ANGLE) + FLS_ROLLER_R;
+    // 트립 거리 — 종단 착상면(카 바닥 레벨) 기준
+    const LS_TRIP        = 0.040;   // 리미트: 바닥레벨 ±30~50mm (MR_설계 138p)
+    const FLS_OVERTRAVEL = 0.095;   // 파이널: ±90~99mm (부품설계 196~197p)
+    const SLD_DIST       = 1.50;    // 강제감속: 60m/min 1500mm (부품설계 200~201p)
+    /* 카 캠은 통판이 아니라 파이프 3본(감속·리미트·파이널)이다. 길이·Z 레인이 달라
+       각 가닥이 자기 스위치만 밟는다. 묶음 중심은 스타일 중턱. */
+    const CAM_MID_LY     = (S.CAR_H / 2 + 0.30 + (-S.CAR_H / 2 - 0.05)) / 2;
+    const CAM_VANE_W     = 0.028;   // 가닥 타격면 Z 폭
+    const FLS_PAIR_DZ    = 0.048;   // 리미트(+Z)·파이널(−Z). 감속은 가운데(0)
+    const CAM_VANES = {
+      final:    { kind: 'final',    botLY: CAM_MID_LY - 0.36, topLY: CAM_MID_LY + 0.36, dz: -FLS_PAIR_DZ }, // 720mm
+      limit:    { kind: 'limit',    botLY: CAM_MID_LY - 0.41, topLY: CAM_MID_LY + 0.41, dz: +FLS_PAIR_DZ }, // 820mm
+      slowdown: { kind: 'slowdown', botLY: CAM_MID_LY - 1.28, topLY: CAM_MID_LY + 1.28, dz: 0 }             // 2560mm
+    };
+    /* 스위치 롤러축 Y. 하부 3개는 자기 가닥 하단이, 상부 3개는 상단이 트립점을 지날 때 밟는다.
+       감속 가닥이 1.5m+오버런보다 길어 종단 착상까지 눌린 채 유지된다. */
+    const TERMINAL_SWITCHES = (() => {
+      const lo = FLOOR_Y[0] + S.CAR_H / 2, up = FLOOR_Y[FLOORS - 1] + S.CAR_H / 2;
+      const v = CAM_VANES;
+      return [
+        { name: 'DFL', label: '하부 파이널 리미트', kind: 'final',    dir: -1, dz: v.final.dz,    y: lo - FLS_OVERTRAVEL + v.final.botLY },
+        { name: 'DLS', label: '하부 리미트',         kind: 'limit',    dir: -1, dz: v.limit.dz,    y: lo - LS_TRIP        + v.limit.botLY },
+        { name: 'DSD', label: '하부 강제감속',       kind: 'slowdown', dir: -1, dz: v.slowdown.dz, y: lo + SLD_DIST       + v.slowdown.botLY },
+        { name: 'USD', label: '상부 강제감속',       kind: 'slowdown', dir: +1, dz: v.slowdown.dz, y: up - SLD_DIST       + v.slowdown.topLY },
+        { name: 'ULS', label: '상부 리미트',         kind: 'limit',    dir: +1, dz: v.limit.dz,    y: up + LS_TRIP        + v.limit.topLY },
+        { name: 'UFL', label: '상부 파이널 리미트', kind: 'final',    dir: +1, dz: v.final.dz,    y: up + FLS_OVERTRAVEL + v.final.topLY }
+      ];
+    })();
+
+    /* ── 20.4 착상장치 차폐판 LCD Vane (MR_설계.pdf 186~187p) — 좌측(-X) 레일 ──
+       레일 부착형. GLB 원점은 레일 배면 중심. 아래 수치가 Python/카측 센서 공용 원본.
+       층별 중심 Y는 착상 시 카 톱빔 월드 높이와 같다
+       (`FLOOR_Y[f] + S.CAR_H/2 + LCD_VANE_TOP_BEAM_LY`). 카측 3단 센서 중심도 같은 높이다. */
+    // 현장 사진 20260911: 평판 + 카측 3단 포크 센서. Python도 이 수치들을 읽는다.
+    const LCD_VANE_H = 0.164;
+    const LCD_VANE_W = 0.130;
+    const LCD_VANE_T = 0.002;
+    const LCD_VANE_OFFSET_Z = 0.350;
+    const LCD_VANE_Z = CAR_RAIL_Z + LCD_VANE_OFFSET_Z; // 검출축 Z
+    const LCD_VANE_X_OFFSET = 0.036;
+    const LCD_SENSOR_PITCH = 0.080;
+    const LCD_SLOT_GAP = 0.012;
+    const LCD_VANE_TOP_BEAM_LY = S.CAR_H / 2 + 0.36; // elevator.js chY (카 그룹 로컬)
+
+    /* ── 16.2~16.4 이동케이블 T-Cable (184~188p) — 좌측(-X) 제어반 방향 ──
+       해치 케이블 행거(고정) ↔ 카 케이블 행거(세이프티 디바이스) 사이에서
+       U 자 곡면을 그리며 늘어진다. 총 길이는 "최하층에서 곡면 최하단 = 피트 바닥
+       +300mm" 조건으로 buildTravelCable() 이 역산한다. */
+    const TC_X          = -(CAR_RAIL_X + 0.1475);      // 케이블 주행 X (좌측)
+    const TC_LOOP_R     = 0.120;                    // U 곡면 반지름
+    const TC_CAR_Z      = CAR_RAIL_Z + 0.65;       // 센서 및 레일 취부 암보다 전면으로 분리
+    const TC_FIX_Z      = TC_CAR_Z + 2 * TC_LOOP_R; // 승강로 고정측 가닥 Z
+    const TC_PIT_CLEAR  = 0.30;                     // 최하층 곡면 최하단 ↔ 피트 바닥 300±50mm (188p)
+    const TC_HANGER_UP  = 1.00;                     // 해치 행거 = B 지점 카 바닥 +1,000mm (187p)
+    const TC_W          = 0.075;                    // 편평형 이동케이블 폭
+    const TC_T          = 0.008;                    // 편평형 이동케이블 두께
+    const TC_CAR_HANGER_LY = -(S.CAR_H / 2) - 0.2725; // 카 케이블 행거 로컬 Y (세이프티 플랭크 하부)
+    const TC_WALL_X = -(S.SHAFT_W / 2) + 0.060; // 외피 끝과 벽 사이 22.5mm
+    const TC_SIDE_X = -(S.CAR_W / 2) - 0.050; // 외피 끝과 카 외판 사이 12.5mm
+    const TC_CAR_TOP_LY = S.CAR_H / 2 + 0.36 + 0.07 + 0.10; // 카 천장 고정 브라켓 로컬 Y
+
+    /* ── 16.3 / 16.5 / 16.6 승강로 하네스 (185p, 189~192p) — 좌측 벽면 ──
+       승강로를 두르는 벽은 좌측벽 하나뿐이라 제어반·새들 고정선은 모두 좌측이다. */
+    const HARNESS_X = -(S.SHAFT_W / 2) + 0.065; // 벽 내면에서 65mm (새들 고정)
+    const HARNESS_Z = 1.10;                     // 승장 출입구 쪽 모서리 (피트 사다리 Z 회피)
+    const PIT_REMOTE_Y = FLOOR_Y[0] + 1.00;     // 요청 기준: 최하층 승강장 +1m
+    const TOP_LIGHT_SWITCH_Y = FLOOR_Y[FLOORS - 1] + 1.00;
+    const SHAFT_SWITCH_Z = FRONT_WALL_INNER_Z - 0.40 - 0.36; // 사다리 옆, 상하 동일 위치
+    const SHAFT_LIGHT_Z = CAR_RAIL_Z - 0.95; // 레일 브라켓 뒤 벽면
+    const TC_COLOR = 0x45494d; // 회색 PVC 외피, 현재 장면 광량에서 회색으로 보이도록 조정
+    /* 기계실 케이블 관통구 X — 제어반 캐비닛(폭 0.3 × scale 1.5) 바깥이라야 인출이 보인다.
+       T 케이블 고정단도 천장을 타고 여기로 모여 제어반으로 들어간다(187p 1항). */
+    const MR_CABLE_HOLE_X = (-(S.SHAFT_W / 2) + 0.15) + 0.15 * 1.5 + 0.14;
+    const SHAFT_CEIL_Y = Y0 + TOTAL_H - 0.245;  // 승강로 천장 슬래브 하면
+    const CEIL_RUN_Y   = SHAFT_CEIL_Y - 0.10;   // 천장 밑 수평 배선 높이
 
     // ---- [추가] 인디케이터 관리를 위한 배열 ----
     let indicators = [];
@@ -725,6 +836,10 @@
     const DEBUG_SENSOR = true;
     const USE_PHOTO_BG_PREVIEW = false; // true: koelsa/koelsa2 좌우 원경(흐림) / false: 3D 배경
     const landingDevices = [];
+    // 종단 안전장치·이동케이블 (부품설계.pdf 16.2~16.8) 그룹과 가동부 핸들
+    let limitGrp = null, shaftCableGrp = null, travelCableGrp = null;
+    const terminalDevices = { cam: null, switches: [] };
+    const travelCable = { ready: false }; // buildTravelCable() 이 채운다 (refreshTravelCable 계약)
     const carSensors = {};
     const elevatorState = { direction: 0, speed: 0, slowdownActive: false, limitActive: false, finalLimitActive: false };
 
@@ -906,6 +1021,27 @@
         camera.position.set(GOV_TENS_X + 0.60, Y0 + TOTAL_H + 0.80, GOV_TENS_Z + 0.68);
         controls.target.set(GOV_TENS_X, Y0 + TOTAL_H + 0.60, GOV_TENS_Z - 0.03);
         document.getElementById('loading').style.display = 'none';
+      } else if (location.search.includes('lcdcam')) {
+        // 1층 착상 차폐판 — 좌측 레일 전면 레인
+        controls.minDistance = 0.10;
+        const vy = FLOOR_Y[0] + S.CAR_H / 2 + LCD_VANE_TOP_BEAM_LY;
+        camera.position.set(-CAR_RAIL_X - 0.24, vy + 0.10, LCD_VANE_Z + 0.28);
+        controls.target.set(-CAR_RAIL_X + LCD_VANE_X_OFFSET, vy, LCD_VANE_Z);
+        document.getElementById('loading').style.display = 'none';
+      } else if (location.search.includes('flscam')) {
+        // 하부 리미트·파이널 스위치(DLS/DFL) — 피트 레일 + 카 스타일 캠 하단
+        controls.minDistance = 0.10;
+        const sy = TERMINAL_SWITCHES.find(s => s.name === 'DLS').y;
+        camera.position.set(FLS_PIVOT_X - 0.32, sy + 0.16, FLS_Z - 0.42);
+        controls.target.set(FLS_PIVOT_X + 0.02, sy - 0.02, FLS_Z);
+        document.getElementById('loading').style.display = 'none';
+      } else if (location.search.includes('sldcam')) {
+        // 하부 강제감속 스위치(DSD) — 최하층 바닥 +1.5m 트립
+        controls.minDistance = 0.10;
+        const sy = TERMINAL_SWITCHES.find(s => s.name === 'DSD').y;
+        camera.position.set(FLS_PIVOT_X + 0.80, sy + 0.25, FLS_Z - 0.75);
+        controls.target.set(FLS_PIVOT_X + 0.03, sy, FLS_Z);
+        document.getElementById('loading').style.display = 'none';
       } else if (location.search.includes('mrcam=4')) {
         // 로프브레이크·현수도르래 근접 뷰
         camera.position.set(2.1, Y0 + TOTAL_H + 1.45, -0.15);
@@ -928,16 +1064,25 @@
       buildFrontWallAndLobby(); // 승장 및 점자블록
       buildGuideRails();        // 레일 (후면 균형추)
       buildShaftLandingDevices(); // 승강로 레일 측 센서 (층 인식용 도킹 센서)
-      buildLimitSwitches();       // 승강로 좌측 레일 안전용 리미트 스위치
+      buildLimitSwitches();       // 좌측 레일 CAM ASSY(파이널 리미트) + SLD 자석판 (16.7~16.8)
+      buildLevelingVanes();       // 각 층 착상장치 차폐판 (LCD Vane, 좌측 레일)
       buildMachineRoom();       // 기계실 및 도르래
       buildCarCabin();          // 재공사 스텁 — 원본 js/archive/car.js
       buildPassenger();         // 재공사 스텁 — 탑승자 원본 동일 파일
       buildCarDoors();          // 재공사 스텁 — 원본 js/archive/doors.js
       buildHatchDoors();        // 재공사 스텁 — 헤더·페시아·토가드 포함 원본 동일 파일
+      buildShaftCableHarness(); // 도어 접점 검정 배선 · 조명 · 상하 스위치 박스
       buildCounterWeight();     // 후면 균형추
+      buildTravelCable();       // 이동케이블(T-Cable) U 곡면 — 카·균형추 위치에서 길이 역산 (16.4)
       buildWireRopes();         // 로프
       buildPitFoundation();     // 피트
       updateBuffers();          // 동적 완충기
+
+      // ?tcam(해치 케이블 행거)만 빌드 결과(travelCable.hangerY)가 있어야 잡을 수 있다
+      if (travelCable.ready && location.search.includes('tcam') && !location.search.includes('tcam=2')) {
+        camera.position.set(TC_X + 1.09, travelCable.hangerY + 0.62, TC_FIX_Z + 0.62);
+        controls.target.set(TC_X, travelCable.hangerY - 0.11, (TC_CAR_Z + TC_FIX_Z) / 2 - 0.10);
+      }
 
       bindUIEvents();
 

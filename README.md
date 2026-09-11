@@ -23,6 +23,7 @@ Three.js로 승강로, 카, 도어, 기계실, 피트와 안전장치를 구성�
 - `PLAN.md`: 현재 분석 작업 하나를 넘기는 로컬 임시 문서. Git에는 포함하지 않는다.
 - `docs/DOOR-REBUILD.md`: 도어 재공사 기록. 원본 코드는 `js/archive/doors.js`.
 - `docs/CAR-REBUILD.md`: 카 재공사 기록. 원본 코드는 `js/archive/car.js`.
+- `docs/TRAVEL-CABLE-TERMINAL.md`: 이동케이블·종단 리미트 스위치(파이널·리미트·강제감속, 스위치 방식) (MR_설계.pdf 137~138p, 부품설계.pdf 184~204p).
 
 ## 실제 프로젝트 구조
 
@@ -39,7 +40,8 @@ simmul/
 │     └─ car.js                   카 재공사 원본 (앱 미로드)
 ├─ docs/
 │  ├─ DOOR-REBUILD.md             도어 재공사 안내
-│  └─ CAR-REBUILD.md              카 재공사 안내
+│  ├─ CAR-REBUILD.md              카 재공사 안내
+│  └─ TRAVEL-CABLE-TERMINAL.md    이동케이블·종단 안전장치 (184~204p)
 ├─ blender/
 │  ├─ BLENDER-WORKFLOW.md
 │  └─ scripts/
@@ -53,6 +55,7 @@ simmul/
 ├─ sound/                         도어·층 안내·차임 음원
 ├─ tools/
 │  ├─ build_safety_glb.mjs        세이프티기어 GLB 생성 도구
+│  ├─ verify_travel_cable.mjs     이동케이블·종단 안전장치 수치 검증
 │  └─ transcribe.py               개발 보조 도구
 ├─ generate_sounds.py             사운드 생성 보조
 ├─ extract_audio.py               오디오 추출 보조
@@ -85,13 +88,15 @@ Three.js → OrbitControls → GLTFLoader → GSAP
   → buildFrontWallAndLobby()
   → buildGuideRails()
   → buildShaftLandingDevices()
-  → buildLimitSwitches()
+  → buildLimitSwitches()          레일 고정 종단 리미트 스위치 6개 (DFL/DLS/DSD/USD/ULS/UFL)
   → buildMachineRoom()
+  → buildShaftCableHarness()      제어반 인출 → 좌측벽 하네스 → 층 분기박스 → 피트 리모컨
   → buildCarCabin()               재공사 스텁 (빈 그룹)
   → buildPassenger()              재공사 스텁
   → buildCarDoors()               재공사 스텁 (빈 그룹)
   → buildHatchDoors()             재공사 스텁 (빈 그룹)
   → buildCounterWeight()
+  → buildTravelCable()            이동케이블(T-Cable) U 곡면
   → buildWireRopes()
   → buildPitFoundation()
   → updateBuffers()
@@ -111,7 +116,7 @@ Three.js → OrbitControls → GLTFLoader → GSAP
 - 층 좌표 `FLOOR_Y`, 피트·오버헤드와 카/승강로 Z 파생 좌표.
 - `createBox()`, `createCylinder()`, `makeRopeGeometry()` 기하 헬퍼.
 - `init()`과 `renderLoop()`.
-- `?mrcam`, `?doorcam=1~4`, `?govcam` 카메라 확인 쿼리.
+- `?mrcam`, `?doorcam=1~4`, `?govcam`, `?tcam`, `?flscam`, `?sldcam` 카메라 확인 쿼리.
 
 ### `js/config.js`
 
@@ -125,7 +130,9 @@ Three.js → OrbitControls → GLTFLoader → GSAP
 
 - 조명과 배경 지형·건물.
 - 전면벽, 로비, 점자블록.
-- 가이드레일, 층 인식 장치, 리미트 스위치.
+- 가이드레일, 층 인식 장치.
+- 종단 안전장치 승강로측: 레일 클립 고정 리미트 스위치 6개 — 파이널·리미트·강제감속 (`buildLimitSwitches()`). 캠은 카 스타일(`elevator.js buildCarCabin()` §7).
+- 승강로 케이블 하네스: 제어반 인출, 층 분기 박스, 피트 리모컨 (`buildShaftCableHarness()`).
 - 기계실, 권상기, 주도르래와 조속기 GLB 마운트.
 - 피트, 완충기, 인장시브와 조속기 로프 기반 형상.
 - 조속기 래퍼와 `mrGrp.userData.governor` 계약.
@@ -138,6 +145,7 @@ Three.js → OrbitControls → GLTFLoader → GSAP
 - `buildGuideRails()`
 - `buildShaftLandingDevices()`
 - `buildLimitSwitches()`
+- `buildShaftCableHarness()`
 - `buildMachineRoom()`
 - `buildPitFoundation()`
 - `updateBuffers()`
@@ -153,6 +161,7 @@ Three.js → OrbitControls → GLTFLoader → GSAP
 - `buildCarCabin()`, `buildPassenger()`, `togglePassenger()` — 현재 스텁. 원본 `js/archive/car.js`
 - `buildCarDoors()`, `buildHatchDoors()`, `spinDoorDrive()` — 현재 스텁. 원본 `js/archive/doors.js`
 - `buildCounterWeight()`
+- `buildTravelCable()`, `refreshTravelCable()`, `refreshTerminalDevices()`
 - `buildWireRopes()`, `refreshRopes()`, `refreshGovernorRope()`
 - `governorTrip()`, `governorReset()`
 - `syncAllIndicators()`

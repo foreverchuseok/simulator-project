@@ -82,8 +82,7 @@
           });
         });
 
-        // 카 천장 임시 고정 앵글 (도면 100~101p)
-        createBox(0.05, 0.04, 0.28, frmMat, sx - sign * 0.025, H / 2 - 0.04, railBladeZ, carFrameGrp);
+        // 천장 임시 앵글은 판넬 조립 완료 후 철거(부품설계 210p).
       });
 
       // ── (2) 상부 크로스헤드 빔 (Top Beam / Double C-Channels - 도면 92p) ──
@@ -292,6 +291,7 @@
          도면 103~104p & 사용자 스크린샷 124932.png, 1249321.png
          ========================================================================= */
       const handrailGrp = new THREE.Group();
+      handrailGrp.name = 'carHandrail'; // 카 상부 부품 확인용 — 검증 스크립트가 잠시 숨긴다
       carGrp.add(handrailGrp);
 
       // ── (1) 황색 베이스 가드 (Base Guard - 도면 103p, M16 볼트 고정) ──
@@ -358,6 +358,108 @@
       createBox(hrW, 0.10, 0.014, yelGuardMat, 0, toeBoardY, hrRearZ, handrailGrp); // 후면
       createBox(0.014, 0.10, hrD, yelGuardMat, hrLeftX,  toeBoardY, (hrRearZ + hrFrontZ) / 2, handrailGrp); // 좌측
       createBox(0.014, 0.10, hrD, yelGuardMat, hrRightX, toeBoardY, (hrRearZ + hrFrontZ) / 2, handrailGrp); // 우측
+
+      /* =========================================================================
+         7. 카측 종단 안전장치 + 이동케이블 취부 (MR_설계.pdf 16.8, 부품설계.pdf 16.4)
+            · CAM ASSY — 좌측 카 스타일에 붙는 파이프 3본(감속·리미트·파이널). 길이·Z가 달라 자기 스위치만 밟는다.
+            · 카 케이블 행거 + T-CABLE 카측 배선 + 카 천장 고정 브라켓 (188p)
+            좌표 원본은 index.html 계약 상수. 승강로측(리미트 스위치·해치 행거)은
+            environment.js buildLimitSwitches() / buildTravelCable() 가 만든다.
+         ========================================================================= */
+      const zL = wz => wz - CAR_CTR_Z;   // 월드 Z → 카 로컬 Z
+      const brkMat    = M.ss(0x98a1ab);
+
+      /* ── (1) CAM ASSY — 카 스타일 고정, 파이프 3본(감속·리미트·파이널) ── */
+      const camGrp = new THREE.Group();
+      camGrp.name = 'terminalCamAssy';
+      carFrameGrp.add(camGrp);
+      const camT    = 0.006;
+      const vaneW   = CAM_VANE_W;
+      const camX    = FLS_CAM_FACE_X + camT / 2;               // 타격면 중심 X (면이 −X, 레일 쪽)
+      const pipeX   = camX + 0.011;                            // 타격면 뒤 원형 파이프 중심
+      const rise    = FLS_LEVER_L - FLS_LEVER_L * Math.cos(FLS_TRIP_ANGLE);
+      const rampLen = Math.hypot(rise, FLS_LEAD);
+      const pipeMat = {
+        slowdown: M.ss(0x9aa3ad),
+        limit:    M.ss(0xb0b8c0),
+        final:    M.ss(0x7e868f)
+      };
+      const faceMat = {
+        slowdown: M.ss(0x8f98a3),
+        limit:    M.ss(0xa4adb6),
+        final:    M.ss(0x747c86)
+      };
+
+      function addCamVane(vane) {
+        const z = zL(FLS_Z + vane.dz);
+        const len = vane.topLY - vane.botLY;
+        const midY = (vane.topLY + vane.botLY) / 2;
+        const straight = Math.max(0.02, len - 2 * FLS_LEAD);
+        const face = faceMat[vane.kind], pipe = pipeMat[vane.kind];
+        createBox(camT, straight, vaneW, face, camX, midY, z, camGrp);
+        createCylinder(0.009, 0.009, straight, pipe, pipeX, midY, z, camGrp);
+        [[vane.botLY, +1], [vane.topLY, -1]].forEach(([endY, inward]) => {
+          const ramp = createBox(camT, rampLen, vaneW, face,
+            camX + rise / 2, endY + inward * FLS_LEAD / 2, z, camGrp);
+          ramp.rotation.z = inward * Math.atan2(rise, FLS_LEAD);
+          createBox(0.018, camT, vaneW, face, camX + rise + 0.006, endY, z, camGrp);
+        });
+      }
+      addCamVane(CAM_VANES.slowdown);
+      addCamVane(CAM_VANES.limit);
+      addCamVane(CAM_VANES.final);
+
+      // 스타일 −Z 플랜지 → 세 가닥을 묶는 취부 암. 짧은 파이널 가닥과 겹치는 높이에만 둔다.
+      const flangeZ = railBladeZ - 0.073;
+      const bundleZ0 = flangeZ - 0.007;
+      const bundleZ1 = zL(FLS_Z) + FLS_PAIR_DZ + vaneW / 2;
+      [CAM_VANES.final.botLY + 0.12, CAM_MID_LY, CAM_VANES.final.topLY - 0.12].forEach(ay => {
+        createBox(0.040, 0.028, Math.abs(bundleZ1 - bundleZ0), brkMat,
+          camX + camT / 2 + 0.020, ay, (bundleZ0 + bundleZ1) / 2, camGrp);
+        Object.values(CAM_VANES).forEach(v => {
+          createBox(0.010, 0.028, CAM_VANE_W + 0.008, brkMat,
+            pipeX + 0.006, ay, zL(FLS_Z + v.dz), camGrp);
+        });
+        [-0.012, 0.012].forEach(dx => {
+          createCylinder(0.0045, 0.0045, 0.024, boltMat, camX + camT / 2 + 0.020 + dx, ay, flangeZ - 0.010, camGrp)
+            .rotation.x = Math.PI / 2;
+        });
+      });
+      terminalDevices.cam = { node: camGrp, lead: FLS_LEAD, faceX: FLS_CAM_FACE_X, vanes: CAM_VANES };
+
+      /* 카 하부 인입 → 카 외판 측면 → 상부 정션박스. */
+      const tcGrp = new THREE.Group();
+      tcGrp.name = 'carTravelCable'; carGrp.add(tcGrp);
+      const tcZL = zL(TC_CAR_Z), endY = TC_CAR_HANGER_LY;
+      const sideZ = tcZL + 0.10, topY = TC_CAR_TOP_LY;
+      // 플랫폼 외곽 채널 아래의 짧은 접힌 취부판. 주행 구간 중간에는 암을 두지 않는다.
+      const floorEdgeX = -S.CAR_W / 2;
+      createBox(Math.abs(TC_X-floorEdgeX)+0.02,0.008,0.10,brkMat,
+        (TC_X+floorEdgeX)/2,endY+0.115,tcZL,tcGrp);
+      createBox(0.008,0.12,0.10,brkMat,floorEdgeX,endY+0.17,tcZL,tcGrp);
+      addTravelCableGrip(tcGrp,TC_X,endY+0.040,tcZL,'carCableGrip');
+      const route = createTravelCableRun([
+        [TC_X,endY,tcZL],[TC_X,endY+0.085,tcZL],
+        [TC_X+0.06,endY+0.13,tcZL+0.045],
+        [TC_SIDE_X,endY+0.16,sideZ],
+        [TC_SIDE_X,endY+0.36,sideZ],
+        [TC_SIDE_X,topY-0.26,sideZ],[TC_SIDE_X,topY-0.16,sideZ]
+      ],tcGrp,'carCableRun');
+      // 카에 밀착한 좁은 검정 밴드: 긴 금속 새들·돌출 볼트 제거.
+      for(let y=endY+0.45;y<topY-0.20;y+=0.45)
+        addTravelCableBand(tcGrp,TC_SIDE_X,y,sideZ);
+      const jb = new THREE.Group(); jb.name='carCableJunction';
+      jb.position.set(TC_SIDE_X+0.035,topY-0.04,sideZ); tcGrp.add(jb);
+      createBox(0.10,0.22,0.16,M.paint(0x42484b),0,0,0,jb);
+      createBox(0.004,0.20,0.14,M.ss(0x737b80),-0.053,0,0,jb);
+      [-0.08,0.08].forEach(y=>[-0.05,0.05].forEach(z=>{
+        createCylinder(0.003,0.003,0.006,boltMat,-0.057,y,z,jb).rotation.z=Math.PI/2;
+      }));
+      createBox(TC_W+0.008,0.018,TC_T+0.01,M.paint(0x101214),TC_SIDE_X,topY-0.155,sideZ,tcGrp);
+      route.userData = { type:'car-cable-run', end:[TC_SIDE_X,topY-0.16,sideZ] };
+      buildCarPanels(carGrp);
+      buildCarLevelingSensors(carGrp);
+
     }
 
     function buildPassenger() {
@@ -563,7 +665,7 @@
       const SILL_HALL_EDGE  = 0.0275;  // 홀 쪽 — 기존 55mm 실과 동일
       const SILL_GROOVE1_Z  = 0;       // 1번 홈 (문짝 아래)
       const SILL_GROOVE2_Z  = -0.026;  // 2번 홈 (승강로 쪽 보강)
-      const SILL_SHAFT_EDGE = -0.048;  // 승강로로 살짝 확장
+      const SILL_SHAFT_EDGE = HALL_SILL_SHAFT_Z - SILL_Z;  // 카 실과 공용 끝면
       const ribMat = new THREE.MeshStandardMaterial({ color: 0xc4cdd8, metalness: 0.70, roughness: 0.28 });
       const sillAlum = new THREE.MeshStandardMaterial({ color: 0xc8d0d8, metalness: 0.78, roughness: 0.26 });
       const grooveMat = new THREE.MeshStandardMaterial({ color: 0x2a3038, metalness: 0.40, roughness: 0.70 });
@@ -1263,7 +1365,8 @@
         }
 
         // 4. 패널 후면(승강로 측, −Z) 세로 보강 C채널 2줄
-        [-dw * 0.35, dw * 0.35].forEach(rbx => {
+        // 문짝 폭의 약 1/4·3/4. 키홀 쪽만 바깥으로 50mm 더 비운다.
+        [side * (0.05 - dw * 0.26), side * dw * 0.26].forEach(rbx => {
           createBox(0.050, dh * 0.94, 0.014, ribMat, pX + rbx, yCtr, zHoist - 0.007, grp);
         });
 
@@ -1356,8 +1459,7 @@
             depth: 0.0024, bevelEnabled: true, bevelThickness: 0.0004, bevelSize: 0.0004, bevelSegments: 2
           });
           const triCore = new THREE.Mesh(triGeom, ilContactMat);
-          triCore.position.set(0, 0, zHall + 0.0008);
-          triKeyGrp.add(triCore);
+          // Parent to the cam shaft so lobby-side triangle turns with the key.
 
           // (2) 도어 패널 관통 황동 바디 (두께 32mm 관통)
           const bodyLen = dt + 0.004;
@@ -1386,15 +1488,27 @@
           const camTip = createCylinder(0.007, 0.007, 0.0045, ilGoldZincMat, camLen, 0, 0, camPivot);
           camTip.rotation.x = Math.PI / 2;
 
-          // 캠 끝단 드라이브 핀 (수직 링크 바의 장공 슬롯에 결합)
-          const drivePin = createCylinder(0.0035, 0.0035, 0.010, hpBoltMat, camLen, 0, 0, camPivot);
-          drivePin.rotation.x = Math.PI / 2;
+          // Joint marker at the cam tip. HallInterlock stretches this pin in −Z
+          // until it sits in the GLB LinkFoot slot after the model loads.
+          const drivePin = new THREE.Group();
+          drivePin.name = 'CamPinJoint';
+          drivePin.position.set(camLen, 0, 0);
+          camPivot.add(drivePin);
+          const pinMesh = createCylinder(0.0035, 0.0035, 0.010, hpBoltMat, camLen, 0, 0, camPivot);
+          pinMesh.rotation.x = Math.PI / 2;
           const pinCap = createCylinder(0.006, 0.006, 0.003, hpBoltMat, camLen, 0, -0.005, camPivot);
           pinCap.rotation.x = Math.PI / 2;
 
+          camPivot.add(triCore);
+          triCore.position.set(0, 0, (zHall + 0.0008) - (zHoist - 0.008));
+          triCore.rotation.z = -camRad;
+
           triKeyGrp.add(camPivot);
           grp.add(triKeyGrp);
-          grp.userData.triKey = { group: triKeyGrp, camPivot, drivePin, triX, triY, pinY, barX };
+          grp.userData.triKey = {
+            group: triKeyGrp, camPivot, drivePin, pinMesh, pinCap,
+            pinRest: 0.010, camLen, triX, triY, pinY, barX
+          };
         }
       }
 
@@ -1431,6 +1545,7 @@
           link: headerByFloor[i].link
         };
         HallInterlock.attach(h, headerByFloor[i], g);
+        if (right.userData.triKey) right.userData.triKey.floorIdx = i;
         hatchDoors.push(h);
         spinDoorDrive(h); // 닫힘 상태의 로프 마디·풀리각·클로저 스프링 길이 초기화
       }
@@ -1445,12 +1560,14 @@
          2) 수직 평철 링크 바 연동 -> 대각선 암 틸트 -> 후크 래치 4~5mm 상승 및 접점 브리지 분리 */
     function setEmergencyKey(fIdx = 0, ratio = 0) {
       if (!hatchDoors || !hatchDoors[fIdx] || !hatchDoors[fIdx].right) return;
-      const rGrp = hatchDoors[fIdx].right;
+      const h = hatchDoors[fIdx];
+      const rGrp = h.right;
       const tri  = rGrp.userData.triKey;
       const hp   = rGrp.userData.hookPivot;
-      if (!tri || !tri.camPivot || !hatchDoors[fIdx].interlock?.ready) return;
+      if (!tri || !tri.camPivot || !h.interlock?.ready) return;
 
       const clampedRatio = Math.max(0, Math.min(1, ratio));
+      h.keyRatio = clampedRatio;
       // (1) 삼각키 캠 레버 회전: 35° ~ 85°
       const initAng = 35 * Math.PI / 180;
       const maxDelta = 50 * Math.PI / 180;
@@ -1458,9 +1575,9 @@
 
       /* (2) GLB에 기록된 정확한 회전각으로 사각 턱을 해정한다. */
       if (hp) {
-        const lr = hatchDoors[fIdx].latch.liftRad;
+        const lr = h.latch.liftRad;
         hp.rotation.z = -clampedRatio * lr;
-        HallInterlock.update(hatchDoors[fIdx]);
+        HallInterlock.update(h);
       }
     }
     window.setEmergencyKey = setEmergencyKey;
@@ -1523,6 +1640,237 @@
       const cwtTopStartY = Y0 + cwtBottomClearance + S.CWT_H / 2 + carTravel;
       cwtGrp.position.set(0, cwtTopStartY, CWT_CENTER_Z);
       scene.add(cwtGrp);
+    }
+
+    /* ==========================================================================
+       buildTravelCable — 이동케이블(T-Cable) 승강로 고정단 + U 곡면 본체
+       부품설계.pdf 16.4 (186~188p)
+
+       ① 해치 케이블 행거: "카운터웨이트 프레임 충돌판과 카 바닥이 같은 높이인
+          상태(B 지점)에서 1,000mm 상부" 카 히치측 카 레일에 설치한다(187p 2항).
+          B 지점은 상수로 박지 않고 실제 카·균형추 그룹 위치에서 역산한다.
+            카 바닥(carY − CAR_H/2) = 균형추 충돌판(cwtY − CWT_H/2)
+            균형추는 카와 반대로 같은 양만큼 움직이므로 carY 에 대해 1차식이 된다.
+       ② 케이블 총 길이: "카가 최하층일 때 곡면 최하단부가 피트 바닥 +300±50mm"
+          (188p 5항) 조건으로 역산한다. 길이가 정해지면 곡면 중심 높이는
+          두 끝점 높이의 함수라 카가 움직일 때마다 refreshTravelCable() 이 푼다.
+
+       메시는 단면이 편평한 리본이다. 샘플 수를 고정해 두고 위치 속성만 갱신하므로
+       렌더 루프에서 지오메트리를 새로 만들지 않는다(AGENTS.md).
+       ========================================================================== */
+    // Shared rounded PVC profile: broad flat faces, softly rounded edges.
+    function travelCableJacket() {
+      if (!travelCableJacket.cached) {
+        const material=M.paint(TC_COLOR);
+        material.clearcoat=0; material.metalness=0; material.roughness=0.88;
+        travelCableJacket.cached=material;
+      }
+      return travelCableJacket.cached;
+    }
+    function travelCableProfile() {
+      if (travelCableProfile.cached) return travelCableProfile.cached;
+      const points=[], r=TC_T/2;
+      for(let side of [1,-1]) for(let j=0;j<=6;j++) {
+        const a=-Math.PI/2+j*Math.PI/6+(side===1?0:Math.PI);
+        points.push([side*(TC_W/2-r)+r*Math.cos(a),r*Math.sin(a)]);
+      }
+      travelCableProfile.cached=points;
+      return points;
+    }
+    function createTravelCableGeometry(count) {
+      const n=travelCableProfile().length, idx=[];
+      for(let i=0;i<count-1;i++) for(let k=0;k<n;k++) {
+        const a=i*n+k,b=i*n+(k+1)%n,c=b+n,d=a+n;
+        idx.push(a,b,c,a,c,d);
+      }
+      for(let k=1;k<n-1;k++) { idx.push(0,k+1,k); const a=(count-1)*n; idx.push(a,a+k,a+k+1); }
+      const g=new THREE.BufferGeometry();
+      g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(count*n*3),3));
+      g.setIndex(idx); return g;
+    }
+    function createTravelCableRun(points,parent,name) {
+      const pts=points.map(p=>new THREE.Vector3(...p)), curve=new THREE.CurvePath();
+      let last=pts[0];
+      for(let i=1;i<pts.length-1;i++) {
+        const p=pts[i], before=pts[i-1], after=pts[i+1];
+        const radius=Math.min(0.08,p.distanceTo(before)*0.25,p.distanceTo(after)*0.25);
+        const entry=p.clone().addScaledVector(before.clone().sub(p).normalize(),radius);
+        const exit=p.clone().addScaledVector(after.clone().sub(p).normalize(),radius);
+        curve.add(new THREE.LineCurve3(last,entry));
+        curve.add(new THREE.QuadraticBezierCurve3(entry,p,exit)); last=exit;
+      }
+      curve.add(new THREE.LineCurve3(last,pts[pts.length-1]));
+      const count=Math.max(160,Math.ceil(curve.getLength()/0.012)), profile=travelCableProfile(), geo=createTravelCableGeometry(count);
+      const positions=geo.attributes.position.array;
+      let tangent=curve.getTangent(0), width=new THREE.Vector3(1,0,0);
+      width.addScaledVector(tangent,-width.dot(tangent)).normalize();
+      for(let i=0;i<count;i++) {
+        const t=i/(count-1), next=curve.getTangent(t), p=curve.getPoint(t);
+        width.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(tangent,next)).normalize();
+        const normal=new THREE.Vector3().crossVectors(next,width).normalize(); tangent=next;
+        for(let k=0;k<profile.length;k++) {
+          const q=p.clone().addScaledVector(width,profile[k][0]).addScaledVector(normal,profile[k][1]);
+          q.toArray(positions,(i*profile.length+k)*3);
+        }
+      }
+      geo.computeVertexNormals();
+      const m=new THREE.Mesh(geo,travelCableJacket()); m.name=name; m.castShadow=true; parent.add(m); return m;
+    }
+    function addTravelCableBand(parent,x,y,z) {
+      const m=M.paint(0x121416), g=new THREE.Group(); g.name='cableBand';
+      m.clearcoat=0; m.roughness=0.9; m.metalness=0;
+      g.position.set(x,y,z); parent.add(g);
+      const h=0.004, t=0.0012;
+      for(const side of [-1,1]) {
+        createBox(TC_W+2*t,h,t,m,0,0,side*(TC_T+t)/2,g);
+        createBox(t,h,TC_T,m,side*(TC_W+t)/2,0,0,g);
+      }
+      // Flush-cut locking head, no pointed tail.
+      createBox(0.006,0.006,0.003,m,TC_W/2-0.004,0,TC_T/2+0.002,g);
+      return g;
+    }
+    function addTravelCableGrip(parent,x,y,z,name) {
+      const g=new THREE.Group(); g.name=name; g.position.set(x,y,z); parent.add(g);
+      const shell=M.ss(0x50585c), rubber=M.paint(0x171a1c);
+      createBox(TC_W+0.016,0.075,TC_T+0.014,shell,0,0,0,g);
+      createBox(TC_W,0.07,0.003,rubber,0,0,-TC_T/2-0.008,g);
+      for(const sx of [-1,1]) {
+        createCylinder(0.003,0.003,0.004,shell,sx*(TC_W/2+0.004),0,-TC_T/2-0.01,g).rotation.x=Math.PI/2;
+      }
+      return g;
+    }
+
+    const TC_SEGS = 240; // 곡선 샘플 수 (고정)
+
+    function buildTravelCable() {
+      travelCableGrp = new THREE.Group();
+      travelCableGrp.name = 'travelCableGrp';
+
+      const brkMat  = M.ss(0x98a1ab);
+      const boltMat = M.ss(0xb8bec6);
+      const clipMat = M.gold();
+      const tcJacket = travelCableJacket();
+
+      /* ── B 지점과 해치 케이블 행거 높이 역산 ──
+         carY − CAR_H/2 = (cwtY0 − (carY − carY0)) − CWT_H/2  →  carY 에 대해 풀면 다음. */
+      const carY0 = carGrp.position.y, cwtY0 = cwtGrp.position.y;
+      const carYb = (cwtY0 + carY0 + (S.CAR_H - S.CWT_H) / 2) / 2;
+      const hangerY = carYb - S.CAR_H / 2 + TC_HANGER_UP;
+
+      /* ── 총 길이 역산 (최하층 기준) ── */
+      const pitTopY = Y0 + 0.02;                       // 피트 마감 바닥 상면 (buildPitFoundation)
+      const ycBottom = pitTopY + TC_PIT_CLEAR + TC_LOOP_R;
+      const carEndY0 = FLOOR_Y[0] + S.CAR_H / 2 + TC_CAR_HANGER_LY;
+      const totalLen = (hangerY - ycBottom) + Math.PI * TC_LOOP_R + (carEndY0 - ycBottom);
+
+      // 작은 고정 행거만 벽에 취부. 레일에서 길게 나온 드럼/암은 사용하지 않는다.
+      const hangerGrp=new THREE.Group(); hangerGrp.name='travelCableHanger';
+      travelCableGrp.add(hangerGrp);
+      const wallX=-S.SHAFT_W/2;
+      createBox(0.006,0.15,0.11,brkMat,wallX+0.003,hangerY+0.055,TC_FIX_Z,hangerGrp);
+      createBox(Math.abs(TC_X-wallX),0.008,0.09,brkMat,(wallX+TC_X)/2,hangerY+0.11,TC_FIX_Z,hangerGrp);
+      addTravelCableGrip(hangerGrp,TC_X,hangerY+0.045,TC_FIX_Z,'shaftCableGrip');
+      const upTop=CEIL_RUN_Y, mrCableY=Y0+TOTAL_H+0.07;
+      createTravelCableRun([
+        [TC_X,hangerY,TC_FIX_Z],[TC_X,hangerY+0.14,TC_FIX_Z],
+        [TC_WALL_X,hangerY+0.45,TC_FIX_Z],
+        [TC_WALL_X,upTop-0.20,TC_FIX_Z],
+        [TC_WALL_X,upTop,HARNESS_Z-0.12],
+        [MR_CABLE_HOLE_X,upTop+0.04,HARNESS_Z],
+        [MR_CABLE_HOLE_X,mrCableY-0.06,HARNESS_Z],
+        [MR_CABLE_HOLE_X-0.16,mrCableY,HARNESS_Z]
+      ],travelCableGrp,'fixedCableRun');
+      for(let y=hangerY+0.65;y<upTop-0.30;y+=0.65){
+        addTravelCableBand(travelCableGrp,TC_WALL_X,y,TC_FIX_Z);
+        createBox(0.018,0.018,0.014,brkMat,wallX+0.012,y,TC_FIX_Z,travelCableGrp);
+      }
+
+      /* ── 편평 케이블 리본 메시 (단면 TC_W × TC_T, 샘플 TC_SEGS 고정) ── */
+      const geo = createTravelCableGeometry(TC_SEGS);
+      const ribbon = new THREE.Mesh(geo, tcJacket);
+      ribbon.name = 'travelCableRibbon';
+      ribbon.castShadow = true; ribbon.receiveShadow = true;
+      ribbon.frustumCulled = false;
+      travelCableGrp.add(ribbon);
+
+      travelCable.ready = true;
+      travelCable.hangerY = hangerY;
+      travelCable.bY = carYb - S.CAR_H / 2;   // B 지점(카 바닥) 높이 — 검증용
+      travelCable.totalLen = totalLen;
+      travelCable.ribbon = ribbon;
+      travelCable.pitTopY = pitTopY;
+
+      scene.add(travelCableGrp);
+      refreshTravelCable();
+    }
+
+    /* 카가 움직일 때마다 U 곡면 중심 높이를 다시 풀고 리본 정점을 갱신한다.
+       길이 보존:  (yTop − yc) + πR + (yCar − yc) = totalLen  →  yc = (yTop + yCar + πR − L) / 2 */
+    function refreshTravelCable() {
+      if (!travelCable.ready) return;
+      const R = TC_LOOP_R;
+      const yTop = travelCable.hangerY;
+      const yCar = carGrp.position.y + TC_CAR_HANGER_LY;
+      let yc = (yTop + yCar + Math.PI * R - travelCable.totalLen) / 2;
+      // 안전 클램프 — 피트 바닥을 뚫거나 고정단 위로 올라가지 않게 한다
+      yc = Math.max(travelCable.pitTopY + R + 0.02, Math.min(yc, yTop - 0.02));
+
+      const zc = (TC_FIX_Z + TC_CAR_Z) / 2;
+      const straightTop = yTop - yc;
+      const arcLen = Math.PI * R;
+      const straightCar = yCar - yc;
+      const total = straightTop + arcLen + straightCar;
+
+      const pos = travelCable.ribbon.geometry.attributes.position;
+      const arr = pos.array;
+      const profile = travelCableProfile();
+      for (let i = 0; i < TC_SEGS; i++) {
+        const t = total * i / (TC_SEGS - 1);
+        let y, z, dz, dy;
+        if (t <= straightTop) {                      // 고정단 하강
+          z = TC_FIX_Z; y = yTop - t; dz = 0; dy = -1;
+        } else if (t <= straightTop + arcLen) {      // U 곡면
+          const phi = (t - straightTop) / R;
+          z = zc + R * Math.cos(phi); y = yc - R * Math.sin(phi);
+          dz = -Math.sin(phi); dy = -Math.cos(phi);
+        } else {                                     // 카측 상승
+          z = TC_CAR_Z; y = yc + (t - straightTop - arcLen); dz = 0; dy = 1;
+        }
+        // 진행방향에 수직인 단면 법선 (ZY 평면) — 폭은 항상 월드 X 축이다
+        const nz = -dy, ny = dz;
+        for(let k=0;k<profile.length;k++) {
+          const [w,h]=profile[k], o=(i*profile.length+k)*3;
+          arr[o]=TC_X+w; arr[o+1]=y+ny*h; arr[o+2]=z+nz*h;
+        }
+      }
+      pos.needsUpdate = true;
+      travelCable.ribbon.geometry.computeVertexNormals();
+      travelCable.ribbon.geometry.computeBoundingBox();
+      travelCable.loopBottomY = yc - R;
+    }
+
+    /* 카 캠 가닥 3본이 자기 레인 스위치만 밟는 상태 갱신 (MR_설계 16.8).
+       스위치 롤러축 Y 가 해당 종류 가닥 범위 안이면 눌린다. 양 끝 FLS_LEAD 는 리드인.
+       운행 FSM 은 건드리지 않는다. elevatorState 플래그만 반영한다. */
+    function refreshTerminalDevices() {
+      const cam = terminalDevices.cam;
+      if (!cam || !terminalDevices.switches.length) return;
+      const active = { slowdown: false, limit: false, final: false };
+      terminalDevices.switches.forEach(sw => {
+        const vane = cam.vanes[sw.kind];
+        const camBot = carGrp.position.y + vane.botLY;
+        const camTop = carGrp.position.y + vane.topLY;
+        let r = 0;
+        if (sw.y >= camBot && sw.y <= camTop) {
+          r = Math.min(1, (sw.y - camBot) / cam.lead, (camTop - sw.y) / cam.lead);
+        }
+        sw.ratio = r;
+        sw.lever.rotation.z = sw.dir * FLS_TRIP_ANGLE * r;
+        if (r > 0.98) active[sw.kind] = true;
+      });
+      elevatorState.slowdownActive   = active.slowdown;
+      elevatorState.limitActive      = active.limit;
+      elevatorState.finalLimitActive = active.final;
     }
 
     // 와이어로프 12mm — 꼬임 무늬 텍스처 (공유)
@@ -1605,6 +1953,11 @@
         if (r.line.geometry) r.line.geometry.dispose();
         r.line.geometry = geo;
       });
+      // 카 위치가 바뀌면 이동케이블 곡면과 종단 리미트 레버도 같이 따라간다.
+      // (운행·점검·과속 낙하 모든 경로가 refreshRopes 를 거치므로 호출점은 여기 하나다)
+      refreshTravelCable();
+      refreshTerminalDevices();
+      refreshLevelingSensors();
     }
 
     // 실사 와이어로프 2구간(조속기휠→클램프, 클램프→인장시브)의 위치·길이·기울기만 갱신한다.

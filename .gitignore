@@ -16,11 +16,17 @@ MISC-SETTINGS-MEMO.md
 # AI·개발용 임시 스크린샷·PDF 추출·캡처 스크립트·작업 폴더
 .shot-*.png
 .shot-*/
+.shot-*.json
 .vid_*.jpg
 .rv-*.png
 .pdf-*.png
 .claude-tmp*
 .claude-tmp-*/
+.temp_verify/
+scratch/
+scratch_p*.png
+video_frame_*.png
+yt_info.json
 
 # 로컬 참고 사진·캡처 폴더와 루트 미사용 이미지 (앱 미로드)
 temporary/

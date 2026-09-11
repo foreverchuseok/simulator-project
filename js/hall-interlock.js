@@ -62,12 +62,31 @@ const HallInterlock = (() => {
       tri.group.position.x += shift;
       tri.triX += shift;
       tri.barX = localBarX;
-      state.rodLength = g.caseCY + data.link.y - tri.pinY + 0.016;
       state.a = new THREE.Vector3();
       state.b = new THREE.Vector3();
       state.d = new THREE.Vector3();
       state.bottom = new THREE.Vector3();
       state.q = new THREE.Quaternion();
+      // Cam stays on the cylinder; the drive pin reaches the GLB link plane.
+      h.right.updateWorldMatrix(true, true);
+      moving.updateWorldMatrix(true, true);
+      tri.camPivot.updateWorldMatrix(true);
+      state.linkPin.getWorldPosition(state.a);
+      const dz = state.a.z - tri.camPivot.getWorldPosition(state.b).z;
+      tri.drivePin.position.set(tri.camLen, 0, dz);
+      if (tri.pinMesh) {
+        const pinLen = Math.abs(dz) + 0.006;
+        tri.pinMesh.position.set(tri.camLen, 0, dz * 0.5);
+        tri.pinMesh.scale.y = pinLen / tri.pinRest;
+        const capDir = dz === 0 ? -1 : Math.sign(dz);
+        tri.pinCap.position.set(tri.camLen, 0, dz + capDir * 0.002);
+      }
+      tri.drivePin.updateWorldMatrix(true);
+      state.linkPin.getWorldPosition(state.a);
+      tri.drivePin.getWorldPosition(state.b);
+      moving.worldToLocal(state.a);
+      moving.worldToLocal(state.b);
+      state.rodLength = Math.hypot(state.a.x - state.b.x, state.a.y - state.b.y);
       for (const assembly of [fixed, moving, opposite]) assembly.traverse(o => {
         if (!o.isMesh) return;
         o.castShadow = true; o.receiveShadow = true;
@@ -106,15 +125,15 @@ const HallInterlock = (() => {
     const tri = h.right.userData.triKey;
     tri.drivePin.getWorldPosition(b);
     s.moving.worldToLocal(b);
-    // A rigid flat bar: its lower pin slides in a real slot as the hook rises.
+    // Rigid bar: slot origin sits on the cam pin; stock keeps a fixed length.
     const dx = a.x - b.x;
     const bottom = s.bottom.set(b.x, a.y - Math.sqrt(Math.max(0, s.rodLength ** 2 - dx ** 2)), a.z);
     d.copy(a).sub(bottom).normalize();
     s.q.setFromUnitVectors(up, d);
-    s.foot.position.copy(bottom).addScaledVector(d, 0.020);
+    s.foot.position.copy(bottom);
     s.foot.quaternion.copy(s.q);
-    const stockLen = s.rodLength - 0.040;
-    s.stock.position.copy(bottom).addScaledVector(d, 0.040 + stockLen / 2);
+    const stockLen = Math.max(0.01, s.rodLength - 0.020);
+    s.stock.position.copy(bottom).addScaledVector(d, 0.020 + stockLen / 2);
     s.stock.quaternion.copy(s.q);
     s.stock.scale.y = stockLen;
   }

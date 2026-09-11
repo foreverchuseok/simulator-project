@@ -176,6 +176,7 @@
             // 인터록 재잠금: 도어 닫힘 정위치에서 후크 낙하 체결 및 접점 브리지 도킹
             if (h.hook) {
               gsap.killTweensOf(h.hook.rotation);
+              if (h.keyRatio) setEmergencyKey(curFloor, 0);
               gsap.to(h.hook.rotation, {
                 z: 0, duration: 0.20, ease: 'power1.in',
                 onComplete: () => { if (cb) cb(); }
@@ -750,6 +751,52 @@
       };
       Object.keys(camViews).forEach(id => {
         document.getElementById(id).addEventListener('click', camViews[id]);
+      });
+
+      // Click the landing triangle key: turn the cam, lift the latch, open that floor.
+      const keyRay = new THREE.Raycaster();
+      const keyNdc = new THREE.Vector2();
+      let keyPtr = null;
+      const canvas = renderer.domElement;
+      canvas.addEventListener('pointerdown', e => {
+        if (e.button !== 0) return;
+        keyPtr = { x: e.clientX, y: e.clientY };
+      });
+      canvas.addEventListener('pointerup', e => {
+        if (e.button !== 0 || !keyPtr) return;
+        const dragged = Math.hypot(e.clientX - keyPtr.x, e.clientY - keyPtr.y) > 6;
+        keyPtr = null;
+        if (dragged || moving) return;
+        const rect = canvas.getBoundingClientRect();
+        keyNdc.set(
+          ((e.clientX - rect.left) / rect.width) * 2 - 1,
+          -((e.clientY - rect.top) / rect.height) * 2 + 1
+        );
+        keyRay.setFromCamera(keyNdc, camera);
+        const groups = hatchDoors.map(h => h.right.userData.triKey?.group).filter(Boolean);
+        const hit = keyRay.intersectObjects(groups, true)[0];
+        if (!hit) return;
+        let grp = hit.object;
+        while (grp && grp.name !== 'EmergencyTriangleKey') grp = grp.parent;
+        const fIdx = hatchDoors.findIndex(h => h.right.userData.triKey?.group === grp);
+        if (fIdx < 0) return;
+        const h = hatchDoors[fIdx];
+        if (!h.interlock?.ready) return;
+        const unlocking = !(h.keyRatio > 0.5);
+        if (!h.keyTween) h.keyTween = { r: 0 };
+        h.keyTween.r = h.keyRatio || 0;
+        gsap.killTweensOf(h.keyTween);
+        gsap.to(h.keyTween, {
+          r: unlocking ? 1 : 0,
+          duration: 0.4,
+          ease: 'power1.inOut',
+          onUpdate: () => setEmergencyKey(fIdx, h.keyTween.r),
+          onComplete: () => {
+            setEmergencyKey(fIdx, unlocking ? 1 : 0);
+            if (unlocking && fIdx === curFloor && !doorOpen) openDoors();
+            else if (!unlocking && fIdx === curFloor && doorOpen) closeDoors();
+          }
+        });
       });
     }
 

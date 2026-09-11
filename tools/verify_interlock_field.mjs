@@ -44,6 +44,8 @@ try{
       return {spec:h.latch,lip:wp(lip),pocket:wp(pocket),fixed:wp(s.fixed),opposite:wp(s.opposite),
         moving:wp(s.moving),springLength:s.spring.scale.y*s.springRest,
         stockLength:s.stock.scale.y,angle:h.hook.rotation.z,
+        pinSlot:h.right.userData.triKey.drivePin.getWorldPosition(new THREE.Vector3())
+          .distanceTo(s.foot.getWorldPosition(new THREE.Vector3())),
         colors:s.opposite.getObjectByName('hallLatchBar').geometry.hasAttribute('color')};
     });
   };
@@ -52,7 +54,7 @@ try{
     assert.ok(Math.abs(c.pocket[1]-c.lip[1]-0.008)<1e-6,'Closed tooth engagement');
     assert.ok(Math.abs(c.pocket[2]-c.lip[2])<1e-6,'Latch plane');
     assert.equal(c.spec.keeperParent,'oppositeDoor');
-    assert.ok(c.colors,'Chromate vertex colours exported');
+    assert.ok(c.pinSlot<0.008,'Cam pin sits in the link-foot slot');
   }
   const aim=async(offset,detail=false)=>{
     await page.evaluate(({offset,detail})=>{
@@ -68,6 +70,13 @@ try{
   await page.screenshot({path:path.join(out,'closed-overview.png')});
   await aim([0.02,0.075,-0.15],true);
   await page.screenshot({path:path.join(out,'closed-latch.png')});
+  await page.evaluate(()=>{
+    const p=hatchDoors[1].right.userData.triKey.drivePin.getWorldPosition(new THREE.Vector3());
+    camera.position.copy(p).add(new THREE.Vector3(-0.10,0.05,-0.22));
+    controls.target.copy(p);controls.update();
+  });
+  await page.waitForTimeout(250);
+  await page.screenshot({path:path.join(out,'key-link.png')});
   await page.evaluate(()=>{
     for(const h of hatchDoors) h.hook.rotation.z=-h.latch.liftRad;
   });
