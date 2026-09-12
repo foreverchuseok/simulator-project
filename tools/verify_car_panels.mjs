@@ -31,9 +31,20 @@ try {
   check('11 panel sections',Array.from({length:11},(_,i)=>!!p.getObjectByName('carPanel_'+(i+1))).every(Boolean));
   const opb=scene.getObjectByName('carOPB'), load=scene.getObjectByName('carOverloadAssembly');
   check('four floor OPB / display 4',opb.userData.displayFloor===4&&[1,2,3,4].every(f=>opb.getObjectByName('opbFloorButton_'+f))&&!opb.getObjectByName('opbFloorButton_5'));
-  check('load switches 50 and 110', [50,110].every(t=>scene.getObjectByName('carLoadSwitch_'+t)?.userData.thresholdPercent===t));
-  // 상부 체결 볼트는 플랫폼 채널 안으로 들어가며 스위치 몸체는 그 아래에 둔다.
-  check('overload below platform',bounds(load).max.y<carGrp.position.y-S.CAR_H/2&&[50,110].every(t=>bounds(scene.getObjectByName('carLoadSwitch_'+t).getObjectByName('loadSwitchBody')).max.y<carGrp.position.y-S.CAR_H/2-0.20));
+  // 224~226p A 타입: 포텐셜미터 2개가 플랫폼 측면 채널 밑, 플랭크 양면에 대각으로 놓인다.
+  const sensors=load.children.filter(o=>o.userData.type==='car-load-potentiometer');
+  const pm1=scene.getObjectByName('carLoadSensor_PM1'), pm2=scene.getObjectByName('carLoadSensor_PM2');
+  const local=o=>{const c=bounds(o).getCenter(new THREE.Vector3());return carGrp.worldToLocal(c);};
+  check('two potentiometers PM1 / PM2, A type',sensors.length===2&&load.userData.sensorType==='potentiometer'&&load.userData.mountType==='A'&&pm1&&pm2&&!scene.getObjectByName('carLoadSwitch_110'));
+  check('diagonal: PM1 left-front, PM2 right-rear',local(pm1).x<0&&local(pm1).z>0.04&&local(pm2).x>0&&local(pm2).z<0.04);
+  check('sensors under platform side channels',[pm1,pm2].every(pm=>Math.abs(Math.abs(local(pm.getObjectByName('loadSensorBody')).x)-(S.CAR_W/2-0.02))<1e-6));
+  const channelBottom=carGrp.position.y-S.CAR_H/2-0.085;
+  check('plunger tops meet channel bottom, press 2~4mm',[pm1,pm2].every(pm=>Math.abs(bounds(pm.getObjectByName('loadSensorPlunger')).max.y-channelBottom)<1e-6&&pm.userData.pressMm>=2&&pm.userData.pressMm<=4));
+  check('sensors on plank web faces',[pm1,pm2].every(pm=>{const c=local(pm.getObjectByName('loadSensorBody'));return Math.abs(Math.abs(c.z-0.04)-0.078)<1e-6;}));
+  const plankBottom=carGrp.position.y-S.CAR_H/2-0.24;
+  check('sensor assemblies between plank bottom and platform',bounds(pm1).min.y>plankBottom&&bounds(pm2).min.y>plankBottom&&bounds(pm1).max.y<=channelBottom+1e-6&&bounds(pm2).max.y<=channelBottom+1e-6);
+  const harness=scene.getObjectByName('loadSensorHarness');
+  check('sensor harness reaches top box',harness&&bounds(harness).max.y>bounds(scene.getObjectByName('carTopBox')).min.y-0.01);
   check('top box within car width',Math.abs(bounds(scene.getObjectByName('carTopBox')).min.x)<S.CAR_W/2);
   const wcop=scene.getObjectByName('carAccessibleOPB');
   const wcButtons=wcop.children.filter(o=>o.userData.type==='accessible-cop-button');
@@ -47,7 +58,7 @@ try {
   carGrp.position.y=y0;cwtGrp.position.y=c0;refreshRopes();
   return checks;
  });
- for(const view of (process.argv.includes('--accessible')?['accessible']:process.argv.includes('--controls')?['opb','top-box','overload','accessible']:['front','rear','context','opb','top-box','overload','accessible'])){
+ for(const view of (process.argv.includes('--load')?['overload','pm1','pm2','load-wiring']:process.argv.includes('--accessible')?['accessible']:process.argv.includes('--controls')?['opb','top-box','overload','accessible']:['front','rear','context','opb','top-box','overload','accessible'])){
   await page.evaluate(view=>{
    scene.children.forEach(o=>{if(o.userData.panelQaVisible===undefined)o.userData.panelQaVisible=o.visible;o.visible=o.userData.panelQaVisible;});
    if(view!=='context')scene.children.forEach(o=>{if(o!==carGrp&&!o.isLight)o.visible=false;});
@@ -57,7 +68,10 @@ try {
    controls.target.set(0,y+0.25,z);
    if(view==='opb') {camera.position.set(0.70,y+0.06,z-0.90);controls.target.set(0.95,y-0.07,z+S.CAR_D/2-0.06);}
    if(view==='top-box') {camera.position.set(1.7,y+2.8,z+2.4);controls.target.set(-0.75,y+1.7,z+0.70);}
-   if(view==='overload') {camera.position.set(0.65,y-S.CAR_H/2-0.66,z+1.0);controls.target.set(0,y-S.CAR_H/2-0.20,z+0.19);}
+   if(view==='overload') {camera.position.set(1.4,y-S.CAR_H/2-1.1,z+4.2);controls.target.set(0,y-S.CAR_H/2-0.16,z+0.05);}
+   if(view==='pm1') {camera.position.set(-0.72,y-S.CAR_H/2-0.42,z+0.78);controls.target.set(-1.18,y-S.CAR_H/2-0.12,z+0.12);}
+   if(view==='pm2') {camera.position.set(0.72,y-S.CAR_H/2-0.42,z-0.78);controls.target.set(1.18,y-S.CAR_H/2-0.12,z-0.04);}
+   if(view==='load-wiring') {camera.position.set(-3.4,y-S.CAR_H/2-1.6,z+3.2);controls.target.set(-0.8,y-S.CAR_H/2+0.3,z+0.3);}
    if(view==='accessible') {camera.position.set(0.15,y-0.05,z+0.75);controls.target.set(-1.12,y-S.CAR_H/2+0.85,z+0.25);}
    controls.update();
   },view);

@@ -1,4 +1,9 @@
 // 엘리베이터 카, 도어 스텁, 균형추, 로프 등 동적 객체 생성 함수를 정의한다.
+    /* 안전기 작동 샤프트의 트립 각 (rotation.x). 이 값이 트립 진행률의 분모다.
+       ui.js engageDeviceStop 과 refreshCarSafetyLinkage 가 같이 읽는 단일 원본이므로
+       한쪽만 바꾸면 상부 크로스헤드 연동부가 웨지와 어긋난다. */
+    const SG_TRIP_ROT = -0.38;
+
     /* ==========================================================================
        카 재공사 (2026-08-17): 형상은 화면에서 제거.
        원본: js/archive/car.js   안내: docs/CAR-REBUILD.md
@@ -64,8 +69,12 @@
         createBox(0.06,  stileH, 0.014, frmMat, fxc, stileMidY, railBladeZ - 0.073, carFrameGrp); // 전면 플랜지
         createBox(0.06,  stileH, 0.014, frmMat, fxc, stileMidY, railBladeZ + 0.073, carFrameGrp); // 후면 플랜지
 
-        // 상부 크로스헤드 체결 거싯 플레이트 & M16 볼트 (도면 92p)
-        createBox(0.016, 0.22, 0.19, frmDkMat, sx - sign * 0.008, chY, railBladeZ, carFrameGrp);
+        /* 상부 크로스헤드 체결 거싯 플레이트 & M16 볼트 (도면 92p)
+           ★Z 깊이 0.12 — 크로스헤드 전면 웹(Z 0.083~0.097)과 후면 웹을 물리는 체결판이라
+             이만큼이면 충분하다. 예전 0.19 는 앞면이 Z 0.135 까지 튀어나와,
+             §4-B 크로스헤드 연동부가 이걸 피하려고 빔에서 55mm 나 떠야 했다
+             (사용자 지적 "우리 건 이게 떨어져있지"). 여기를 줄여야 연동부가 빔에 붙는다. */
+        createBox(0.016, 0.22, 0.12, frmDkMat, sx - sign * 0.008, chY, railBladeZ, carFrameGrp);
         [-0.05, 0.05].forEach(dy => {
           [-0.06, 0, 0.06].forEach(dz => {
             const b = createCylinder(0.012, 0.012, 0.024, boltMat, sx - sign * 0.018, chY + dy, railBladeZ + dz, carFrameGrp);
@@ -195,30 +204,17 @@
 
       /* =========================================================================
          4. 하부 세이프티 기어 및 조속기 연동 (Safety Gear GLB 로드 - 도면 91p, 96~98p)
-         assets/safety_gear.glb
+         assets/safety_gear.glb — 현대 SAFETY (CAR) 스타일 (tools/build_safety_glb.mjs).
+         민트그레이 하우징·골드 트립 레버·복귀 스프링 로드·Honeywell 안전 스위치를 포함하며
+         하부 가이드슈는 models/gltf/car_guide_shoe.glb 가 담당한다 (GLB 안에 슈 없음).
          ========================================================================= */
       const safetyGearGrp = new THREE.Group();
+      safetyGearGrp.name = 'carSafetyGear';
       carGrp.add(safetyGearGrp);
 
       new THREE.GLTFLoader().load('assets/safety_gear.glb', (gltf) => {
         const g = gltf.scene;
         g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-        // Hide only the four unnamed legacy shoe boxes, not safety-gear mechanisms.
-        // Dimensions/centres mirror tools/build_safety_glb.mjs; retain the source GLB.
-        g.updateMatrixWorld(true);
-        const legacyShoes = [];
-        const box = new THREE.Box3(), size = new THREE.Vector3(), center = new THREE.Vector3();
-        g.traverse(o => {
-          if (!o.isMesh) return;
-          box.setFromObject(o).getSize(size);
-          box.getCenter(center);
-          const near = (a, b) => Math.abs(a - b) < 1e-5;
-          const body = near(size.x, 0.13) && near(size.y, 0.075) && near(size.z, 0.10) && near(Math.abs(center.x), stileX);
-          const liner = near(size.x, 0.04) && near(size.y, 0.075) && near(size.z, 0.05) && near(Math.abs(center.x), stileX - 0.04);
-          if ((body || liner) && near(center.y, plankY - 0.175) && near(center.z, railBladeZ)) legacyShoes.push(o);
-        });
-        if (legacyShoes.length === 4) legacyShoes.forEach(o => { o.visible = false; o.userData.legacyGuideShoe = true; });
-        else console.warn('[safety_gear.glb] Legacy guide-shoe geometry contract changed:', legacyShoes.length);
         safetyGearGrp.add(g);
         const pick = n => g.getObjectByName(n);
         carGrp.userData.safetyGear = {
@@ -226,24 +222,458 @@
           liftL:   pick('liftL'),
           liftR:   pick('liftR'),
           springs: ['springL0', 'springL1', 'springR0', 'springR1'].map(pick).filter(Boolean),
-          wedges:  ['wedgeL0', 'wedgeL1', 'wedgeR0', 'wedgeR1'].map(pick).filter(Boolean),
-          clamp:   pick('clamp')
+          wedges:  ['wedgeL0', 'wedgeL1', 'wedgeR0', 'wedgeR1'].map(pick).filter(Boolean)
+          /* clamp 노드는 없다(2026-09-12). 조속기 로프는 실물처럼 카 상부 크로스헤드
+             트립 레버의 후방 크랭크가 문다 — §4-B `safetyGovCrank`, carGrp.userData.govClamp. */
         };
         carGrp.userData.safetyGear.wedges.forEach(w => { w.userData.z0 = w.position.z; });
         if (typeof refreshGovernorRope === 'function') refreshGovernorRope();
       }, undefined, (err) => console.error('[safety_gear.glb] 로드 실패:', err));
 
-      // 조속기 로프 카 상부 고정 브라켓 (우측 톱빔 상단 홀 관통 - 도면 96p-1)
-      createBox(0.06, 0.05, 0.12, frmMat, stileX + 0.07, chY + chH / 2 + 0.025, -0.15, carFrameGrp);
-      createCylinder(0.014, 0.014, 0.06, silvMat, stileX + 0.07, chY + chH / 2 + 0.03, -0.15, carFrameGrp);
+      /* 조속기 로프 가이드 브라켓 (도면 96p-1) — 로프 수직선 위 톱빔 상단.
+         예전에는 하부 플랭크에 풀 바·심블·와이어 클립을 두어 로프가 카 하부에서
+         끝나는 것처럼 보였는데, 실제 연결점은 크로스헤드 트립 레버다(§4-B).
+         모순되는 하부 철물은 걷어내고 로프가 지나가는 가이드만 남긴다. */
+      createBox(0.05, 0.04, 0.10, frmMat, GOV_TENS_X - 0.04, chY + chH / 2 + 0.020, GOV_CLAMP_Z - CAR_CTR_Z, carFrameGrp);
+      createCylinder(0.013, 0.013, 0.05, silvMat, GOV_TENS_X, chY + chH / 2 + 0.025, GOV_CLAMP_Z - CAR_CTR_Z, carFrameGrp);
 
-      // 액츄에이터 레버 풀 바 (Actuator Lever Pull Bar - 도면 96p-2)
-      createBox(0.015, 0.40, 0.025, silvMat, stileX + 0.07, plankY + 0.12, -0.15, carFrameGrp);
-      // 조속기 로프 연결 심블 & 와이어 클립 (도면 98p)
-      createCylinder(0.016, 0.016, 0.035, goldMat, stileX + 0.07, plankY - 0.02, -0.15, carFrameGrp);
-      [-0.05, -0.08].forEach(dy => {
-        createBox(0.022, 0.014, 0.018, silvMat, stileX + 0.07, plankY + dy, -0.15, carFrameGrp);
+      /* =========================================================================
+         4-B. 카 상부 크로스헤드 비상정지 연동부
+              (장죽 · 흑색 복귀 스프링 · 골드 캠 플레이트 · Honeywell 리미트 스위치
+               · 조속기 로프 직결 토크 튜브 + 후방 크랭크)
+         참고: docs/safety_switch_device/frames.md, temporary/safety_switch_frames/,
+               사용자 육성 지시(2026-09-12). 제작도면 복제가 아닌 교육용 재구성이다.
+
+         ★좌우 반전 계약 — 영상 현장은 좌측(-X) 거버너지만 우리 승강로는 조속기·피트
+           인장추가 우측(GOV_TENS_X = +1.4275)이다. 조작 뭉치(스프링·너트·클레비스·캠·
+           스위치)는 전부 우측(+X). 스위치 글랜드는 카 중심(-X), 롤러 레버는 외측(+X).
+
+         ★기구학 — 아래 상수에서 전부 파생한다. 각도·행정을 딴 데 또 적지 않는다.
+           · 양쪽 트립 레버는 거울상이 아니라 같은 부호로 rotation.z 를 돈다.
+             장죽 하나가 두 레버를 같은 각도로 끌어올려야 하기 때문이다(frames.md 06).
+           · 클레비스 핀은 회전축 "위"(로컬 0,+R). 레버가 + 로 돌면 핀이 -X 로 가므로
+             장죽은 카 중심 쪽으로 끌려오고, 그래야 브라켓↔너트 사이 스프링이 압축된다.
+           · 대기 -SL_HALF ↔ 트립 +SL_HALF 대칭이라 핀 Y 가 양 끝에서 같다
+             → 장죽은 순수 X 이동(2·R·sin11° ≈ 22mm)만 하고 위아래로 튀지 않는다.
+             같은 트릭을 후방 크랭크에도 써서 로프 클램프의 X 를 양 끝에서 일치시킨다.
+
+         ★Z 레이어 (사용자 지적 "우리 건 이게 떨어져있지" 교정)
+             빔 전면 웹 앞면        0.097
+             스타일 전면 플랜지 앞면 0.120
+             상부 거싯 앞면          0.100  ← 깊이를 0.19→0.12 로 줄여 확보한 여유
+             가동부 평면 SL_ROD_Z   0.135  ← 웹면에서 38mm. 예전 0.152(55mm)는 난간처럼 떴다.
+
+         ★조속기 로프 직결 — Z 축 토크 튜브 + 후방 크랭크
+           레버(Z≈+0.13)와 로프 평면(Z=-0.37)은 0.5m 떨어져 있다. 빔 끝을 도는 절곡
+           링크는 레일 Z 밴드를 가로질러 불가하고, 후면에 X축 로커를 두는 방식은
+           전면 레버가 Z축 회전이라 Z 방향 변위를 2차항(<1mm)밖에 못 만들어 불가하다.
+           그래서 회전축을 그대로 튜브로 연장해 전·후 웹을 관통시키고 후단에 크랭크를
+           물린다. Z축 회전은 점의 Z 를 보존하므로 클램프가 로프 평면에 정확히 머문다.
+           ※ engageDeviceStop 에서 카는 250mm 낙하하는데 클램프는 카 상대 83mm 만
+             올라간다. 엄밀히는 로프가 잡혔으니 월드 Y 가 고정이어야 하지만 그러려면
+             크랭크 반경이 0.65m 여야 해서 불가능하다. "로프가 클램프를 미끄러진다"로
+             본 근사이며, 예전(하부 샤프트 클램프)보다는 오차가 줄었다.
+         ========================================================================= */
+      const slGrp = new THREE.Group();
+      slGrp.name = 'carSafetyLinkage';
+      carFrameGrp.add(slGrp);
+
+      // ── 재질 (기존 M.* 팔레트) ──
+      const swBlueMat = M.paint(0x17457a);  // Honeywell SZL-VL-S 청색 수지 하우징
+      const swLabMat  = M.paint(0xeef1f4);  // 전면 규격/회로도 백색 라벨
+      const glandMat  = M.paint(0xdcdcd6);  // 회색 방수 케이블 글랜드
+      const cableMat  = M.paint(0x14171a);  // 안전회로 제어선
+      /* 흑색 압축 스프링 — M.paint 는 clearcoat 0.8 이라 밝은 장면에서 회청색으로 뜬다.
+         현장 부품은 흑색이므로 광택이 낮은 M.ss 의 어두운 색으로 잡는다. */
+      const blkSprMat = M.ss(0x1c2024);
+
+      /* ── 경계 원본 (새 하드코딩 금지 — 전부 기존 프레임 상수에서 파생) ── */
+      const SL_WEB_Z   = chFwdZ + 0.027;                 // 0.097 전면 C채널 웹 앞면
+      const SL_WEB_TOP = chY + chH / 2;                  // 1.6075 빔 상단 = 황색 가드 밑면
+      const SL_WEB_BOT = chY - chH / 2;                  // 1.4675 빔 하단
+
+      // ── 치수 원본 ──
+      const SL_PLATE_T = 0.007;                          // 캠/레버 강판 두께 7mm
+      const SL_ROD_R   = 0.007;                          // 장죽 Ø14 환봉
+      /* 장죽 축 Y — 빔 상단 모서리에서 20mm 아래. 더 올리면 스프링 외경(Ø32) 윗면이
+         황색 베이스 가드 밑면(SL_WEB_TOP)을 파고든다. */
+      const SL_ROD_Y   = SL_WEB_TOP - 0.020;             // 1.5875
+      /* 클레비스가 스타일 전면 플랜지(앞면 0.120) 위를 지나므로, 포크 바깥면이 그보다
+         앞서야 한다. 포크 반폭 0.012 → 평면 0.135 에서 바깥면 0.123 (3mm 여유). */
+      const SL_ROD_Z   = chFwdZ + 0.065;                 // 0.135 (웹면에서 38mm)
+      const SL_PIN_R   = 0.058;                          // 회전축 → 클레비스 핀 (핀이 축 위)
+      const SL_HALF    = 11 * Math.PI / 180;             // 대기 -11° ↔ 트립 +11° (총 22°)
+      const SL_TRAVEL  = 2 * SL_PIN_R * Math.sin(SL_HALF);            // 0.0221 장죽 행정
+      const SL_PIV_Y   = SL_ROD_Y - SL_PIN_R * Math.cos(SL_HALF);     // 1.5306 레버 회전축 Y
+      const SL_PIV_XR  = 1.214;                          // 우측(조작 뭉치) 회전축 X
+      const SL_PIV_XL  = -stileX;                        // 좌측(반대편) 회전축 X
+      const SL_LNK_DX  = 0.055, SL_LNK_DY = 0.055;       // 회전축 → 수직 타이로드 핀 (로컬 +X, 아래)
+      const SL_TIE_R   = 0.008;                          // 수직 연동 타이로드 Ø16
+      const SL_TIE_BOT = plankY + 0.200;                 // 타이로드 하단 (안전기 캡 볼트 머리 위)
+
+      // 레버 각도 / 로컬점 회전 (p = 0 대기, 1 트립)
+      const slRot = p => -SL_HALF + 2 * SL_HALF * p;
+      const slSpin = (lx, ly, a) => [lx * Math.cos(a) - ly * Math.sin(a), lx * Math.sin(a) + ly * Math.cos(a)];
+
+      // 클레비스 핀(로컬 0,+R)과 타이로드 핀(로컬 +DX,-DY)의 대기/트립 위치
+      const SL_PINC0 = slSpin(0, SL_PIN_R, slRot(0));
+      const SL_PINL0 = slSpin(SL_LNK_DX, -SL_LNK_DY, slRot(0));
+      const SL_PINL1 = slSpin(SL_LNK_DX, -SL_LNK_DY, slRot(1));
+      const SL_PIN_XR0 = SL_PIV_XR + SL_PINC0[0];        // 우측 클레비스 핀 대기 X
+      const SL_PIN_XL0 = SL_PIV_XL + SL_PINC0[0];        // 좌측 클레비스 핀 대기 X
+      const SL_LNK_Y0  = SL_PIV_Y + SL_PINL0[1];         // 타이로드 핀 대기 Y
+      const SL_LNK_DUP = SL_PINL1[1] - SL_PINL0[1];      // 트립 시 타이로드 상승량 (≈21mm)
+      const SL_LNK_DOU = SL_PINL1[0] - SL_PINL0[0];      // 트립 시 타이로드 핀 X 이동
+
+      /* ── 조속기 로프 직결부 (후방 크랭크) ──
+         크랭크 반경을 cos(SL_HALF) 로 나눠 두면 대기·트립 양 끝에서 클램프 X 가
+         정확히 로프 수직선(GOV_TENS_X)에 일치한다 → 양 끝에서 로프 횡꺾임 0. */
+      const SL_ROPE_Z = GOV_CLAMP_Z - CAR_CTR_Z;                       // -0.37 (카 로컬)
+      const SL_CRK_R  = (GOV_TENS_X - SL_PIV_XR) / Math.cos(SL_HALF);  // 0.2175
+      const SL_CRK_UP = 2 * SL_CRK_R * Math.sin(SL_HALF);              // 0.0830 클램프 상승량
+      const SL_TUBE_R = 0.011;                                         // Ø22 토크 튜브
+
+      /* ── 장죽 축선 부품 배치 (우측 끝단에서 카 중심 쪽으로) ──
+         클레비스 → 잼 너트 → 조절 더블 너트 → 시트 와셔 → 흑색 스프링 → 관통 브라켓 */
+      const SL_CLV_L  = 0.032;                           // U 클레비스 몸통 (핀 ~ 나사 결합면)
+      const SL_JAM_X  = SL_PIN_XR0 - SL_CLV_L - 0.006;   // 클레비스 잼 너트
+      const SL_NUT1_X = SL_JAM_X - 0.020;                // 장력 조절 너트 1
+      const SL_NUT2_X = SL_NUT1_X - 0.012;               // 장력 조절 너트 2 (풀림 방지)
+      const SL_WSH_X  = SL_NUT2_X - 0.008;               // 스프링 시트 와셔
+      const SL_SPR_R  = 0.016;                           // 스프링 외경 32mm
+      const SL_SPR_W  = 0.0025;                          // 선경 5mm
+      const SL_SPR_L0 = 0.062;                           // 자유장 62mm (실물처럼 짧고 굵게)
+      const SL_SPR_X0 = SL_WSH_X - 0.002 - SL_SPR_L0;    // 스프링 고정단 = 브라켓 바깥면
+      const SL_BRK_X  = SL_SPR_X0 - 0.005;               // 관통 브라켓 판 중심 (두께 10mm)
+      /* 수나사 구간은 스프링 고정단에서 행정만큼 안쪽에서 시작한다. 브라켓보다 왼쪽에서
+         시작하면 트립 때 나사산이 브라켓 밖으로 빠져나와 또 하나의 코일처럼 보인다. */
+      const SL_THR_X0 = SL_SPR_X0 + SL_TRAVEL;           // 수나사 가공 구간 시작
+      const SL_THR_X1 = SL_PIN_XR0 - SL_CLV_L + 0.004;   // 수나사 구간 끝 (클레비스 결합)
+
+      /* ── Honeywell SZL-VL-S 리미트 스위치 ──
+         ★사용자 지적 "현실을 보면 스위치가 최대 아래 요런 식으로 붙어있고" →
+           빔 웹면에 납작하게(두께 18mm + 심 4mm), 위치는 웹 하단 바로 위. */
+      const SL_SW_W  = 0.068, SL_SW_H = 0.030, SL_SW_D = 0.018;
+      const SL_SW_CY = SL_WEB_BOT + 0.008 + SL_SW_H / 2; // 1.4905 몸체 밑면이 빔 하단 +8mm
+      const SL_SW_CZ = SL_WEB_Z + 0.004 + SL_SW_D / 2;   // 0.110 웹면 + 취부 심
+      const SL_SW_PY = SL_SW_CY + SL_SW_H / 2 + 0.001;   // 1.5065 롤러 레버 축 = 몸체 상단
+      const SL_ARM_L = 0.040, SL_ROLLER_R = 0.009;
+      const SL_ARM_A0 = -13 * Math.PI / 180;             // 대기 롤러 레버 각 (로브에 눌려 내려감)
+      const SL_ARM_SW = 15 * Math.PI / 180;              // 트립 시 로브에서 떨어지며 튀어 오름
+
+      /* 롤러 축 X 는 "원하는 대기 캠 반경"에서 역산한다.
+         스위치가 회전축보다 아래에 있으므로 롤러는 캠을 아래에서 받친다 →
+         대기(로브 위)가 큰 반경, 트립(기초원)이 작은 반경이다. frames.md 03 의
+         "캠이 회전하면 롤러가 튀어 올라가며 NC 접점이 열린다"와 같은 동작이다. */
+      const SL_CAM_AIM = 0.050;                          // 대기 시 캠 로브 반경
+      const SL_SW_PX = (() => {
+        const dy = SL_SW_PY + SL_ARM_L * Math.sin(SL_ARM_A0) - SL_PIV_Y;
+        const d  = SL_CAM_AIM + SL_ROLLER_R;
+        return SL_PIV_XR - Math.sqrt(d * d - dy * dy) - SL_ARM_L * Math.cos(SL_ARM_A0);
+      })();
+      const SL_SW_CX = SL_SW_PX - SL_SW_W / 2 - 0.006;   // 몸체 중심 X (축이 외측 끝)
+
+      // 롤러 중심(월드 XY) → 우측 레버 로컬 극좌표. 캠 엣지 반경을 여기서 역산한다.
+      const slRoller = a => [SL_SW_PX + SL_ARM_L * Math.cos(a), SL_SW_PY + SL_ARM_L * Math.sin(a)];
+      function slCamContact(armA, leverA) {
+        const r = slRoller(armA);
+        const l = slSpin(r[0] - SL_PIV_XR, r[1] - SL_PIV_Y, -leverA);
+        return [Math.hypot(l[0], l[1]) - SL_ROLLER_R, Math.atan2(l[1], l[0])];
+      }
+      const SL_CAM_LO = slCamContact(SL_ARM_A0, slRot(0));             // 대기 — 높은 로브
+      const SL_CAM_HI = slCamContact(SL_ARM_A0 + SL_ARM_SW, slRot(1)); // 트립 — 기초원
+      const SL_CAM_RH = SL_CAM_LO[0], SL_CAM_AH = SL_CAM_LO[1];        // 로브 반경·각
+      const SL_CAM_RB = SL_CAM_HI[0], SL_CAM_AB = SL_CAM_HI[1];        // 기초원 반경·각
+
+      // 원점에서 +X 로 뻗는 압축 코일 (실제 자유장으로 만들고 scale.x 로만 압축한다)
+      function makeCoilX(turns, coilR, wireR, len, segPerTurn = 12) {
+        const pts = [], n = turns * segPerTurn;
+        for (let i = 0; i <= n; i++) {
+          const t = i / n, a = t * turns * Math.PI * 2;
+          pts.push(new THREE.Vector3(t * len, Math.cos(a) * coilR, Math.sin(a) * coilR));
+        }
+        return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), n, wireR, 8, false);
+      }
+      function hexNut(r, h, mat, x, y, z, parent) {
+        const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 6), mat);
+        m.position.set(x, y, z); m.rotation.z = Math.PI / 2;
+        m.castShadow = true; m.receiveShadow = true; parent.add(m); return m;
+      }
+
+      /* ── (1) 트립 레버 / 캠 플레이트 (좌·우 동일 형상, 같은 부호로 회전) ── */
+      function buildTripLever(px, withCam) {
+        const g = new THREE.Group();
+        g.name = withCam ? 'safetyCamLeverR' : 'safetyTripLeverL';
+        g.position.set(px, SL_PIV_Y, SL_ROD_Z);
+        g.rotation.z = slRot(0);
+        slGrp.add(g);
+
+        // 기초원 판 (트립 시 롤러가 내려앉는 원호)
+        createCylinder(SL_CAM_RB, SL_CAM_RB, SL_PLATE_T, goldMat, 0, 0, 0, g).rotation.x = Math.PI / 2;
+        // 클레비스 암 (회전축 위) + 라운드 노즈 + 핀
+        createBox(0.024, SL_PIN_R, SL_PLATE_T, goldMat, 0, SL_PIN_R / 2, 0, g);
+        createCylinder(0.014, 0.014, SL_PLATE_T, goldMat, 0, SL_PIN_R, 0, g).rotation.x = Math.PI / 2;
+        createCylinder(0.005, 0.005, 0.026, boltMat, 0, SL_PIN_R, 0, g).rotation.x = Math.PI / 2;
+        // 타이로드 암 (회전축 로컬 +X 아래) + 노즈 + 핀
+        const armLen = Math.hypot(SL_LNK_DX, SL_LNK_DY);
+        const arm = createBox(0.024, armLen, SL_PLATE_T, goldMat, SL_LNK_DX / 2, -SL_LNK_DY / 2, 0, g);
+        arm.rotation.z = Math.atan2(-SL_LNK_DX, -SL_LNK_DY);
+        createCylinder(0.014, 0.014, SL_PLATE_T, goldMat, SL_LNK_DX, -SL_LNK_DY, 0, g).rotation.x = Math.PI / 2;
+        createCylinder(0.005, 0.005, 0.026, boltMat, SL_LNK_DX, -SL_LNK_DY, 0, g).rotation.x = Math.PI / 2;
+
+        if (withCam) {
+          /* 캠 로브 — 대기 각(SL_CAM_AH)에서 롤러를 눌러 두고, 트립 각(SL_CAM_AB)으로
+             돌아가면 기초원이 와서 롤러가 튀어 오른다. 두 접점 반경은 위에서 역산했다. */
+          const shape = new THREE.Shape();
+          const aS = SL_CAM_AB, aRamp = SL_CAM_AH - 0.05, aE = SL_CAM_AH + 0.40;
+          shape.moveTo(0, 0);
+          for (let i = 0; i <= 24; i++) {
+            const a = aS + (aE - aS) * i / 24;
+            const t = a <= aRamp ? (a - aS) / (aRamp - aS) : 1;
+            const r = SL_CAM_RB + (SL_CAM_RH - SL_CAM_RB) * (t * t * (3 - 2 * t));
+            shape.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+          }
+          shape.lineTo(0, 0);
+          const lobe = new THREE.Mesh(
+            new THREE.ExtrudeGeometry(shape, { depth: SL_PLATE_T, bevelEnabled: false }), goldMat);
+          lobe.position.z = -SL_PLATE_T / 2;
+          lobe.castShadow = true; lobe.receiveShadow = true;
+          g.add(lobe);
+        }
+
+        // 중심 대형 육각 보스 + 풀림 방지 분할 핀 (frames.md 05)
+        hexNut(0.020, 0.026, goldMat, 0, 0, SL_PLATE_T / 2 + 0.013, g);
+        createCylinder(0.0022, 0.0022, 0.040, boltMat, 0, 0.010, SL_PLATE_T / 2 + 0.013, g).rotation.x = Math.PI / 2;
+        createCylinder(0.0022, 0.0022, 0.012, boltMat, 0, 0.016, SL_PLATE_T / 2 + 0.032, g).rotation.z = Math.PI / 2;
+        return g;
+      }
+      const slLeverR = buildTripLever(SL_PIV_XR, true);
+      const slLeverL = buildTripLever(SL_PIV_XL, false);
+
+      /* 레버 회전축 필로블록 (빔 웹 앞면에 직결, 정지부).
+         거싯을 0.12 로 줄인 덕분에 스타일 플랜지가 아니라 웹면에서 바로 세울 수 있다. */
+      [SL_PIV_XR, SL_PIV_XL].forEach(px => {
+        createBox(0.054, 0.076, SL_ROD_Z - SL_PLATE_T / 2 - SL_WEB_Z, frmDkMat,
+          px, SL_PIV_Y, (SL_WEB_Z + SL_ROD_Z - SL_PLATE_T / 2) / 2, slGrp);
+        [-0.028, 0.028].forEach(dy => {
+          createCylinder(0.006, 0.006, 0.020, boltMat, px, SL_PIV_Y + dy, SL_WEB_Z + 0.008, slGrp)
+            .rotation.x = Math.PI / 2;
+        });
       });
+
+      /* ── (2) 조속기 로프 직결 토크 튜브 + 후방 크랭크 (가동) ── */
+      const slCrank = new THREE.Group();
+      slCrank.name = 'safetyGovCrank';
+      slCrank.position.set(SL_PIV_XR, SL_PIV_Y, SL_ROPE_Z);
+      slCrank.rotation.z = slRot(0);
+      slGrp.add(slCrank);
+      {
+        // 크랭크 암 + 끝단 보스
+        createBox(SL_CRK_R, 0.030, 0.010, silvMat, SL_CRK_R / 2, 0, 0, slCrank);
+        createCylinder(0.020, 0.020, 0.014, silvMat, SL_CRK_R, 0, 0, slCrank).rotation.x = Math.PI / 2;
+        createCylinder(0.022, 0.022, 0.018, goldMat, 0, 0, 0, slCrank).rotation.x = Math.PI / 2;
+        // 로프 히치 요크 — 크랭크 끝에서 아래로 매달린 클램프 (심블 + 3구 와이어 클립)
+        createBox(0.026, 0.034, 0.030, M.ss(0xccd2d9), SL_CRK_R, -0.026, 0, slCrank);
+        [-0.048, -0.066, -0.084].forEach(dy => {
+          createBox(0.020, 0.010, 0.024, boltMat, SL_CRK_R, dy, 0, slCrank);
+          createCylinder(0.0028, 0.0028, 0.028, boltMat, SL_CRK_R, dy, 0, slCrank).rotation.x = Math.PI / 2;
+        });
+      }
+      // 토크 튜브 — 전면 레버 판 뒤에서 후면 웹을 지나 크랭크까지 (정지부처럼 보이되 회전)
+      const slTube = new THREE.Group();
+      slTube.name = 'safetyTorqueTube';
+      slTube.position.set(SL_PIV_XR, SL_PIV_Y, 0);
+      slGrp.add(slTube);
+      {
+        const z0 = SL_ROPE_Z, z1 = SL_ROD_Z - SL_PLATE_T / 2;
+        createCylinder(SL_TUBE_R, SL_TUBE_R, z1 - z0, silvMat, 0, 0, (z0 + z1) / 2, slTube)
+          .rotation.x = Math.PI / 2;
+      }
+      // 토크 튜브 지지 필로블록 2개소 (후면 웹 뒷면, 아웃리거 행거)
+      [chAftZ - 0.027 - 0.020, SL_ROPE_Z + 0.045].forEach(bz => {
+        createBox(0.052, 0.058, 0.014, frmDkMat, SL_PIV_XR, SL_PIV_Y, bz, slGrp);
+        createCylinder(SL_TUBE_R + 0.006, SL_TUBE_R + 0.006, 0.016, silvMat, SL_PIV_XR, SL_PIV_Y, bz, slGrp)
+          .rotation.x = Math.PI / 2;
+      });
+      // 후면 웹에서 아웃리거 행거를 매다는 브레이스
+      createBox(0.016, 0.040, Math.abs(SL_ROPE_Z + 0.045 - (chAftZ - 0.027)), frmMat,
+        SL_PIV_XR, SL_PIV_Y + 0.045, (SL_ROPE_Z + 0.045 + chAftZ - 0.027) / 2, slGrp);
+
+      /* ── (3) 장죽 (Actuating Cross-Rod) — 축방향으로만 움직이는 가동 그룹 ── */
+      const slRod = new THREE.Group();
+      slRod.name = 'safetyCrossRod';
+      slGrp.add(slRod);
+      {
+        const plainX0 = SL_PIN_XL0 + SL_CLV_L, plainX1 = SL_THR_X0;
+        // 은색 환봉 본선 — 중앙 턴버클을 사이에 두고 좌·우 2본
+        const tbHalf = 0.030;
+        createCylinder(SL_ROD_R, SL_ROD_R, -tbHalf - plainX0, silvMat,
+          (plainX0 - tbHalf) / 2, SL_ROD_Y, SL_ROD_Z, slRod).rotation.z = Math.PI / 2;
+        createCylinder(SL_ROD_R, SL_ROD_R, plainX1 - tbHalf, silvMat,
+          (tbHalf + plainX1) / 2, SL_ROD_Y, SL_ROD_Z, slRod).rotation.z = Math.PI / 2;
+        // 중앙 턴버클(길이 조절 커플러) + 양측 잼 너트
+        createCylinder(0.013, 0.013, 2 * tbHalf - 0.016, silvMat, 0, SL_ROD_Y, SL_ROD_Z, slRod)
+          .rotation.z = Math.PI / 2;
+        createBox(0.030, 0.008, 0.026, silvMat, 0, SL_ROD_Y, SL_ROD_Z, slRod);
+        [-tbHalf + 0.006, tbHalf - 0.006].forEach(nx => hexNut(0.011, 0.008, goldMat, nx, SL_ROD_Y, SL_ROD_Z, slRod));
+        // 수나사 가공 구간 (M14 — 나사산은 링으로 표현)
+        createCylinder(SL_ROD_R + 0.0006, SL_ROD_R + 0.0006, SL_THR_X1 - SL_THR_X0, boltMat,
+          (SL_THR_X0 + SL_THR_X1) / 2, SL_ROD_Y, SL_ROD_Z, slRod).rotation.z = Math.PI / 2;
+        for (let x = SL_THR_X0 + 0.003; x < SL_THR_X1; x += 0.0035) {
+          createCylinder(SL_ROD_R + 0.0011, SL_ROD_R + 0.0011, 0.0013, boltMat,
+            x, SL_ROD_Y, SL_ROD_Z, slRod).rotation.z = Math.PI / 2;
+        }
+        // 시트 와셔 + 장력 조절 더블 너트 + 클레비스 잼 너트
+        createCylinder(0.018, 0.018, 0.004, goldMat, SL_WSH_X, SL_ROD_Y, SL_ROD_Z, slRod)
+          .rotation.z = Math.PI / 2;
+        [SL_NUT2_X, SL_NUT1_X, SL_JAM_X].forEach(nx => hexNut(0.013, 0.010, goldMat, nx, SL_ROD_Y, SL_ROD_Z, slRod));
+
+        // U 자 클레비스 (요크) — 좌·우 양단. 두 볼이 레버 판을 물고 핀이 관통한다.
+        [[SL_PIN_XR0, -1], [SL_PIN_XL0, 1]].forEach(end => {
+          const pinX = end[0], dir = end[1];
+          const bodyX = pinX + dir * SL_CLV_L / 2;
+          createBox(SL_CLV_L * 0.42, 0.026, 0.030, silvMat, pinX + dir * SL_CLV_L * 0.79, SL_ROD_Y, SL_ROD_Z, slRod);
+          [-1, 1].forEach(zs => {
+            createBox(SL_CLV_L * 0.80, 0.026, 0.008, silvMat, bodyX, SL_ROD_Y, SL_ROD_Z + zs * 0.008, slRod);
+          });
+          [-0.008, 0.008].forEach(dz => {
+            createCylinder(0.013, 0.013, 0.008, silvMat, pinX, SL_ROD_Y, SL_ROD_Z + dz, slRod).rotation.x = Math.PI / 2;
+          });
+        });
+      }
+
+      /* ── (4) 흑색 압축 복귀 스프링 — 고정단은 관통 브라켓 바깥면, scale.x 로만 압축 ── */
+      const slSpring = new THREE.Mesh(makeCoilX(7, SL_SPR_R - SL_SPR_W, SL_SPR_W, SL_SPR_L0), blkSprMat);
+      slSpring.name = 'safetyReturnSpring';
+      slSpring.position.set(SL_SPR_X0, SL_ROD_Y, SL_ROD_Z);
+      slSpring.castShadow = true; slSpring.receiveShadow = true;
+      slGrp.add(slSpring);
+
+      /* ── (5) 관통 ㄷ자 브라켓 + 중간 가이드 브라켓 6개소 ──
+         ★사용자 지적 "일자야" 교정 — 빔에 바짝 붙인 진짜 ㄷ자 브라켓을 촘촘히 박아
+           장죽이 빔에 눌려 붙은 인상을 준다. 발이 웹면(SL_WEB_Z)에서 바로 올라온다. */
+      function slRodBracket(bx, plateH, webW) {
+        const footY = SL_ROD_Y - plateH + 0.024;
+        createBox(0.010, plateH, 0.050, frmMat, bx, SL_ROD_Y - plateH / 2 + 0.020, SL_ROD_Z, slGrp); // 관통 판
+        createBox(webW, 0.011, SL_ROD_Z - SL_WEB_Z, frmMat, bx, footY, (SL_WEB_Z + SL_ROD_Z) / 2, slGrp); // 빔 쪽 발
+        createBox(webW + 0.012, 0.026, 0.008, frmMat, bx, footY + 0.008, SL_WEB_Z + 0.004, slGrp);        // 웹 밀착 플랜지
+        [-0.009, 0.009].forEach(dy => {
+          createCylinder(0.004, 0.004, 0.016, boltMat, bx, footY + 0.008 + dy, SL_WEB_Z + 0.006, slGrp)
+            .rotation.x = Math.PI / 2;
+        });
+      }
+      slRodBracket(SL_BRK_X, 0.086, 0.036);
+      [-0.95, -0.62, -0.30, 0.30, 0.62, 0.95].forEach(gx => slRodBracket(gx, 0.064, 0.028));
+
+      /* ── (6) Honeywell 리미트 스위치 — 웹면 하단에 납작하게 ── */
+      const slSwGrp = new THREE.Group();
+      slSwGrp.name = 'safetyLimitSwitch';
+      slGrp.add(slSwGrp);
+      {
+        // 취부 심 플레이트 (웹면 밀착)
+        createBox(SL_SW_W + 0.014, SL_SW_H + 0.012, 0.004, frmDkMat,
+          SL_SW_CX, SL_SW_CY, SL_WEB_Z + 0.002, slSwGrp);
+        // 청색 바디 + 전면 백색 라벨
+        createBox(SL_SW_W, SL_SW_H, SL_SW_D, swBlueMat, SL_SW_CX, SL_SW_CY, SL_SW_CZ, slSwGrp);
+        createBox(SL_SW_W - 0.020, SL_SW_H - 0.011, 0.0012, swLabMat,
+          SL_SW_CX - 0.002, SL_SW_CY, SL_SW_CZ + SL_SW_D / 2 + 0.0007, slSwGrp);
+        // 취부 나사 2개
+        [-1, 1].forEach(s => createCylinder(0.0035, 0.0035, 0.024, boltMat,
+          SL_SW_CX + s * (SL_SW_W / 2 - 0.006), SL_SW_CY, SL_SW_CZ, slSwGrp).rotation.x = Math.PI / 2);
+        // 롤러 레버 회전축 보스 (몸체 상단 외측 → 캠 평면으로 나옴)
+        createCylinder(0.008, 0.008, SL_ROD_Z - SL_SW_CZ + 0.008, silvMat,
+          SL_SW_PX, SL_SW_PY, (SL_SW_CZ + SL_ROD_Z) / 2, slSwGrp).rotation.x = Math.PI / 2;
+        // 안쪽(-X) 회색 방수 케이블 글랜드
+        createCylinder(0.009, 0.009, 0.022, glandMat,
+          SL_SW_CX - SL_SW_W / 2 - 0.011, SL_SW_CY, SL_SW_CZ, slSwGrp).rotation.z = Math.PI / 2;
+        /* 흑색 제어선 — 글랜드에서 일단 아래로 늘어졌다가 빔 웹 하단을 따라 카 중심으로.
+           (실물 frame_012 의 늘어진 곡선. 곧장 수평으로 가면 붙은 느낌이 안 난다.) */
+        const cabY = SL_WEB_BOT + 0.016, cabZ = SL_WEB_Z + 0.007;
+        const cablePts = [
+          new THREE.Vector3(SL_SW_CX - SL_SW_W / 2 - 0.022, SL_SW_CY, SL_SW_CZ),
+          new THREE.Vector3(SL_SW_CX - SL_SW_W / 2 - 0.052, SL_SW_CY - 0.024, SL_SW_CZ - 0.004),
+          new THREE.Vector3(SL_SW_CX - SL_SW_W / 2 - 0.082, cabY, cabZ),
+          new THREE.Vector3(0.62, cabY, cabZ),
+          new THREE.Vector3(0.22, cabY, cabZ)
+        ];
+        const cable = new THREE.Mesh(
+          new THREE.TubeGeometry(new THREE.CatmullRomCurve3(cablePts, false, 'centripetal'), 56, 0.0035, 8, false),
+          cableMat);
+        cable.castShadow = true; slSwGrp.add(cable);
+        // 새들 클립 — 케이블을 빔에 물려 둔다
+        [0.90, 0.74, 0.58, 0.42, 0.28].forEach(cx => {
+          createBox(0.010, 0.014, 0.010, frmMat, cx, cabY, cabZ, slSwGrp);
+          createCylinder(0.003, 0.003, 0.014, boltMat, cx, cabY - 0.009, cabZ, slSwGrp);
+        });
+      }
+      // 롤러 레버 암 (가동) — 캠 엣지에 상시 접촉
+      const slSwArm = new THREE.Group();
+      slSwArm.name = 'safetySwitchArm';
+      slSwArm.position.set(SL_SW_PX, SL_SW_PY, SL_ROD_Z);
+      slSwArm.rotation.z = SL_ARM_A0;
+      slGrp.add(slSwArm);
+      createBox(SL_ARM_L, 0.008, 0.005, cableMat, SL_ARM_L / 2, 0, 0, slSwArm);
+      createCylinder(SL_ROLLER_R, SL_ROLLER_R, 0.011, silvMat, SL_ARM_L, 0, 0, slSwArm)
+        .rotation.x = Math.PI / 2;
+
+      /* ── (7) 수직 연동 타이 로드 — 레버 축 → 카 측면 프레임 → 하부 세이프티 플랭크 ── */
+      function buildTieRod(pinX) {
+        const g = new THREE.Group();
+        g.name = 'safetyTieRod';
+        g.position.set(pinX, SL_LNK_Y0, SL_ROD_Z);
+        slGrp.add(g);
+        const len = SL_LNK_Y0 - SL_TIE_BOT;
+        // 상단 클레비스 (레버 노즈를 물림)
+        [-1, 1].forEach(zs => createBox(0.012, 0.040, 0.008, silvMat, 0, -0.014, zs * 0.008, g));
+        hexNut(0.012, 0.010, goldMat, 0, -0.040, 0, g);
+        // 본체 환봉 + 하단 아이 엔드
+        createCylinder(SL_TIE_R, SL_TIE_R, len - 0.056, silvMat, 0, -0.046 - (len - 0.056) / 2, 0, g);
+        createCylinder(0.016, 0.016, 0.010, goldMat, 0, -len + 0.010, 0, g).rotation.x = Math.PI / 2;
+        return g;
+      }
+      const slTieR = buildTieRod(SL_PIV_XR + SL_PINL0[0]);
+      const slTieL = buildTieRod(SL_PIV_XL + SL_PINL0[0]);
+      [slTieR, slTieL].forEach(tie => { tie.userData.x0 = tie.position.x; });
+      // 스타일 고정 가이드 브라켓 (타이로드 처짐·횡유격 방지, 정지부)
+      [slTieR.position.x, slTieL.position.x].forEach(tx => {
+        [H / 2 - 0.20, 0, -H / 2 + 0.30].forEach(by => {
+          createBox(0.030, 0.020, SL_ROD_Z - (railBladeZ + 0.080), frmMat,
+            tx, by, (railBladeZ + 0.080 + SL_ROD_Z) / 2, slGrp);
+          createCylinder(0.013, 0.013, 0.020, silvMat, tx, by, SL_ROD_Z, slGrp);
+        });
+      });
+
+      /* ── (8) 트립/복귀 포즈 — p = 0(대기) ~ 1(트립). 단일 진입점. ──
+         ★매 프레임 호출된다. 지오메트리 생성·dispose 금지, transform 대입만. */
+      const SL_TIE_LEN = SL_LNK_Y0 - SL_TIE_BOT;
+      // 조속기 로프가 읽는 클램프 좌표(카 로컬). 프레임마다 새로 만들지 않고 갱신만 한다.
+      const slClampOut = { x: 0, y: 0, z: SL_ROPE_Z };
+      carGrp.userData.govClamp = slClampOut;
+      carGrp.userData.safetyLinkage = {
+        rod: slRod, spring: slSpring, leverR: slLeverR, leverL: slLeverL,
+        swArm: slSwArm, tieR: slTieR, tieL: slTieL, crank: slCrank, tube: slTube,
+        travel: SL_TRAVEL, lift: SL_LNK_DUP, swing: 2 * SL_HALF, clampLift: SL_CRK_UP,
+        set(p) {
+          const t = Math.min(Math.max(p, 0), 1);
+          const a = slRot(t);
+          slRod.position.x = -SL_TRAVEL * t;                       // 장죽이 카 중심 쪽으로 끌려온다
+          slSpring.scale.x = (SL_SPR_L0 - SL_TRAVEL * t) / SL_SPR_L0;
+          slLeverR.rotation.z = a;
+          slLeverL.rotation.z = a;
+          slTube.rotation.z = a;
+          slCrank.rotation.z = a;
+          slSwArm.rotation.z = SL_ARM_A0 + SL_ARM_SW * t;          // 로브에서 떨어지며 튀어 오름
+          [slTieR, slTieL].forEach(tie => {
+            tie.position.y = SL_LNK_Y0 + SL_LNK_DUP * t;
+            tie.position.x = tie.userData.x0 + SL_LNK_DOU * t;
+            tie.rotation.z = -Math.asin(SL_LNK_DOU * t / SL_TIE_LEN); // 하단은 제자리, 위만 끌린다
+          });
+          // 조속기 로프 클램프 (후방 크랭크 끝) — X 는 대기·트립 양 끝에서 로프선과 일치
+          slClampOut.x = SL_PIV_XR + SL_CRK_R * Math.cos(a);
+          slClampOut.y = SL_PIV_Y + SL_CRK_R * Math.sin(a);
+        }
+      };
+      carGrp.userData.safetyLinkage.set(0);
 
       /* =========================================================================
          5. 카 플랫폼 베이스 프레임 (Platform Frame - 도면 93~94p)
@@ -516,18 +946,17 @@
     function spinDoorDrive(h) {
       if (!h || !h.link) return;
       const k = h.link;
-      const ax = h.right.position.x + k.aOff; // 상부 가닥 스프링 고정단 (월드 +X 행거판)
+      const ax = h.right.position.x + k.aOff; // 상부 가닥 클램프 (월드 +X 행거판)
 
       // 상부 가닥: 좌풀리 ↔ 좌측 패널 클램프 ↔ 우풀리 (헤더 상단 전면 가시 주행)
       setRopeSpan(k.seg.upL, k.pulLX, ax - k.aHalf, k.upY, k.upZ);
       setRopeSpan(k.seg.upR, ax + k.aHalf, k.pulRX, k.upY, k.upZ);
 
-      /* 하부 가닥 본선: 우단 풀리 ↔ 텐셔너 풀리 우측 뒤 접선 /
-         텐셔너 풀리 좌측 뒤 접선 ↔ 좌단 풀리. 본선 Y·Z 는 k.loY / k.loZ 그대로.
-         창으로 나와 스프링에 물리는 짧은 구간·상단홈↔하단홈 높이차는 행거판 고정 튜브. */
+      /* 하부 본선: 양단 풀리 ↔ −X판의 고정 리드 시작점.
+         본선 Y/Z는 유지하고 관통창의 높이·앞뒤 전환은 고정 리드가 담당한다. */
       const bx = h.left.position.x;
-      setRopeSpan(k.seg.loL, k.pulLX, bx + k.bL, k.loY, k.loZ); // 화면 오른쪽 본선 → 풀리 뒤 상단 홈
-      setRopeSpan(k.seg.loR, bx + k.bR, k.pulRX, k.loY, k.loZ); // 풀리 뒤 하단 홈 → 화면 왼쪽 본선
+      setRopeSpan(k.seg.loL, k.pulLX, bx + k.bL, k.loY, k.loZ);
+      setRopeSpan(k.seg.loR, bx + k.bR, k.pulRX, k.loY, k.loZ);
 
       // 풀리 회전 = 로프가 지나간 거리 / 홈 반지름 (상부 가닥이 +X 로 가면 시계방향)
       const spin = -(h.right.position.x - h.right.userData.cx) / k.ropeR;
@@ -848,58 +1277,17 @@
       const CASE_D = 0.035;       // 174p C형 케이스 깊이 (35mm)
       const TRACK_OFF = 0.069;    // 174p 피아노선 → 트랙센터 수직거리 (69mm)
 
-      /* ── Z 레이어 원본: 연동 로프 본선은 "행거판 뒤"에서 달린다 ──
-         양단 풀리를 작게 잡으면 상·하 가닥이 행거판 높이 안쪽(inboard)으로 들어온다.
-         그래서 행거판 솔리드 금속면 앞에서는 상·하 본선이 보이면 안 된다.
-         로프가 눈에 드러나는 곳은 세 군데다.
-           (a) 두 행거판 사이·바깥의 열린 헤더 구간 (C레일 웹을 배경으로 노출)
-           (b) 화면 우측 행거판 가운데 풀리창 — 안쪽 본선이 2열 홈 롤러를 타고 바깥으로 나옴
-           (c) 같은 판의 좌·우 고정 구멍 — 바깥으로 나온 끝이 스프링 고정대에 물림
-         상·하 본선은 같은 평면을 쓴다. 바깥으로 나오는 짧은 구간만 판 앞에 있다. */
-      const CASE_LIP_Z = -(CASE_D / 2) + 0.002;  // C형 케이스 전면 립
-      const HP_PLATE_Z = CASE_LIP_Z - 0.005;     // 행거 플레이트 전면 중심 Z (승강로에서 보이는 면)
-      /* 로프 주행면은 행거판 뒤 12mm. 8mm 로 잡으면 활짝 열렸을 때 행거판 바깥변이
-         풀리를 덮는데도 풀리 앞 플랜지(반두께 11mm)가 판 앞면을 1.25mm 뚫고 나온다.
-         "판 반두께 1.75mm + 풀리 반두께 11mm" 보다 깊게 물려야 완전히 가려진다. */
-      const ROPE_PLANE_Z = HP_PLATE_Z + 0.012;   // 로프 주행면 = 행거판 뒤 12mm (판이 앞을 가린다)
-      const ROPE_UP_Z  = ROPE_PLANE_Z;           // 상부 가닥
-      const ROPE_LO_Z  = ROPE_PLANE_Z;           // 하부 가닥
-      const ROPE_Z     = ROPE_PLANE_Z;
-
-      /* ── 연동(릴레이팅) 로프 제원 — 2짝 중앙개폐 동기 링크 ──
-         상부 가닥에 월드 +X 행거판, 하부 가닥에 월드 -X 행거판이 물린다.
-         한쪽이 열림 방향으로 가면 로프가 양단 풀리를 돌아 반대쪽을 같은 양만큼 끌어간다. */
-      /* 풀리 홈 반지름이 상·하 가닥 간격(2·ROPE_R)을 그대로 정한다 — 단일 원본.
-         행거판은 높이 160mm, 중심 caseCY-40mm 이므로 윗변이 caseCY+40mm 다.
-         ROPE_R=0.022 → 상부 가닥 caseCY+22mm 로 윗변보다 18mm 아래 = 판 안쪽.
-         (예전 0.040 은 상부 가닥이 판 윗변에 정확히 올라타서 판 밖으로 튀어나왔고,
-          플랜지 46mm 는 C레일 상·하 립(±38mm)을 뚫고 지나갔다.) */
-      const ROPE_R  = 0.022;   // 풀리 홈 반지름 — 상·하 가닥 간격 44mm, 행거판 안쪽으로 진입
-      const PUL_R   = 0.030;   // 풀리 플랜지 바깥 반지름 — C레일 상·하 립 사이에 들어간다
-      const ROPE_RD = 0.0035;  // 연동로프 Ø7
-      const RA_OFF  = 0.020;   // 월드 +X 행거판 로컬 x — 상부 가닥 클램프 고정단 중심
-      const RA_HALF = 0.052;   // 클램프 고정단 어셈블리 반길이 (로프 가닥이 끊기는 구간)
-      const RB_OFF  = -0.020;  // 월드 -X 행거판 로컬 x — 타공창 롤러 텐셔너 중심
-      /* 하부 가닥 본선이 끊기는 두 점 (월드 -X 행거판 로컬 x).
-         본선은 풀리 뒤(안쪽) 접선에서 끊긴다. 창으로 나와 스프링에 물리는 짧은 구간은
-         행거판에 붙인 고정 튜브다. 예전 ±0.082/0.095 는 본선을 고정대까지 끌어
-         롤러를 안 쓰고 판 뒤를 가로지르는 것처럼 보였다. */
-      const RB_L    =  0.000;  // 풀리 뒤(안쪽) 접선 — 상단 홈으로 진입
-      const RB_R    = +0.002;  // 풀리 뒤 접선에서 2mm — 하단 홈으로 진입 (마디 겹침 방지)
-
-      /* ── 텐셔너(2열 홈 수평 풀리) 제원 — 행거판 타공창 위치의 단일 원본 ──
-         행거판 메쉬 중심이 월드 caseCY-0.040 이므로 로컬 Y = 월드Y - caseCY + 0.040.
-         하부 가닥/상단 홈의 로컬 Y 가 TP_LY = 0.040 - ROPE_R = 18mm 다. */
-      /* ★로프 중심이 앉는 피치 반지름(TP_GR)과 홈 바닥(TP_HR)·플랜지(TP_FR)를 분리한다.
-         셋을 한 값으로 뭉뚱그리면 플랜지가 로프보다 커져서 감김이 원판 속에 파묻혀
-         "끊긴 엘보" 처럼 보인다. TP_HR = 피치 - 로프반지름, TP_FR = 로프 바깥면 + 1mm. */
-      const TP_GR    = 0.008;            // 로프 중심 피치 반지름
-      const TP_HR    = 0.0048;           // 홈 바닥(허브) 반지름
-      const TP_FR    = 0.0122;           // 플랜지 반지름
-      const TP_DY    = 0.012;            // 상단 홈 ↔ 하단 홈 높이차
-      const TP_LY    = 0.040 - ROPE_R;   // 행거판 로컬 좌표계에서의 상단 홈 높이
-      const TP_ROD_X = RB_OFF - 0.039;   // 화면 오른쪽 고정 구멍 중심 (로컬 −X)
-      const TP_SPR_X = RB_OFF + 0.039;   // 화면 왼쪽 고정 구멍 중심 (로컬 +X)
+      // 2026-09-11 현장 교체 영상: 양단 반환 풀리 + 직접 전산볼트 종단.
+      // 본선은 행거판 뒤, -X판 종단 주변만 두 관통창을 통해 앞쪽으로 나온다.
+      const CASE_LIP_Z = -(CASE_D / 2) + 0.002;
+      const HP_PLATE_Z = CASE_LIP_Z - 0.005;
+      const ROPE_PLANE_Z = HP_PLATE_Z + 0.012;
+      const ROPE_UP_Z = ROPE_PLANE_Z, ROPE_LO_Z = ROPE_PLANE_Z, ROPE_Z = ROPE_PLANE_Z;
+      const ROPE_R = 0.022, PUL_R = 0.030;
+      const ROPE_RD = 0.0018; // 현장처럼 가는 연선, 시각 재구성 Ø3.6mm.
+      const RA_OFF = 0.020, RA_HALF = 0.022;
+      const RB_OFF = 0, RB_L = -0.125, RB_R = 0.125;
+      const END_DY = 0.013, END_Z = HP_PLATE_Z - 0.025, END_ENTRY = 0.058;
       const doorRopeGeo = makeRopeGeometry(ROPE_RD, GOV_ROPE_PITCH, 12, 12); // 단위길이 1m 공유
 
       /* 폐문 스프링용 헬릭스 튜브 — 원점에서 +X 로 단위길이 1m.
@@ -983,7 +1371,7 @@
           const pg = new THREE.Group();
           pg.position.set(px, pulY, ROPE_Z);
           // 홈 바닥 + 양측 이탈방지 플랜지
-          createCylinder(ROPE_R, ROPE_R, 0.014, hcDarkMat, 0, 0, 0, pg).rotation.x = Math.PI / 2;
+          createCylinder(ROPE_R-ROPE_RD, ROPE_R-ROPE_RD, 0.014, hcDarkMat, 0, 0, 0, pg).rotation.x = Math.PI / 2;
           [-0.009, 0.009].forEach(fz => {
             createCylinder(PUL_R, PUL_R, 0.004, hcDarkMat, 0, 0, fz, pg).rotation.x = Math.PI / 2;
           });
@@ -1086,7 +1474,7 @@
             seg: ropeSeg, pulL, pulR, pulLX, pulRX,
             upZ: ROPE_UP_Z, loZ: ROPE_LO_Z, ropeZ: ROPE_Z,
             upY: pulY + ROPE_R, loY: pulY - ROPE_R, ropeR: ROPE_R,
-            aOff: RA_OFF, aHalf: RA_HALF,
+            aOff: RA_OFF, aHalf: RA_HALF, terminalType: 'opposed-threaded-studs',
             bL: RB_OFF + RB_L, bR: RB_OFF + RB_R,
             closer: { anchorX: scbX - 0.010, lugDX: -0.060, coil: sprCoil }
           }
@@ -1146,40 +1534,18 @@
           // 화면 좌측 패널 (right 그룹): 솔리드 플레이트 (후면 로프 차폐)
           createBox(0.380, 0.160, 0.0035, hpPlateMat, 0, g.caseCY - 0.040, plateZ, grp);
         } else {
-          /* 화면 우측 패널 (left 그룹): 타공창 3개.
-             가운데 = 2열 홈 롤러, 좌·우 = 연동로프 스프링 고정대 (설치도면·실사 202356).
-             본선은 판 뒤, 롤러를 타고 판 앞(승강로 쪽)으로 나와 고정된다. */
+          // 직접 종단용 관통창 2개. 가운데는 세로 취부 브라켓의 체결 면이다.
           const pShape = new THREE.Shape();
-          pShape.moveTo(-0.190, -0.080);
-          pShape.lineTo(0.190, -0.080);
-          pShape.lineTo(0.190, 0.080);
-          pShape.lineTo(-0.190, 0.080);
-          pShape.closePath();
-
-          /* 창 사각형(행거판 로컬 좌표)을 userData 에 남긴다 — tools/verify_relay_rope.mjs 가
-             하드코딩 대신 이 값을 읽어서 "상부 가닥이 어느 창에도 안 걸리는지" 를 검사한다. */
-          grp.userData.windows = [];
-          grp.userData.tens = {
-            rbOff: RB_OFF, gr: TP_GR, fr: TP_FR, dy: TP_DY, ly: TP_LY,
-            rodX: TP_ROD_X, sprX: TP_SPR_X
-          };
-          const addWin = (x0, x1, y0, y1) => {
-            const hole = new THREE.Path();
-            hole.moveTo(x0, y0);
-            hole.lineTo(x1, y0);
-            hole.lineTo(x1, y1);
-            hole.lineTo(x0, y1);
-            hole.closePath();
-            pShape.holes.push(hole);
-            grp.userData.windows.push({ x0, x1, y0, y1 });
-          };
-          const wUpY = TP_LY;          // 상단 홈 로컬 Y
-          const wLoY = TP_LY - TP_DY;  // 하단 홈 로컬 Y
-          const wMidY = (wLoY + wUpY) / 2;
-          /* 설치도면: 가로로 구멍 3개. 가운데가 조금 크고 좌·우 고정 구멍이 바로 옆. */
-          addWin(RB_OFF - 0.021, RB_OFF + 0.021, wLoY - 0.014, wUpY + 0.020);
-          addWin(TP_ROD_X - 0.012, TP_ROD_X + 0.012, wMidY - 0.018, wMidY + 0.018);
-          addWin(TP_SPR_X - 0.012, TP_SPR_X + 0.012, wMidY - 0.018, wMidY + 0.018);
+          pShape.moveTo(-0.190,-0.080);pShape.lineTo(0.190,-0.080);
+          pShape.lineTo(0.190,0.080);pShape.lineTo(-0.190,0.080);pShape.closePath();
+          grp.userData.windows=[];
+          for(const sign of [-1,1]) {
+            const x=sign*0.099,y=0.040-ROPE_R-sign*END_DY;
+            const w={x0:x-0.024,x1:x+0.024,y0:y-0.012,y1:y+0.012};
+            const hole=new THREE.Path();hole.moveTo(w.x0,w.y0);hole.lineTo(w.x1,w.y0);
+            hole.lineTo(w.x1,w.y1);hole.lineTo(w.x0,w.y1);hole.closePath();
+            pShape.holes.push(hole);grp.userData.windows.push(w);
+          }
 
           const pGeom = new THREE.ExtrudeGeometry(pShape, { depth: 0.0035, bevelEnabled: false });
           const pMesh = new THREE.Mesh(pGeom, hpPlateMat);
@@ -1206,44 +1572,13 @@
           // ── 화면 좌측 행거판 (right 그룹, 월드 +X): 상단 연동 로프 클램프 + 실물 7계열 인터록 롤러/걸쇠/하단 긴 바 ──
           // 도어 중앙 방향은 로컬 -X 방향임!
 
-          /* (1) 연동 로프 스프링 고정단 — 실사 2026-08-18 000627 / 000712 좌측
-             상부 가닥이 이 판에서 끊긴다. 중앙(-X) 쪽 로프는 인장 코일 스프링을 거쳐
-             전산볼트·육각너트로 물리고, 바깥(+X) 쪽 로프는 같은 볼트에 직결된다. */
-          const clampY = g.caseCY + ROPE_R;   // 상부 가닥 높이 — 행거판 윗변(caseCY+0.040)보다 18mm 아래
-          const rZ = ROPE_UP_Z;               // 로프면은 행거판 뒤
-          /* 이 판은 타공창이 없는 솔리드 판이다. 로프가 판 뒤로 지나가므로 앞면에서는
-             좌면 패드와 조임 볼트 머리만 보이고 로프·스프링은 한 가닥도 드러나지 않는다. */
-          // 전면 좌면 패드 + M8 조임 볼트 머리 2개 (판 앞에서 보이는 유일한 흔적)
-          createBox(0.058, 0.030, 0.003, hpSteelMat, RA_OFF, clampY, plateZ - 0.0025, grp);
-          [-0.019, 0.019].forEach(cb => {
-            createCylinder(0.005, 0.005, 0.004, hpBoltMat, RA_OFF + cb, clampY, plateZ - 0.006, grp)
-              .rotation.x = Math.PI / 2;
-          });
-          // 판을 관통해 뒤쪽 로프면까지 가는 스페이서
-          createBox(0.046, 0.014, Math.abs(rZ - plateZ), hpSteelMat, RA_OFF, clampY, (plateZ + rZ) / 2, grp);
-          // 로프를 무는 크로메이트 클램프 블록 + 조임 볼트 2개 (판 뒤)
-          createBox(0.024, 0.020, 0.013, hpSteelMat, RA_OFF, clampY, rZ, grp);
-          [-0.007, 0.007].forEach(cb => {
-            createCylinder(0.0035, 0.0035, 0.015, hpBoltMat, RA_OFF + cb, clampY, rZ + 0.0065, grp)
-              .rotation.x = Math.PI / 2;
-          });
-          // 인장 코일 스프링 (중앙 -X 쪽 로프 끝) — 스웨이지 슬리브 → 코일 → 육각너트
-          const spA0 = RA_OFF - RA_HALF + 0.004; // 코일 시작
-          const spA1 = RA_OFF - 0.014;           // 코일 끝(클램프 앞)
-          createCylinder(0.0022, 0.0022, spA1 - spA0, hpBoltMat, (spA0 + spA1) / 2, clampY, rZ, grp)
-            .rotation.z = Math.PI / 2;
-          for (let ci = 0; ci < 9; ci++) {
-            createCylinder(0.0058, 0.0058, 0.0032, hpSpringMat,
-              spA0 + (ci + 0.5) * (spA1 - spA0) / 9, clampY, rZ, grp).rotation.z = Math.PI / 2;
-          }
-          createBox(0.008, 0.011, 0.011, hpBoltMat, spA0 - 0.005, clampY, rZ, grp); // 스웨이지 슬리브
-          createBox(0.006, 0.010, 0.010, hpBoltMat, RA_OFF - 0.016, clampY, rZ, grp); // 육각너트
-          // 바깥(+X) 쪽 전산볼트 + 육각너트 2개 — 실사에서 로프 끝이 밖으로 빠져나온 부분
-          createCylinder(0.0022, 0.0022, RA_HALF - 0.010, hpBoltMat,
-            RA_OFF + (RA_HALF + 0.010) / 2, clampY, rZ, grp).rotation.z = Math.PI / 2;
-          [0.015, 0.026].forEach(nx => {
-            createBox(0.006, 0.011, 0.011, hpBoltMat, RA_OFF + nx, clampY, rZ, grp);
-          });
+          // 상부 연속 로프를 단순 2볼트 클램프로 고정한다. 종단용 코일 스프링은 없다.
+          const clampY=g.caseCY+ROPE_R,rZ=ROPE_UP_Z;
+          const clamp=new THREE.Group();clamp.name='relayUpperClamp';grp.add(clamp);
+          createBox(0.054,0.026,0.003,hpSteelMat,RA_OFF,clampY,plateZ-0.003,clamp);
+          createBox(RA_HALF*2,0.012,0.014,hpSteelMat,RA_OFF,clampY,rZ,clamp);
+          for(const dx of [-0.015,0.015])
+            createCylinder(0.004,0.004,0.025,hpBoltMat,RA_OFF+dx,clampY,plateZ+0.003,clamp).rotation.x=Math.PI/2;
 
           // Roller base, hook, compression spring and link are supplied by the GLB.
         } else {
@@ -1258,59 +1593,36 @@
           const shLug = createCylinder(0.004, 0.004, 0.014, boltMat, -0.060, shY + 0.021, 0, grp);
           shLug.rotation.z = Math.PI / 2;
 
-          /* (1) 연동 로프 텐셔너 — 2열 홈 수평 풀리 + 판 앞 좌·우 스프링 고정대.
-             본선은 판 뒤(안쪽). 롤러를 타고 승강로 쪽(판 앞)으로 나와 고정된다.
-             상단 홈 → 화면 오른쪽 구멍, 하단 홈 → 화면 왼쪽 구멍. */
-          const upGY = tensY;               // 상단 홈 = 하부 본선 높이
-          const loGY = tensY - TP_DY;       // 하단 홈 = 12mm 아래
-          const pulZ = plateZ - 0.008;      // 롤러 중심 Z (타공창 안)
-          const zFace = plateZ - 0.0035 / 2 - 0.001; // 판 앞면 바깥
-
-          /* 스프링 고정대(육각 스터드 + 슬리브)를 판 앞면에 박는다.
-             outerSign: 판 바깥쪽 방향 (+1 은 우측 로컬 +X, -1 은 좌측 로컬 -X) */
-          function addFaceTensioner(sleeveX, y, outerSign) {
-            createBox(0.016, 0.028, 0.0035, hpSteelMat, sleeveX, y, plateZ - 0.002, grp);
-            const slv = createCylinder(0.004, 0.004, 0.012, hpBoltMat, sleeveX, y, zFace, grp);
-            slv.rotation.x = Math.PI / 2;
-            const nutX = sleeveX + outerSign * 0.010;
-            [0, outerSign * 0.005].forEach(dx => {
-              const hx = new THREE.Mesh(new THREE.CylinderGeometry(0.0055, 0.0055, 0.0045, 6), hpBoltMat);
-              hx.position.set(nutX + outerSign * dx, y, zFace);
-              hx.rotation.z = Math.PI / 2;
-              grp.add(hx);
-            });
-            return sleeveX;
-          }
-          const rodSleeveX = addFaceTensioner(TP_ROD_X, upGY, -1);
-          const sprSleeveX = addFaceTensioner(TP_SPR_X, loGY, +1);
-
-          /* 홈 원주만 찍는다. 끝점을 고정대까지 한 스플라인에 넣으면
-             CatmullRom 이 원을 벗어나 롤러 옆을 가로지른다. */
-          function wrapGroove(yA, yB, a0, a1, sleeveX, sleeveY) {
-            const n = 32;
-            const arc = [];
-            for (let i = 0; i <= n; i++) {
-              const t = i / n;
-              const a = a0 + (a1 - a0) * t;
-              const y = yA + (yB - yA) * Math.min(1, t / 0.18);
-              arc.push(new THREE.Vector3(
-                RB_OFF + TP_GR * Math.cos(a), y, pulZ + TP_GR * Math.sin(a)));
+          // 현장 영상 55~85초/660초: 위·아래 로프가 반대 방향에서 오는 나사식 종단 2개.
+          const ends=new THREE.Group();ends.name='relayThreadedTerminals';grp.add(ends);
+          createBox(0.036,0.068,0.004,hpSteelMat,RB_OFF,tensY,plateZ-0.003,ends);
+          createBox(0.004,0.064,plateZ-END_Z+0.014,hpSteelMat,RB_OFF,tensY,(plateZ+END_Z-0.014)/2,ends);
+          for(const dy of [-0.026,0.026])
+            createCylinder(0.004,0.004,0.007,hpBoltMat,RB_OFF+0.011,tensY+dy,plateZ-0.007,ends).rotation.x=Math.PI/2;
+          for(const sign of [-1,1]) {
+            const y=tensY-sign*END_DY;
+            const end=new THREE.Group();end.name=sign<0?'relayTerminalUpper':'relayTerminalLower';ends.add(end);
+            const entry=RB_OFF+sign*END_ENTRY,tip=RB_OFF-sign*0.026;
+            createCylinder(0.0035,0.0035,Math.abs(entry-tip),hpBoltMat,(entry+tip)/2,y,END_Z,end).rotation.z=Math.PI/2;
+            const sleeve=createCylinder(0.0055,0.0055,0.019,M.ss(0xaa914e),entry-sign*0.0095,y,END_Z,end);
+            sleeve.name='relaySwageSleeve';sleeve.rotation.z=Math.PI/2;
+            // 와셔와 더블 너트는 수직 브라켓 양면에 놓는다.
+            for(const x of [-0.008,0.008,0.016].map(v=>RB_OFF-sign*v)) {
+              const nut=new THREE.Mesh(new THREE.CylinderGeometry(0.006,0.006,0.005,6),hpBoltMat);
+              nut.position.set(x,y,END_Z);nut.rotation.z=Math.PI/2;end.add(nut);
             }
-            makeRopeTube(grp, arc);
-            const end = arc[n];
-            makeRopeTube(grp, [
-              end,
-              new THREE.Vector3(
-                end.x * 0.55 + sleeveX * 0.45,
-                end.y * 0.55 + sleeveY * 0.45,
-                end.z * 0.55 + zFace * 0.45),
-              new THREE.Vector3(sleeveX, sleeveY, zFace)
-            ]);
+            for(let x=-0.024;x<=0.024;x+=0.003)
+              createCylinder(0.0039,0.0039,0.0007,hpBoltMat,RB_OFF+x,y,END_Z,end).rotation.z=Math.PI/2;
+            const start=RB_OFF+(sign<0?RB_L:RB_R);
+            // 짧은 전환부는 이동판에 고정하며 본선 높이는 유지하고 창 안에서 앞으로 나온다.
+            const points=[new THREE.Vector3(start,tensY,ROPE_Z),
+              new THREE.Vector3(RB_OFF+sign*0.114,y,ROPE_Z),
+              new THREE.Vector3(RB_OFF+sign*0.099,y,(ROPE_Z+END_Z)/2),
+              new THREE.Vector3(RB_OFF+sign*0.081,y,END_Z),new THREE.Vector3(entry,y,END_Z)];
+            const lead=makeRopeTube(end,points);lead.name='relayTerminalLead';
+            lead.userData.start=points[0].toArray();lead.userData.end=points.at(-1).toArray();
           }
-          /* 상단 홈: 뒤 → 좌 → 앞(카메라) → 우. 정면에서 홈이 와이어로 덮인다. */
-          wrapGroove(upGY, upGY, Math.PI / 2, -Math.PI, rodSleeveX, upGY);
-          /* 하단 홈: 뒤 → 우 → 앞 → 좌. 뒤쪽에서 높이만 내린다. */
-          wrapGroove(upGY, loGY, Math.PI / 2, Math.PI * 2, sprSleeveX, loGY);
+          grp.userData.relayTerminalType='opposed-threaded-studs';
 
           // The opposite-door slotted keeper is supplied by the GLB.
         }
@@ -1958,6 +2270,18 @@
       refreshTravelCable();
       refreshTerminalDevices();
       refreshLevelingSensors();
+      refreshCarSafetyLinkage();
+    }
+
+    /* 카 상부 크로스헤드 연동부는 하부 안전기 샤프트 각도 하나만 읽어 따라간다.
+       ui.js engageDeviceStop 이 shaft.rotation.x 를 SG_TRIP_ROT 까지 돌리므로
+       장죽·스프링·캠·스위치 롤러·타이로드가 웨지 물림과 같은 진행률로 움직인다.
+       트립(engageDeviceStop)·복귀(governorReset) 양쪽 경로가 여기를 거친다. */
+    function refreshCarSafetyLinkage() {
+      if (!carGrp || !carGrp.userData.safetyLinkage) return;
+      const sg = carGrp.userData.safetyGear;
+      if (!sg || !sg.shaft) return;
+      carGrp.userData.safetyLinkage.set(sg.shaft.rotation.x / SG_TRIP_ROT);
     }
 
     // 실사 와이어로프 2구간(조속기휠→클램프, 클램프→인장시브)의 위치·길이·기울기만 갱신한다.
@@ -1968,23 +2292,40 @@
     function refreshGovernorRope() {
       if (!govRopeSegs || !govRopeData) return;
 
-      let clampY = carGrp.position.y - S.CAR_H / 2 - 0.16;
-      let clampZ = govRopeData.z; // 기본값 -0.37
-
-      if (carGrp.userData.safetyGear && carGrp.userData.safetyGear.shaft) {
-        const theta = carGrp.userData.safetyGear.shaft.rotation.x;
-        clampY = carGrp.position.y - S.CAR_H / 2 - 0.16 + 0.22 * Math.sin(theta);
-        clampZ = (CAR_CTR_Z - 0.15) - 0.22 * Math.cos(theta); // 카 중심 추종 (base -0.15)
+      /* 클램프 좌표의 단일 원본은 카 상부 크로스헤드 연동부다(§4-B `set(p)` 가 발행).
+         후방 크랭크가 Z 축으로 돌기 때문에 클램프 Z 는 로프 평면(GOV_CLAMP_Z)에 고정이고
+         X 는 대기·트립 양단에서 같다(±SL_HALF 대칭). 그 사이에서만 살짝 볼록해진다.
+         ★ environment.js buildPit() 이 카를 만들기 전에 한 번 부르므로
+           govClamp 가 아직 없으면 꺾임 없는 직선 로프로 그린다. */
+      const gc = carGrp && carGrp.userData.govClamp;
+      if (!gc) {
+        const seg = govRopeSegs[0];
+        _ropeA.set(govRopeData.x, govRopeData.topY, govRopeData.z);
+        _ropeB.set(govRopeData.x, govRopeData.botY, govRopeData.z);
+        _ropeDir.subVectors(_ropeB, _ropeA);
+        const len0 = _ropeDir.length();
+        seg.visible = len0 > 1e-5;
+        if (seg.visible) {
+          seg.position.addVectors(_ropeA, _ropeB).multiplyScalar(0.5);
+          seg.quaternion.setFromUnitVectors(_ropeUp, _ropeDir.divideScalar(len0));
+          setGovRopeLen(seg, len0);
+        }
+        govRopeSegs[1].visible = false;
+        return;
       }
 
+      const clampX = gc.x;                       // 카 로컬 X = 월드 X (carGrp 회전 없음)
+      const clampY = carGrp.position.y + gc.y;
+      const clampZ = CAR_CTR_Z + gc.z;
+
       const ends = [
-        [govRopeData.topY, govRopeData.z, clampY, clampZ],   // 상부 구간
-        [clampY, clampZ, govRopeData.botY, govRopeData.z]    // 하부 구간
+        [govRopeData.x, govRopeData.topY, govRopeData.z, clampX, clampY, clampZ], // 상부 구간
+        [clampX, clampY, clampZ, govRopeData.x, govRopeData.botY, govRopeData.z]  // 하부 구간
       ];
-      ends.forEach(([y0, z0, y1, z1], i) => {
+      ends.forEach(([x0, y0, z0, x1, y1, z1], i) => {
         const seg = govRopeSegs[i];
-        _ropeA.set(govRopeData.x, y0, z0);
-        _ropeB.set(govRopeData.x, y1, z1);
+        _ropeA.set(x0, y0, z0);
+        _ropeB.set(x1, y1, z1);
         _ropeDir.subVectors(_ropeB, _ropeA);
         const len = _ropeDir.length();
         if (len < 1e-5) { seg.visible = false; return; }
@@ -2113,7 +2454,10 @@
         (sg.wedges || []).forEach(w => tl.to(w.position, { z: w.userData.z0 !== undefined ? w.userData.z0 : w.position.z, duration: 0.65, ease: 'power2.inOut' }, 0));
         (sg.springs || []).forEach(spr => tl.to(spr.scale, { y: 1.0, duration: 0.55, ease: 'power2.inOut' }, 0));
       }
-      tl.eventCallback("onUpdate", () => { refreshGovernorRope(); });
+      /* ★순서 주의: 링키지가 먼저 carGrp.userData.govClamp 를 갱신해야
+         refreshGovernorRope() 가 같은 프레임의 클램프 위치를 읽는다. 뒤집으면 로프가
+         한 프레임 늦게 따라와 복귀 애니메이션에서 로프만 덜컥거린다. */
+      tl.eventCallback("onUpdate", () => { refreshCarSafetyLinkage(); refreshGovernorRope(); });
 
       tl.add(() => { governorPhase = 'rest'; if (onDone) onDone(); });
       return tl;

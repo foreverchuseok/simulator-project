@@ -16,13 +16,15 @@ Three.js로 승강로, 카, 도어, 기계실, 피트와 안전장치를 구성�
 
 ## 문서 안내
 
-- `AGENTS.md`: Claude Code, Google Antigravity, Cursor가 따르는 공통 규칙.
+- `AGENTS.md`: Claude Code, Google Antigravity, Codex, Cursor가 따르는 공통 규칙. Codex·Cursor 전용 md는 없다.
 - `CLAUDE.md`: Claude Code 진입점.
-- `GEMINI.md`: Google Antigravity 진입점과 영상·이미지 분석 게이트.
+- `GEMINI.md`: Google Antigravity 진입점.
 - `blender/BLENDER-WORKFLOW.md`: Blender Python에서 GLB를 만들고 연결하는 절차.
-- `PLAN.md`: 현재 분석 작업 하나를 넘기는 로컬 임시 문서. Git에는 포함하지 않는다.
+- `PLAN.md`: 사용자가 이 파일에 담아 달라고 지정했을 때만 쓰는 로컬 임시 계획. Git에는 포함하지 않는다.
 - `docs/DOOR-REBUILD.md`: 도어 재공사 기록. 원본 코드는 `js/archive/doors.js`.
 - `docs/CAR-REBUILD.md`: 카 재공사 기록. 원본 코드는 `js/archive/car.js`.
+- `docs/CAR-CONTROLS.md`: 카 탑 박스·OPB·하중 감지.
+- `docs/LEVELING-SENSORS.md`: 레벨링 센서.
 - `docs/TRAVEL-CABLE-TERMINAL.md`: 이동케이블·종단 리미트 스위치(파이널·리미트·강제감속, 스위치 방식) (MR_설계.pdf 137~138p, 부품설계.pdf 184~204p).
 
 ## 실제 프로젝트 구조
@@ -41,6 +43,8 @@ simmul/
 ├─ docs/
 │  ├─ DOOR-REBUILD.md             도어 재공사 안내
 │  ├─ CAR-REBUILD.md              카 재공사 안내
+│  ├─ CAR-CONTROLS.md             카 탑 박스·OPB·하중 감지
+│  ├─ LEVELING-SENSORS.md         레벨링 센서
 │  └─ TRAVEL-CABLE-TERMINAL.md    이동케이블·종단 안전장치 (184~204p)
 ├─ blender/
 │  ├─ BLENDER-WORKFLOW.md

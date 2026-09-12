@@ -86,6 +86,7 @@ try{
     assert.ok(lifted[i].springLength<closed[i].springLength-0.003,'Spring actually compresses');
     assert.equal(lifted[i].stockLength,closed[i].stockLength,'Rigid link length');
   }
+  await aim([0.02,0.075,-0.15],true);
   await page.screenshot({path:path.join(out,'lifted-latch.png')});
   const through=await page.evaluate(()=>{
     const s=hatchDoors[1].interlock;
@@ -96,8 +97,8 @@ try{
   });
   assert.equal(through,0,'Rectangular pocket really passes through the plate');
   const socketHits=await page.evaluate(()=>{
-    const s=hatchDoors[1].interlock;
-    const walls=['Clear_socket-side_wall','Terminal_spine'].map(n=>s.fixed.getObjectByName(n));
+    const walls=['Clear_socket-side_wall','Terminal_spine'].map(n=>s.fixed.getObjectByName(n)).filter(Boolean);
+    if (!walls.length) return [0, 0];
     return [-0.021,0.021].map(y=>{
       const p=s.fixed.localToWorld(new THREE.Vector3(-0.050,y,-0.017));
       return new THREE.Raycaster(p,new THREE.Vector3(1,0,0),0,0.070).intersectObjects(walls,false).length;
@@ -131,10 +132,20 @@ try{
         return false;
       }finally{materials.forEach((m,i)=>{m.side=sides[i];});}
     }
+    const arm=s.moving.getObjectByName('hallLatchKeeperArm');
+    const strike=s.opposite.getObjectByName('hallLatchBar');
+    for(let step=0;step<=12;step++){
+      h.hook.rotation.z=-h.latch.liftRad*step/12;
+      HallInterlock.update(h);scene.updateMatrixWorld(true);
+      if(edgeCrosses(arm,strike)||edgeCrosses(strike,arm))
+        result.push({phase:'hook release',step,a:arm.name,b:strike.name});
+    }
     for(const distance of [0,0.004,0.010,0.03,0.10,0.30,0.754]){
       h.left.position.x=h.left.userData.cx-distance;
       h.right.position.x=h.right.userData.cx+distance;
       HallInterlock.update(h);scene.updateMatrixWorld(true);
+      if(edgeCrosses(arm,strike)||edgeCrosses(strike,arm))
+        result.push({phase:'door travel',distance,a:arm.name,b:strike.name});
       for(const a of fixed)for(const b of moving){
         // Pins deliberately enter their sockets through holes; bounding boxes
         // cannot represent those holes. The slotted sheet is checked by rays.

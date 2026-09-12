@@ -1,12 +1,13 @@
 # ─── 앱 실행 파일과 공유 문서만 Git에 유지 ───
-# 공유 문서: README.md, AGENTS.md, CLAUDE.md, GEMINI.md, blender/BLENDER-WORKFLOW.md, docs/DOOR-REBUILD.md, docs/CAR-REBUILD.md
+# 공유 문서: README.md, AGENTS.md, CLAUDE.md, GEMINI.md, blender/BLENDER-WORKFLOW.md, docs/*.md
+# Codex·Cursor 전용 md는 두지 않는다.
 # 유지 에셋: assets/bg/*.png(코드 로드), assets/safety_gear.glb, models/gltf/*.glb, sound/
 
 # 로컬 참고용 화면 녹화·참고 영상 (앱 미로드)
 *.mp4
 Screen_Recording_*.mp4
 
-# Antigravity 분석 → Claude Code / Cursor 전달용 현재 작업 임시 계획서
+# 사용자가 @PLAN.md 또는 이 파일에 담아 달라고 지정했을 때만 쓰는 임시 계획서
 # 작업 하나만 담고 완료 후 삭제하거나 다음 계획으로 교체
 PLAN.md
 
@@ -42,8 +43,9 @@ KR100839584B1.pdf
 node_modules/
 package-lock.json
 
-# Claude Code / Cursor 로컬 설정·캐시
+# Claude Code / Codex / Cursor 로컬 설정·캐시
 .claude/
+.codex/
 .cursor/
 
 # OS·에디터 잡파일

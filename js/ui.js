@@ -498,7 +498,8 @@
           spinTractionSheaves(deltaY);
           const p = stopTween.progress(); // 0 ~ 1
           if (sg && sg.shaft) {
-            sg.shaft.rotation.x = -0.38 * p;            // 조속기 로프 견인 → 작동 샤프트 덜컥 회전
+            sg.shaft.rotation.x = SG_TRIP_ROT * p;      // 조속기 로프 견인 → 작동 샤프트 덜컥 회전
+                                                        // (elevator.js refreshCarSafetyLinkage 가 이 각도로 상부 장죽·캠·스위치를 맞춘다)
             sg.liftL.position.y = 0.055 * p;            // 리프트 그룹 상승 → 웨지가 테이퍼로 파고듦
             sg.liftR.position.y = 0.055 * p;
             (sg.springs || []).forEach(spr => { spr.scale.y = 1 - 0.35 * p; });   // U-스프링 압축

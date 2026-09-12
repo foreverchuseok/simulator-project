@@ -62,15 +62,21 @@ try {
         height: data.guideHeight, meshes: meshes.length, hitNames: [...hitNames],
         materials: meshes.flatMap(m => (Array.isArray(m.material) ? m.material : [m.material]).map(mat => mat.name)) };
     });
-    let hiddenLegacy = 0;
-    carGrp.traverse(o => { if (o.userData.legacyGuideShoe && !o.visible) hiddenLegacy++; });
+    // 2026-09-11 재생성된 safety_gear.glb에는 옛 하부 슈 박스(0.13×0.075×0.10)가 없어야 한다.
+    let legacyShoeMeshes = 0;
+    const lb = new THREE.Box3(), ls = new THREE.Vector3();
+    carGrp.getObjectByName('carSafetyGear').traverse(o => {
+      if (!o.isMesh) return;
+      lb.setFromObject(o).getSize(ls);
+      if (Math.abs(ls.x - 0.13) < 1e-5 && Math.abs(ls.y - 0.075) < 1e-5 && Math.abs(ls.z - 0.10) < 1e-5) legacyShoeMeshes++;
+    });
     const sg = carGrp.userData.safetyGear;
-    return { reports, hiddenLegacy, safety: [!!sg.shaft, !!sg.liftL, !!sg.liftR, !!sg.clamp, sg.wedges.length, sg.springs.length], carY: carGrp.position.y };
+    return { reports, legacyShoeMeshes, safety: [!!sg.shaft, !!sg.liftL, !!sg.liftR, !!sg.clamp, sg.wedges.length, sg.springs.length], carY: carGrp.position.y };
   };
   const initial = await page.evaluate(inspect);
   console.log(JSON.stringify(initial));
   assert.equal(initial.reports.length, 4);
-  assert.equal(initial.hiddenLegacy, 4);
+  assert.equal(initial.legacyShoeMeshes, 0);
   assert.deepEqual(initial.safety, [true, true, true, true, 4, 4]);
   for (const shoe of initial.reports) {
     assert.equal(shoe.parent, 'carFrameGrp');
