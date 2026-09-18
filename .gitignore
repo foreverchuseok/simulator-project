@@ -66,6 +66,14 @@ stot/
 
 # 안드로이드 APK·디컴파일러·Python 캐시 (웹 앱 미로드, GitHub/Vercel 용량만 증가)
 *.apk
+*.aab
+*.apk.idsig
 jadx-*/
+jadx-*.zip
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+
+# Blender 자동 백업 (앱 미로드)
+*.blend1
+*.blend2
