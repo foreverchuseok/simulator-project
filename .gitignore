@@ -63,3 +63,9 @@ Desktop.ini
 # 로컬 참고 폴더 (스크린샷·예제 — 앱 미사용)
 ex/
 stot/
+
+# 안드로이드 APK·디컴파일러·Python 캐시 (웹 앱 미로드, GitHub/Vercel 용량만 증가)
+*.apk
+jadx-*/
+__pycache__/
+*.pyc
