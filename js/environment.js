@@ -2526,6 +2526,40 @@
       return result;
     }
 
+    // 레일 본체(T_Rail_*)는 과속 단면에서 이름으로 참조하므로 개별 유지한다.
+    // 같은 부모의 고정 체결부만 묶고 FP_ 접두어로 최상단 이음부 숨김을 유지한다.
+    function batchGuideRailFasteners(source) {
+      const roots = [];
+      source.traverse(o => { if (/^GuideRail_(13K|8K)_Root$/.test(o.name)) roots.push(o); });
+      for (const parent of roots) {
+        const buckets = new Map();
+        for (const mesh of parent.children) {
+          if (!mesh.isMesh || !/^FP_(13K|8K)_(BoltHead|Nut|Tip)_/.test(mesh.name) ||
+              mesh.children.length || !mesh.visible || mesh.isSkinnedMesh || mesh.isInstancedMesh ||
+              Array.isArray(mesh.material) || mesh.material.transparent || mesh.material.opacity !== 1 ||
+              Object.keys(mesh.geometry.morphAttributes).length || mesh.geometry.drawRange.start !== 0 ||
+              mesh.geometry.drawRange.count !== Infinity) continue;
+          const attributes = Object.entries(mesh.geometry.attributes);
+          if (attributes.some(([, a]) => a.isInterleavedBufferAttribute)) continue;
+          mesh.updateMatrix();
+          if (mesh.matrix.determinant() <= 0) continue;
+          const signature = attributes.map(([name, a]) => [name, a.itemSize, a.normalized, a.array.constructor.name]);
+          const key = JSON.stringify([mesh.material.uuid, mesh.castShadow, mesh.receiveShadow,
+            mesh.renderOrder, mesh.layers.mask, mesh.frustumCulled, signature]);
+          if (!buckets.has(key)) buckets.set(key, []);
+          buckets.get(key).push(mesh);
+        }
+        let index = 0;
+        for (const meshes of buckets.values()) {
+          if (meshes.length < 2) continue;
+          const merged = mergeStaticMeshBucket(meshes);
+          merged.name = 'FP_FastenerBatch_' + index++;
+          meshes.forEach(mesh => parent.remove(mesh));
+          parent.add(merged);
+        }
+      }
+    }
+
     function buildGuideRails() {
       railGrp = new THREE.Group();
 
@@ -2584,6 +2618,7 @@
         carRailScene.traverse(o => {
           if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
         });
+        batchGuideRailFasteners(carRailScene);
 
         // 좌측 카 레일 (헤드가 +X 카 중심을 봄, rotation.y = 0)
         const leftCarRail = createFullRail(carRailScene, -S.CAR_BG / 2, carRailZ, 0, false);
@@ -2601,6 +2636,7 @@
         cwtRailScene.traverse(o => {
           if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
         });
+        batchGuideRailFasteners(cwtRailScene);
 
         // 균형추 좌측 레일 (헤드가 +X 균형추 중심을 봄, rotation.y = 0)
         const leftCwtRail = createFullRail(cwtRailScene, -S.CWT_W / 2, CWT_CENTER_Z, 0, true);
