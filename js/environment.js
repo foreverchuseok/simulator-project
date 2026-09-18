@@ -1,4 +1,76 @@
 // 움직이지 않는 배경 및 정적 객체 생성 함수를 정의한다.
+    // r128 calls scene.onBeforeRender after world matrices, before its shadow pass.
+    // Cache only the main view; the overspeed inset temporarily hides other meshes.
+    function installShadowCache(renderScene, mainCamera, webglRenderer) {
+      const values = [];
+      let cursor = 0, previousLength = -1, dirty = true;
+      const previousHook = renderScene.onBeforeRender;
+      function remember(value) {
+        if (values[cursor] !== value) { values[cursor] = value; dirty = true; }
+        cursor++;
+      }
+      function rememberMatrix(matrix) {
+        for (let i = 0; i < 16; i++) remember(matrix.elements[i]);
+      }
+      function rememberAttribute(attribute) {
+        remember(attribute);
+        remember(attribute?.isInterleavedBufferAttribute ? attribute.data.version : attribute?.version);
+      }
+      function rememberMaterial(material) {
+        remember(material); remember(material.version); remember(material.visible);
+        remember(material.side); remember(material.shadowSide); remember(material.alphaTest);
+        remember(material.map); remember(material.map?.version);
+        remember(material.alphaMap); remember(material.alphaMap?.version);
+        remember(material.displacementMap); remember(material.displacementMap?.version);
+        remember(material.displacementScale); remember(material.displacementBias);
+        // Custom clipping/deformation must explicitly refresh rather than reuse a map.
+        if (material.clippingPlanes?.length || material.isShaderMaterial) dirty = true;
+      }
+      function visit(object) {
+        if (!object.castShadow || !object.layers.test(mainCamera.layers)) return;
+        if (!object.isMesh && !object.isLight) return;
+        remember(object.id); rememberMatrix(object.matrixWorld);
+        if (object.isLight) {
+          const shadow = object.shadow;
+          remember(shadow); remember(shadow.mapSize.x); remember(shadow.mapSize.y);
+          rememberMatrix(shadow.camera.projectionMatrix);
+          if (object.target) {
+            object.target.updateWorldMatrix(true, false);
+            rememberMatrix(object.target.matrixWorld);
+          }
+          if (!shadow.map || shadow.needsUpdate) dirty = true;
+          return;
+        }
+        const geometry = object.geometry;
+        remember(geometry); rememberAttribute(geometry.attributes.position);
+        rememberAttribute(geometry.index);
+        remember(geometry.drawRange.start); remember(geometry.drawRange.count);
+        remember(object.frustumCulled);
+        if (object.isInstancedMesh) { remember(object.count); rememberAttribute(object.instanceMatrix); }
+        if (Array.isArray(object.material)) {
+          remember(object.material.length);
+          for (const material of object.material) rememberMaterial(material);
+          for (const group of geometry.groups) {
+            remember(group.start); remember(group.count); remember(group.materialIndex);
+          }
+        } else rememberMaterial(object.material);
+        if (object.isSkinnedMesh || object.morphTargetInfluences || object.customDepthMaterial || object.customDistanceMaterial) dirty = true;
+      }
+      webglRenderer.shadowMap.autoUpdate = false;
+      webglRenderer.domElement.addEventListener('webglcontextrestored', () => { previousLength = -1; });
+      renderScene.onBeforeRender = function (r, s, c, target) {
+        previousHook.call(this, r, s, c, target);
+        if (c !== mainCamera || !r.shadowMap.enabled || r.shadowMap.autoUpdate) return;
+        cursor = 0; dirty = false;
+        remember(r.shadowMap.type); remember(mainCamera.layers.mask);
+        renderScene.traverseVisible(visit);
+        if (cursor !== previousLength) dirty = true;
+        previousLength = cursor;
+        values.length = cursor;
+        if (dirty) r.shadowMap.needsUpdate = true;
+      };
+    }
+
     function buildLighting() {
       // 1. 주변광(HemisphereLight) — 상부 은은한 하늘빛 / 하부 묵직한 반사광
       scene.add(new THREE.HemisphereLight(0xe8f2ff, 0x2c323b, 1.2));

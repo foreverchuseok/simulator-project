@@ -1090,6 +1090,8 @@
 
       bindUIEvents();
 
+      installShadowCache(scene, camera, renderer);
+
       setTimeout(() => { document.getElementById('loading').classList.add('hide'); renderLoop(); }, 500);
       window.addEventListener('resize', () => {
         camera.aspect = wrap.clientWidth / wrap.clientHeight; camera.updateProjectionMatrix();

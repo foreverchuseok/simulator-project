@@ -35,16 +35,22 @@ try{
  });
  const inventory=await page.evaluate(()=>scene.children.map(root=>{let meshes=0;const materials=new Set();root.traverse(o=>{if(o.isMesh){meshes++;for(const m of [].concat(o.material))materials.add(m.uuid);}});return {name:root.name||(root===railGrp?'railGrp':root===mrGrp?'mrGrp':root.type),examples:root.children.slice(0,6).map(o=>o.name||o.type),meshes,materials:materials.size};}).sort((a,b)=>b.meshes-a.meshes));
  const runs=[];
- for(const mode of ['baseline','no-background','no-ground','no-shadows','baseline']){
+ const detailed=process.argv.includes('--detailed');
+ const modes=detailed?['baseline','no-grass','no-shadows','no-background','no-ground','baseline']:['baseline','no-background','no-ground','no-shadows','baseline'];
+ for(let repeat=0;repeat<(detailed?3:1);repeat++)for(const mode of modes){
   const result=await page.evaluate(async mode=>{
    const bg=scene.getObjectByName('outdoorBackground'),ground=scene.getObjectByName('outdoorGround');
    const saved=[bg.visible,ground.visible,renderer.shadowMap.enabled];
+   const grass=ground.children.filter(o=>o.userData.type==='grass-blade-inst');
+   const grassVisibility=grass.map(o=>o.visible);
    if(mode==='no-background')bg.visible=false;
    if(mode==='no-ground')ground.visible=false;
    if(mode==='no-shadows')renderer.shadowMap.enabled=false;
+   if(mode==='no-grass')grass.forEach(o=>{o.visible=false;});
    await ropePerfSample(1);const result=await ropePerfSample(4);
-   [bg.visible,ground.visible,renderer.shadowMap.enabled]=saved;return result;
-  },mode);runs.push({mode,...result});console.log(JSON.stringify(runs.at(-1)));
+   [bg.visible,ground.visible,renderer.shadowMap.enabled]=saved;
+   grass.forEach((o,i)=>{o.visible=grassVisibility[i];});return result;
+  },mode);runs.push({repeat,mode,...result});console.log(JSON.stringify(runs.at(-1)));
  }
  await page.screenshot({path:path.join(out,label+'-overview.png')});
  await page.evaluate(()=>{const b=railGrp.children.find(o=>o.userData.type==='rail-bracket');const box=new THREE.Box3().setFromObject(b),center=box.getCenter(new THREE.Vector3());controls.enableDamping=false;controls.target.copy(center);camera.position.copy(center).add(new THREE.Vector3(1,.5,1));controls.update();});

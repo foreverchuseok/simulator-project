@@ -16,7 +16,7 @@ try{
  page.on('requestfailed',r=>console.error('REQUEST FAILED',r.url(),r.failure()?.errorText));
  await page.goto(`http://127.0.0.1:${server.address().port}/index.html`,{waitUntil:'networkidle'});
  await page.waitForFunction(()=>govHandles()?.ready&&carGrp.userData.safetyGear?.wedges.length===4);
- await page.evaluate(()=>{renderer.setPixelRatio(0.8);renderer.shadowMap.enabled=false;gsap.ticker.lagSmoothing(0);});
+ await page.evaluate(keepShadows=>{renderer.setPixelRatio(0.8);renderer.shadowMap.enabled=keepShadows;gsap.ticker.lagSmoothing(0);},process.argv.includes('--shadows'));
  console.log('OVS models loaded');
  const linkage=await page.evaluate(()=>{
   const sg=carGrp.userData.safetyGear,lk=carGrp.userData.safetyLinkage;let maxPinY=0,minSlotClearance=Infinity,faces=0;
