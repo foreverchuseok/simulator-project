@@ -18,6 +18,10 @@ try{
  await page.waitForFunction(()=>govHandles()?.ready&&carGrp.userData.safetyGear?.wedges.length===4);
  await page.evaluate(keepShadows=>{renderer.setPixelRatio(0.8);renderer.shadowMap.enabled=keepShadows;gsap.ticker.lagSmoothing(0);},process.argv.includes('--shadows'));
  console.log('OVS models loaded');
+ if(process.argv.includes('--detail-view')){
+  await page.click('[data-menu="dd-cam"]');await page.click('#c-governor');
+  await page.waitForFunction(()=>gsap.getTweensOf(camera.position).length===0&&gsap.getTweensOf(controls.target).length===0);
+ }
  const linkage=await page.evaluate(()=>{
   const sg=carGrp.userData.safetyGear,lk=carGrp.userData.safetyLinkage;let maxPinY=0,minSlotClearance=Infinity,faces=0;
   carGrp.traverse(o=>{if(o.name.startsWith('safetyWedgeFrictionFace'))faces++;});

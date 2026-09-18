@@ -41,7 +41,7 @@ try{
   const result=await page.evaluate(async mode=>{
    const bg=scene.getObjectByName('outdoorBackground'),ground=scene.getObjectByName('outdoorGround');
    const saved=[bg.visible,ground.visible,renderer.shadowMap.enabled];
-   const grass=ground.children.filter(o=>o.userData.type==='grass-blade-inst');
+   const grass=[];ground.traverse(o=>{if(o.userData.type==='grass-blade-inst')grass.push(o);});
    const grassVisibility=grass.map(o=>o.visible);
    if(mode==='no-background')bg.visible=false;
    if(mode==='no-ground')ground.visible=false;

@@ -800,16 +800,35 @@
       document.getElementById('t-wall')?.addEventListener('change', e => { if (wallGrp) wallGrp.visible = e.target.checked; });
       document.getElementById('t-rope')?.addEventListener('change', e => { ropeObjs.forEach(r => r.line.visible = e.target.checked); });
 
-      // 카메라 4뷰
+      // 전체 운행과 부품 관찰 프리셋. 부품의 표시 상태·운행 상태는 바꾸지 않는다.
       const midY = Y0 + TOTAL_H * 0.4;
       const camViews = {
         'c-mr': () => moveCam(8, Y0 + TOTAL_H + 5, 8, 0, Y0 + TOTAL_H + 0.8, 0),
-        'c-pit': () => moveCam(6.5, Y0 + 1.0, 6.5, 0, Y0 + 1.0, 0),
-        'c-car': () => { const cy = carGrp.position.y; moveCam(0, cy, CAR_FRONT_Z + 0.5, 0, cy - 0.1, CAR_CTR_Z); },
-        'c-shaft': () => moveCam(18, midY, 21, 0, midY, 0)
+        'c-pit': () => moveCam(4, Y0 + 1.6, CAR_CTR_Z - 5, 0, Y0 + 0.8, CAR_CTR_Z),
+        'c-car': () => { const cy = carGrp.position.y; moveCam(0, cy, CAR_FRONT_Z - 0.35, 0, cy - 0.1, CAR_CTR_Z - 0.5, false); },
+        'c-car-top': () => { const cy = carGrp.position.y + S.CAR_H / 2; moveCam(3.5, cy + 2, CAR_CTR_Z - 4, 0, cy, CAR_CTR_Z); },
+        'c-governor': () => { const g = _govWorld(); moveCam(g.x + 1.05, g.y + 0.23, g.z + 0.53, g.x - 0.02, g.y + 0.02, g.z); },
+        'c-shaft': () => moveCam(18, midY, 21, 0, midY, 0, false)
       };
       Object.keys(camViews).forEach(id => {
-        document.getElementById(id).addEventListener('click', camViews[id]);
+        document.getElementById(id).addEventListener('click', () => {
+          if (overspeedActive) return; // 자동 시연 카메라와 경쟁하지 않는다.
+          if (id === 'c-governor' && !govHandles()?.ready) return;
+          const overview = id === 'c-shaft';
+          controls.minDistance = overview ? 2 : 0.15;
+          camera.near = overview ? 0.1 : 0.002;
+          camera.updateProjectionMatrix();
+          gsap.killTweensOf(camera.position); gsap.killTweensOf(controls.target);
+          camViews[id]();
+          Object.keys(camViews).forEach(key => {
+            const button = document.getElementById(key);
+            button.classList.toggle('active', key === id);
+            button.setAttribute('aria-pressed', String(key === id));
+          });
+        });
+      });
+      document.getElementById('c-background').addEventListener('click', () => {
+        setDetailedBackground(!outdoorPresentation.detailed);
       });
 
       // Click the landing triangle key: turn the cam, lift the latch, open that floor.
@@ -859,7 +878,12 @@
       });
     }
 
-    function moveCam(cx, cy, cz, tx, ty, tz) {
+    function moveCam(cx, cy, cz, tx, ty, tz, fitWidth = true) {
+      // 세로 화면에서는 부품의 좌우가 잘리지 않도록 같은 시선 방향으로 물러난다.
+      const distanceScale = fitWidth ? Math.max(1, 0.9 / camera.aspect) : 1;
+      cx = tx + (cx - tx) * distanceScale;
+      cy = ty + (cy - ty) * distanceScale;
+      cz = tz + (cz - tz) * distanceScale;
       gsap.to(camera.position, { x: cx, y: cy, z: cz, duration: 1.2, ease: 'power2.inOut' });
       gsap.to(controls.target, { x: tx, y: ty, z: tz, duration: 1.2, onUpdate: () => controls.update() });
     }

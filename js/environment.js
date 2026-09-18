@@ -71,9 +71,11 @@
       };
     }
 
+    let environmentLighting = [];
     function buildLighting() {
       // 1. 주변광(HemisphereLight) — 상부 은은한 하늘빛 / 하부 묵직한 반사광
-      scene.add(new THREE.HemisphereLight(0xe8f2ff, 0x2c323b, 1.2));
+      const ambient = new THREE.HemisphereLight(0xe8f2ff, 0x2c323b, 1.2);
+      scene.add(ambient);
 
       // 2. 주광(Key Light) — 직광 그림자 및 주 명암
       const sun = new THREE.DirectionalLight(0xfffae8, 2.2);
@@ -92,6 +94,7 @@
       const fillLight = new THREE.DirectionalLight(0xb0c4de, 1.0);
       fillLight.position.set(-30, 10, 20);
       scene.add(fillLight);
+      environmentLighting = [ambient, sun, rimLight, fillLight];
 
       const carLight = new THREE.PointLight(0xfffbe8, 2.5, 6);
       carLight.name = 'carLight';
@@ -1833,20 +1836,44 @@
       parent.add(streamGrp);
     }
 
+    let outdoorPresentation = null;
+    function setDetailedBackground(enabled) {
+      if (!outdoorPresentation) return;
+      const p = outdoorPresentation;
+      p.detailed = Boolean(enabled);
+      p.landscape.visible = p.detailed;
+      p.buildings.visible = p.detailed;
+      p.sky.visible = p.detailed;
+      p.floor.material = p.detailed ? p.floorMaterial : p.simpleFloorMaterial;
+      scene.background = p.detailed ? p.background : p.simpleBackground;
+      scene.fog = p.detailed ? p.fog : p.simpleFog;
+      renderer.toneMappingExposure = p.detailed ? p.exposure : p.simpleExposure;
+      p.lighting.forEach(entry => { entry.light.intensity = p.detailed ? entry.original : entry.studio; });
+      const button = document.getElementById('c-background');
+      if (button) {
+        button.setAttribute('aria-pressed', String(p.detailed));
+        button.classList.toggle('active', p.detailed);
+      }
+    }
+
     function buildOutdoorGround(parent) {
       const g = new THREE.Group();
       g.name = 'outdoorGround';
       g.userData = { type: 'outdoor-ground' };
 
       const span = 280;
-      createBox(span, 0.25, span, M.conc(0x3d3a36), 0, Y0 - 0.125, 0, g);
+      const floor = createBox(span, 0.25, span, M.conc(0x3d3a36), 0, Y0 - 0.125, 0, g);
+      floor.name = 'outdoorBase';
+      const landscape = new THREE.Group();
+      landscape.name = 'outdoorLandscape';
+      g.add(landscape);
 
       // 구릉 지형 + 풀밭 + 들꽃 (스타일라이즈드 자연 배경)
-      buildTerrain(g);
-      buildGrassField(g);
-      buildFlowerField(g);
+      buildTerrain(landscape);
+      buildGrassField(landscape);
+      buildFlowerField(landscape);
 
-      buildStreamAndRocks(g);
+      buildStreamAndRocks(landscape);
 
       // 승강로 전면 및 계단/나선형 휠체어 램프 진입 광장 포장 — 보도블록 확장 (폭 13.0m, 깊이 11.5m)
       const paverW = 13.0;
@@ -1886,6 +1913,25 @@
       }
 
       scene.add(bgGrp);
+      const floor = scene.getObjectByName('outdoorBase');
+      const studioHorizon = '#4c6373';
+      // 별도 3D 배경이나 후처리 없이 작은 텍스처로 관찰용 공간의 명암을 만든다.
+      const studioBackground = createBgGradientTexture(4, 256, (ctx, w, h) => {
+        const gradient = ctx.createLinearGradient(0, 0, 0, h);
+        gradient.addColorStop(0, '#293d4d');
+        gradient.addColorStop(0.58, studioHorizon);
+        gradient.addColorStop(1, '#617887');
+        ctx.fillStyle = gradient; ctx.fillRect(0, 0, w, h);
+      });
+      outdoorPresentation = {
+        detailed: false, buildings: bgGrp, landscape: scene.getObjectByName('outdoorLandscape'),
+        sky: scene.getObjectByName('skyDome'), floor, floorMaterial: floor.material,
+        simpleFloorMaterial: M.conc(0x121c24), background: scene.background, fog: scene.fog,
+        simpleBackground: studioBackground, simpleFog: new THREE.FogExp2(studioHorizon, 0.0045),
+        exposure: renderer.toneMappingExposure, simpleExposure: 0.95,
+        lighting: environmentLighting.map((light, i) => ({ light, original: light.intensity, studio: [0.7, 1.8, 0.65, 0.45][i] }))
+      };
+      setDetailedBackground(false);
     }
 
     // 점형블록 — 실사 텍스처 (6×6 돌기 패턴)

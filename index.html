@@ -447,6 +447,10 @@
       gap: 7px;
     }
 
+    #dd-cam { width: 132px; }
+    #dd-cam .c-btn { width: 100%; flex-shrink: 0; }
+    #dd-cam .dd-title { padding: 4px 3px; letter-spacing: 0; }
+
     .c-btn {
       width: 44px;
       height: 44px;
@@ -599,10 +603,15 @@
     <!-- 드롭다운: 카메라 (세로 일렬) -->
     <div class="dropdown" id="dd-cam">
       <div class="stack">
-        <button class="c-btn" id="c-mr" title="기계실">MR</button>
-        <button class="c-btn" id="c-pit" title="피트">PIT</button>
-        <button class="c-btn" id="c-car" title="카내부">CAR</button>
-        <button class="c-btn" id="c-shaft" title="승강로">ALL</button>
+        <button class="c-btn active" id="c-shaft" aria-pressed="true">전체 운행</button>
+        <div class="dd-title">부품 관찰</div>
+        <button class="c-btn" id="c-mr" aria-pressed="false">기계실</button>
+        <button class="c-btn" id="c-pit" aria-pressed="false">피트</button>
+        <button class="c-btn" id="c-car" aria-pressed="false">카 내부</button>
+        <button class="c-btn" id="c-car-top" aria-pressed="false">카 상부</button>
+        <button class="c-btn" id="c-governor" aria-pressed="false">조속기</button>
+        <div class="dd-title">배경</div>
+        <button class="c-btn" id="c-background" aria-pressed="false" title="기존 건물과 자연 풍경 표시">주변 풍경</button>
       </div>
     </div>
 
