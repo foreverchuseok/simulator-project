@@ -605,6 +605,7 @@
       <div class="stack">
         <button class="c-btn active" id="c-shaft" aria-pressed="true">전체 운행</button>
         <div class="dd-title">부품 관찰</div>
+        <div style="font-size:11px;line-height:1.5;padding:0 3px 5px;color:#394957">부품 두 번 눌러 확대</div>
         <button class="c-btn" id="c-mr" aria-pressed="false">기계실</button>
         <button class="c-btn" id="c-pit" aria-pressed="false">피트</button>
         <button class="c-btn" id="c-car" aria-pressed="false">카 내부</button>
@@ -640,7 +641,8 @@
     <div class="ui-hint">
       🖱 <b>좌클릭 드래그:</b> 화면 회전<br>
       🖱 <b>마우스 휠:</b> 확대 / 축소<br>
-      🖱 <b>우클릭 드래그:</b> 화면 이동(Pan)
+      🖱 <b>우클릭 드래그:</b> 화면 이동(Pan)<br>
+      🖱 <b>부품 더블클릭:</b> 가까이 보기
     </div>
   </div>
 
@@ -958,7 +960,7 @@
       scene.fog = new THREE.FogExp2(0xe8f4fc, 0.0045);
 
       const wrap = document.getElementById('canvas-wrap');
-      camera = new THREE.PerspectiveCamera(50, wrap.clientWidth / wrap.clientHeight, 0.1, 200);
+      camera = new THREE.PerspectiveCamera(50, wrap.clientWidth / wrap.clientHeight, MANUAL_CAMERA.near, 200);
       camera.position.set(18, Y0 + TOTAL_H * 0.4, 21);
 
       renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gl'), antialias: true });
@@ -993,7 +995,7 @@
       controls.enableDamping = true; controls.dampingFactor = 0.07;
       controls.target.set(0, Y0 + TOTAL_H * 0.4, 0);
       controls.maxPolarAngle = Math.PI / 2 + 0.10; // 지평선 살짝 아래까지만 (지면 관통 방지)
-      controls.minDistance = 2;
+      controls.minDistance = MANUAL_CAMERA.minDistance;
       controls.maxDistance = 90;
 
       // TEMP DEBUG: ?mrcam 쿼리로 기계실 카메라 (스크린샷 확인용)

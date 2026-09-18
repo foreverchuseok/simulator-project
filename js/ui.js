@@ -1,4 +1,5 @@
 // 엘리베이터 상태 제어와 UI 이벤트 로직을 정의한다.
+const MANUAL_CAMERA = Object.freeze({ minDistance: 0.04, near: 0.002 });
 
     /* ─────────────────────────────────────────────────────────────
        기계 구동음 엔진 (Web Audio) — 브레이크 개방·구동·가감속·체결을
@@ -812,11 +813,10 @@
       };
       Object.keys(camViews).forEach(id => {
         document.getElementById(id).addEventListener('click', () => {
-          if (overspeedActive) return; // 자동 시연 카메라와 경쟁하지 않는다.
+          if (overspeedActive || !controls.enabled) return; // 자동 시연·복귀 카메라를 보호한다.
           if (id === 'c-governor' && !govHandles()?.ready) return;
-          const overview = id === 'c-shaft';
-          controls.minDistance = overview ? 2 : 0.15;
-          camera.near = overview ? 0.1 : 0.002;
+          controls.minDistance = MANUAL_CAMERA.minDistance;
+          camera.near = MANUAL_CAMERA.near;
           camera.updateProjectionMatrix();
           gsap.killTweensOf(camera.position); gsap.killTweensOf(controls.target);
           camViews[id]();
@@ -836,6 +836,7 @@
       const keyNdc = new THREE.Vector2();
       let keyPtr = null;
       const canvas = renderer.domElement;
+      const ignoreCameraGesture = bindCameraFocus(canvas);
       canvas.addEventListener('pointerdown', e => {
         if (e.button !== 0) return;
         keyPtr = { x: e.clientX, y: e.clientY };
@@ -844,7 +845,7 @@
         if (e.button !== 0 || !keyPtr) return;
         const dragged = Math.hypot(e.clientX - keyPtr.x, e.clientY - keyPtr.y) > 6;
         keyPtr = null;
-        if (dragged || moving) return;
+        if (dragged || moving || ignoreCameraGesture(e)) return;
         const rect = canvas.getBoundingClientRect();
         keyNdc.set(
           ((e.clientX - rect.left) / rect.width) * 2 - 1,
@@ -876,6 +877,80 @@
           }
         });
       });
+    }
+
+    // Tap classification is shared with the triangle key; pinch/drag must never activate it.
+    function bindCameraFocus(canvas) {
+      const pointers = new Map(), ignored = new WeakSet();
+      const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+      let lastTap = null;
+      const cancelMotion = () => {
+        if (overspeedActive || !controls.enabled) return;
+        gsap.killTweensOf(camera.position);
+        gsap.killTweensOf(controls.target);
+      };
+      controls.addEventListener('start', cancelMotion);
+      canvas.addEventListener('pointerdown', e => {
+        if (e.button !== 0) { lastTap = null; return; }
+        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, time: performance.now(), invalid: false });
+        if (pointers.size > 1) {
+          pointers.forEach(p => p.invalid = true);
+          lastTap = null;
+        }
+      }, true);
+      canvas.addEventListener('pointermove', e => {
+        const p = pointers.get(e.pointerId);
+        if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 6) p.invalid = true;
+      }, true);
+      const clear = () => { pointers.clear(); lastTap = null; };
+      canvas.addEventListener('pointercancel', clear, true);
+      window.addEventListener('blur', clear);
+      canvas.addEventListener('pointerup', e => {
+        const p = pointers.get(e.pointerId);
+        pointers.delete(e.pointerId);
+        const now = performance.now();
+        if (!p || p.invalid || now - p.time > 450 || overspeedActive || !controls.enabled) {
+          ignored.add(e); lastTap = null; return;
+        }
+        const rect = canvas.getBoundingClientRect();
+        ndc.set((e.clientX - rect.left) / rect.width * 2 - 1, -(e.clientY - rect.top) / rect.height * 2 + 1);
+        ray.setFromCamera(ndc, camera);
+        // Preserve the existing immediate single-tap emergency-key action.
+        const keys = hatchDoors.map(h => h.right.userData.triKey?.group).filter(Boolean);
+        if (ray.intersectObjects(keys, true).length) { lastTap = null; return; }
+        const previous = lastTap;
+        lastTap = { x: e.clientX, y: e.clientY, time: now, type: e.pointerType };
+        if (!previous || previous.type !== e.pointerType || now - previous.time > 350 ||
+            Math.hypot(previous.x - e.clientX, previous.y - e.clientY) > 24) return;
+        lastTap = null;
+        const meshes = [];
+        scene.traverseVisible(o => {
+          if (!o.isMesh) return;
+          for (let parent = o; parent; parent = parent.parent) {
+            if (['outdoorGround', 'outdoorBackground', 'outdoorLandscape', 'skyDome'].includes(parent.name)) return;
+          }
+          meshes.push(o);
+        });
+        const hit = ray.intersectObjects(meshes, false).find(h => {
+          const material = Array.isArray(h.object.material) ? h.object.material[h.face.materialIndex] : h.object.material;
+          return material?.visible && material.opacity > 0 && camera.layers.test(h.object.layers);
+        });
+        if (!hit) return;
+        ignored.add(e);
+        cancelMotion();
+        const distance = THREE.MathUtils.clamp(hit.distance * 0.3, 0.12, 2);
+        const position = camera.position.clone().sub(hit.point).normalize().multiplyScalar(distance).add(hit.point);
+        position.y = Math.max(Y0 + 0.35, position.y);
+        controls.minDistance = MANUAL_CAMERA.minDistance;
+        camera.near = MANUAL_CAMERA.near;
+        camera.updateProjectionMatrix();
+        gsap.to(camera.position, { x: position.x, y: position.y, z: position.z, duration: 0.75, ease: 'power2.inOut' });
+        gsap.to(controls.target, { x: hit.point.x, y: hit.point.y, z: hit.point.z, duration: 0.75, ease: 'power2.inOut', onUpdate: () => controls.update() });
+        document.querySelectorAll('#dd-cam [id^="c-"]:not(#c-background)').forEach(button => {
+          button.classList.remove('active'); button.setAttribute('aria-pressed', 'false');
+        });
+      }, true);
+      return e => ignored.has(e);
     }
 
     function moveCam(cx, cy, cz, tx, ty, tz, fitWidth = true) {

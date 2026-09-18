@@ -46,6 +46,13 @@ try{
   await page.waitForFunction(()=>gsap.getTweensOf(camera.position).length===0&&gsap.getTweensOf(controls.target).length===0);
   assert.equal(await page.getAttribute('#'+id,'aria-pressed'),'true');
   await page.screenshot({animations:'disabled',path:path.join(out,label+'-'+id+'.png')});
+  if(id==='c-governor') {
+   const before=await page.evaluate(()=>camera.position.distanceTo(controls.target));
+   await page.mouse.dblclick(640,425,{delay:100});
+   await page.waitForFunction(()=>gsap.getTweensOf(camera.position).length===0&&gsap.getTweensOf(controls.target).length===0);
+   assert.ok(await page.evaluate(()=>camera.position.distanceTo(controls.target))<before*.8,'Double click approaches visible geometry');
+   await page.screenshot({path:path.join(out,label+'-focus.png')});
+  }
  }
  const restored=await page.evaluate(()=>{
   for(let i=0;i<6;i++){setDetailedBackground(true);setDetailedBackground(false);}
@@ -53,7 +60,7 @@ try{
   return {partsUnchanged:viewParts.every(([id,visible])=>actual.get(id)?.visible===visible),state:currentState,near:camera.near,minDistance:controls.minDistance,detail:outdoorPresentation.detailed,
    studioRestored:outdoorPresentation.lighting.every(e=>e.light.intensity===e.studio)&&renderer.toneMappingExposure===outdoorPresentation.simpleExposure};
  });
- assert.equal(restored.partsUnchanged,true);assert.equal(restored.state,'IDLE');assert.equal(restored.near,.1);assert.equal(restored.minDistance,2);
+ assert.equal(restored.partsUnchanged,true);assert.equal(restored.state,'IDLE');assert.equal(restored.near,.002);assert.equal(restored.minDistance,.04);
  assert.equal(restored.studioRestored,true);
  const mobile=await browser.newContext({viewport:{width:800,height:1280},deviceScaleFactor:1,isMobile:true,hasTouch:true});
  const tablet=await mobile.newPage();tablet.on('pageerror',e=>errors.push(e.message));
@@ -66,6 +73,22 @@ try{
   await tablet.locator('#c-background').scrollIntoViewIfNeeded();await tablet.tap('#c-background');await tablet.tap('#c-background');
   const box=await tablet.locator('#dd-cam').boundingBox();assert.ok(box.x>=0&&box.x+box.width<=viewport.width+1&&box.y>=0&&box.y+box.height<=viewport.height+1);
   await tablet.screenshot({animations:'disabled',path:path.join(out,`${label}-touch-${viewport.width}.png`)});
+  const before=await tablet.evaluate(()=>camera.position.distanceTo(controls.target));
+  // Real multi-touch must remain a pinch, never a focus or emergency-key click.
+  const touchSession=await mobile.newCDPSession(tablet);
+  const x=viewport.width/2,y=viewport.height/2;
+  await touchSession.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:x-30,y,id:1},{x:x+30,y,id:2}]});
+  await touchSession.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:x-50,y,id:1},{x:x+50,y,id:2}]});
+  await touchSession.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  assert.equal(await tablet.evaluate(()=>gsap.getTweensOf(camera.position).length),0,'Pinch does not start focus');
+  assert.equal(await tablet.evaluate(()=>hatchDoors.some(h=>h.keyRatio>0)),false,'Pinch does not turn a key');
+  await tablet.tap('#c-governor');
+  await tablet.waitForFunction(()=>gsap.getTweensOf(camera.position).length===0&&gsap.getTweensOf(controls.target).length===0);
+  await tablet.touchscreen.tap(viewport.width/2,viewport.height/2);
+  await tablet.touchscreen.tap(viewport.width/2,viewport.height/2);
+  await tablet.waitForFunction(()=>gsap.getTweensOf(camera.position).length===0&&gsap.getTweensOf(controls.target).length===0);
+  assert.ok(await tablet.evaluate(()=>camera.position.distanceTo(controls.target))<before*.8,'Double tap approaches visible geometry');
+  await tablet.screenshot({path:path.join(out,`${label}-focus-touch-${viewport.width}.png`)});
  }
  await mobile.close();assert.deepEqual(errors,[]);
  fs.writeFileSync(path.join(out,label+'-views.json'),JSON.stringify({result,detailed,restored,errors},null,2));console.log(JSON.stringify({result,detailed,restored,errors}));
