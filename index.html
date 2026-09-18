@@ -645,6 +645,7 @@
   <script src="js/hall-interlock.js"></script>
   <script src="js/car-panels.js"></script>
   <script src="js/leveling-sensors.js"></script>
+  <script src="js/safety-device.js"></script>
   <script src="js/elevator.js"></script>
   <script src="js/ui.js"></script>
 
@@ -729,7 +730,7 @@
     const RAIL_BRACKET_BAND = 0.13;           // 브라켓 1단이 차지하는 Y 반높이 + 암 여유
 
     /* ── 16.8 CAM ASSY / FLS ASSY (MR_설계.pdf 137~138p, 책 135~136p) — 좌측(-X) 레일, 스위치 방식 ──
-       캠은 카 스타일에 붙는 파이프 3본(감속·리미트·파이널, 길이·Z 레인 다름)이고,
+       2026-09-17 구형 배치: 캠은 카 스타일에 붙는 공용 긴 캠 1본이고,
        리미트 스위치 6개는 레일 클립으로 승강로에 고정한다(environment.js buildLimitSwitches).
        피트부터 순서: 하부 파이널(DFL) → 하부 리미트(DLS) → 하부 강제감속(DSD)
                       … 상부 강제감속(USD) → 상부 리미트(ULS) → 상부 파이널(UFL).
@@ -737,25 +738,24 @@
        하강 시 캠 하단이, 상승 시 캠 상단이 먼저 스위치를 밟는다. */
     const FLS_Z          = CAR_RAIL_Z - 0.34;      // 캠·스위치 공용 Z 레인 (레일 후면측)
     const FLS_LEVER_L    = 0.050;                  // 고정축~롤러축 48~52mm (부품설계 194p) 중앙값
-    const FLS_ROLLER_R   = 0.030;                  // 레버 롤러 반지름
+    const FLS_ROLLER_R   = 0.019;                  // 구형 금속 레버의 고무 롤러
     const FLS_TRIP_ANGLE = 60 * Math.PI / 180;     // 동작각 50~70° (부품설계 197p) 중앙값
     const FLS_LEAD       = 0.060;                  // 캠 양단 절곡(리드인) 길이
     const FLS_PIVOT_X    = -(CAR_RAIL_X - 0.020);  // 레버 고정축 X (레일 배면에서 20mm 카 쪽)
     // 캠 면 X — 동작각에서 역산. 롤러가 완전히 눌렸을 때 롤러의 카 쪽 면 = 캠 면
     const FLS_CAM_FACE_X = FLS_PIVOT_X + FLS_LEVER_L * Math.cos(FLS_TRIP_ANGLE) + FLS_ROLLER_R;
     // 트립 거리 — 종단 착상면(카 바닥 레벨) 기준
-    const LS_TRIP        = 0.040;   // 리미트: 바닥레벨 ±30~50mm (MR_설계 138p)
-    const FLS_OVERTRAVEL = 0.095;   // 파이널: ±90~99mm (부품설계 196~197p)
+    const LS_TRIP        = 0.100;   // 구형 일렬 배치: 모델 리드인 시작점 (실제 설치 규격 아님)
+    const FLS_OVERTRAVEL = 0.280;   // 본체 간 180mm; 350mm 점검 오버런 안에서 완전 눌림
     const SLD_DIST       = 1.50;    // 강제감속: 60m/min 1500mm (부품설계 200~201p)
-    /* 카 캠은 통판이 아니라 파이프 3본(감속·리미트·파이널)이다. 길이·Z 레인이 달라
-       각 가닥이 자기 스위치만 밟는다. 묶음 중심은 스타일 중턱. */
+    /* 공용 캠 1본. 스위치 높이 차이로 감속 → 리미트 → 파이널을 순차 작동한다.
+       CAM_VANES는 기존 조회부 호환용이며 세 키 모두 같은 원본을 참조한다. */
     const CAM_MID_LY     = (S.CAR_H / 2 + 0.30 + (-S.CAR_H / 2 - 0.05)) / 2;
     const CAM_VANE_W     = 0.028;   // 가닥 타격면 Z 폭
-    const FLS_PAIR_DZ    = 0.048;   // 리미트(+Z)·파이널(−Z). 감속은 가운데(0)
+    const FLS_PAIR_DZ    = 0;       // 구형: 여섯 롤러가 동일 수직선, 공용 캠 한 개
+    const TERMINAL_CAM = Object.freeze({kind: 'shared', botLY: CAM_MID_LY - 1.28, topLY: CAM_MID_LY + 1.28, dz: 0});
     const CAM_VANES = {
-      final:    { kind: 'final',    botLY: CAM_MID_LY - 0.36, topLY: CAM_MID_LY + 0.36, dz: -FLS_PAIR_DZ }, // 720mm
-      limit:    { kind: 'limit',    botLY: CAM_MID_LY - 0.41, topLY: CAM_MID_LY + 0.41, dz: +FLS_PAIR_DZ }, // 820mm
-      slowdown: { kind: 'slowdown', botLY: CAM_MID_LY - 1.28, topLY: CAM_MID_LY + 1.28, dz: 0 }             // 2560mm
+      final: TERMINAL_CAM, limit: TERMINAL_CAM, slowdown: TERMINAL_CAM
     };
     /* 스위치 롤러축 Y. 하부 3개는 자기 가닥 하단이, 상부 3개는 상단이 트립점을 지날 때 밟는다.
        감속 가닥이 1.5m+오버런보다 길어 종단 착상까지 눌린 채 유지된다. */
@@ -1035,7 +1035,7 @@
       } else if (location.search.includes('flscam')) {
         // 하부 리미트·파이널 스위치(DLS/DFL) — 피트 레일 + 카 스타일 캠 하단
         controls.minDistance = 0.10;
-        const sy = TERMINAL_SWITCHES.find(s => s.name === 'DLS').y;
+        const sy = TERMINAL_SWITCHES.find(s => s.name === (location.search.includes('flscam=2')?'ULS':'DLS')).y;
         camera.position.set(FLS_PIVOT_X - 0.32, sy + 0.16, FLS_Z - 0.42);
         controls.target.set(FLS_PIVOT_X + 0.02, sy - 0.02, FLS_Z);
         document.getElementById('loading').style.display = 'none';
@@ -1106,6 +1106,7 @@
       controls.update();
       if (camera.position.y < Y0 + 0.35) camera.position.y = Y0 + 0.35;
       renderer.render(scene, camera);
+      if(typeof renderOverspeedInset==='function')renderOverspeedInset();
     }
 
     init();

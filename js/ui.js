@@ -323,6 +323,7 @@
 
     // 점검 스위치 ON/OFF. ON: 자동 운전 즉시 차단 / OFF: 착상 위치가 아니면 최근접 층 착상
     function setInspectionMode(on) {
+      if(overspeedActive)return;
       if (insMode === on) return;
       insMode = on;
       insHold = 0;
@@ -375,12 +376,48 @@
        governorReset() → 최근접 층 구출 운전
     ───────────────────────────────────────────────────────────── */
     let overspeedActive = false;
+    const ovsDemo={stage:'rest',inset:null,trip:null,stop:null,fallTick:null,hidden:[],insetHidden:[],camera:null};
+    function ovsStage(text){
+      let el=document.getElementById('ovs-stage');
+      if(!el){el=document.createElement('div');el.id='ovs-stage';el.setAttribute('role','status');
+        el.style.cssText='position:fixed;left:50%;bottom:22px;transform:translateX(-50%);max-width:70vw;padding:12px 20px;background:#142230ed;color:#eef5fa;border:1px solid #66859b;border-radius:9px;font:14px sans-serif;z-index:30;pointer-events:none;text-align:center';document.body.appendChild(el);}
+      el.hidden=false;el.textContent='OVS · 느린 동작  |  '+text;
+      updateStatus('v-dir',text,'#f0883e');
+    }
+    function setOVSCutaway(enabled){
+      if(!enabled){ovsDemo.hidden.forEach(([o,v])=>o.visible=v);ovsDemo.hidden=[];return;}
+      const keep=new Set(['carSafetyGear','carSafetyLinkage','CarGuideShoe_L_Lower','CarGuideShoe_R_Lower']);
+      carGrp.traverse(o=>{
+        if(!o.isMesh&&!o.isLine)return;
+        let p=o,retained=false;while(p&&p!==carGrp){if(keep.has(p.name))retained=true;p=p.parent;}
+        if(!retained){ovsDemo.hidden.push([o,o.visible]);o.visible=false;}
+      });
+    }
+    function renderOverspeedInset(){
+      if(!ovsDemo.inset||!ovsDemo.camera)return;
+      const c=ovsDemo.camera,w=Math.min(350,innerWidth*0.32),h=w*0.72;
+      const target=ovsDemo.target,offset=ovsDemo.offset;
+      if(ovsDemo.inset==='governor'){
+        governorWheelGrp.getWorldPosition(target);offset.set(0.64,0.09,0.31);
+      }else{
+        target.set(1.24,-S.CAR_H/2-0.16,0.04);carGrp.localToWorld(target);offset.set(-0.40,-0.22,-0.42);
+      }
+      c.position.copy(target).add(offset);c.lookAt(target);c.aspect=w/h;c.updateProjectionMatrix();
+      // Inset is an explicit section view; restore visibility immediately after drawing.
+      if(ovsDemo.inset==='safety')ovsDemo.insetHidden.forEach(([o])=>{o.userData.ovsInsetVisible=o.visible;o.visible=false;});
+      renderer.setScissorTest(true);renderer.setScissor(18,100,w,h);renderer.setViewport(18,100,w,h);
+      const shadowUpdate=renderer.shadowMap.autoUpdate;renderer.shadowMap.autoUpdate=false;
+      renderer.clearDepth();renderer.render(scene,c);renderer.shadowMap.autoUpdate=shadowUpdate;
+      renderer.setScissorTest(false);renderer.setViewport(0,0,innerWidth,innerHeight);
+      if(ovsDemo.inset==='safety')ovsDemo.insetHidden.forEach(([o])=>o.visible=o.userData.ovsInsetVisible);
+    }
 
     /* ── 카메라 연출 헬퍼 (조속기 → 디바이스 추종) ──────────────────
        classic script라 camera/controls/scene/carGrp/governorWheelGrp는 전역 공유. */
     let _camSaved = null;
     function _saveCam() {
-      _camSaved = { p: camera.position.clone(), t: controls.target.clone(), damp: controls.enableDamping, minD: controls.minDistance };
+      _camSaved = { p: camera.position.clone(), t: controls.target.clone(), damp: controls.enableDamping, minD: controls.minDistance, near:camera.near };
+      camera.near=0.002;camera.updateProjectionMatrix();
       controls.enabled = false; controls.enableDamping = false; controls.minDistance = 0.05;
     }
     function _restoreCam(dur = 1.5) {
@@ -388,7 +425,7 @@
       const s = _camSaved; _camSaved = null;
       gsap.to(camera.position, { x: s.p.x, y: s.p.y, z: s.p.z, duration: dur, ease: 'power2.inOut' });
       gsap.to(controls.target, { x: s.t.x, y: s.t.y, z: s.t.z, duration: dur, ease: 'power2.inOut',
-        onComplete: () => { controls.enableDamping = s.damp; controls.minDistance = s.minD; controls.enabled = true; } });
+        onComplete: () => { controls.enableDamping = s.damp; controls.minDistance = s.minD; controls.enabled = true;camera.near=s.near;camera.updateProjectionMatrix(); } });
     }
     function _camTo(px, py, pz, tx, ty, tz, dur = 1.3, ease = 'power2.inOut', onDone) {
       gsap.to(camera.position, { x: px, y: py, z: pz, duration: dur, ease });
@@ -397,13 +434,14 @@
     function _govWorld() { const v = new THREE.Vector3(); (governorWheelGrp || mrGrp).getWorldPosition(v); return v; }
     function _deviceWorld() {
       // 카 우측 하단 세이프티 기어 웨지/작동 샤프트 월드 좌표
-      return carGrp.localToWorld(new THREE.Vector3(S.CAR_W / 2 + 0.05, -S.CAR_H / 2 - 0.12, 0.04));
+      carGrp.updateMatrixWorld(true);
+      return carGrp.localToWorld(new THREE.Vector3(S.CAR_W / 2 + 0.03, -S.CAR_H / 2 - 0.16, 0.04));
     }
 
     function startOverspeedFault(btn) {
       const gov = mrGrp.userData.governor;
       if (insMode) { updateStatus('v-dir', '점검운전 중 — 자동 시연 불가 (AUT 전환)', '#f0883e'); return; }
-      if (!gov || moving || doorOpen || estop || gsap.isTweening(carDoorL.position)) return;
+      if (!gov?.ready || !carGrp.userData.safetyGear || moving || doorOpen || estop || gsap.isTweening(carDoorL.position)) return;
 
       // 낙하 과속 시연은 3층 이상에서만 (아래로 떨어지며 속도가 붙을 거리 필요). 1·2층 불가.
       if (curFloor < 2) {
@@ -422,6 +460,13 @@
 
       // 카메라: 조속기 정면 3/4 사선 클로즈업으로 부드럽게 이동 (쐐기 물림·스위치 타격·캐치슈 파지 관람)
       _saveCam();
+      ovsDemo.stage='runaway';ovsDemo.inset='safety';
+      ovsDemo.camera ||= new THREE.PerspectiveCamera(42,1,0.002,100);
+      ovsDemo.target ||= new THREE.Vector3();ovsDemo.offset ||= new THREE.Vector3();ovsDemo.insetHidden=[];
+      scene.traverse(o=>{if(!o.isMesh&&!o.isLine)return;let p=o,keep=false;
+        while(p){if(['carSafetyGear','carSafetyLinkage','T_Rail_13K'].includes(p.name))keep=true;p=p.parent;}
+        if(!keep)ovsDemo.insetHidden.push([o]);});
+      ovsStage('낙하 속도가 증가합니다. 왼쪽 아래는 안전기 작동 단면입니다.');
       const gv = _govWorld();
       _camTo(gv.x + 0.70, gv.y + 0.15, gv.z + 0.35, gv.x - 0.02, gv.y + 0.02, gv.z, 1.2);
 
@@ -455,75 +500,87 @@
         if (gov.setLinkage) gov.setLinkage(open);
         // 트립: 정격 130% 도달
         if (!tripped && (v >= vTripMs || carGrp.position.y <= yFloor1 + 0.25)) {
-          tripped = true; gsap.ticker.remove(fallTick); onGovernorOverspeed(spinDir, btn);
+          tripped = true; gsap.ticker.remove(fallTick);ovsDemo.fallTick=null; onGovernorOverspeed(spinDir, btn);
         }
       };
       gsap.ticker.add(fallTick);
+      ovsDemo.fallTick=fallTick;
     }
 
     function onGovernorOverspeed(spinDir, btn) {
-      estop = true; moving = false;
-      MACH.motorOff();
-      currentState = ELEVATOR_STATE.ESTOP;
-      updateStatus('v-dir', '⚠ 과속 검출 — 조속기 슬로우 트립', '#f85149');
-
-      // ① 조속기 4단계 슬로우 트립 (진자 개방 → 쐐기 결착 → 휠 드래그 → 로프 파지 & 스위치 타격)
-      const tripTl = governorTrip(spinDir, () => engageDeviceStop(spinDir, btn));
-
-      // ② 조속기 완전 물림 상태를 약 2.0초간 화면에 고정하여 디테일을 명확히 관람
-      const govDone = tripTl ? tripTl.duration() : 2.0;
-      const govHoldTime = govDone + 2.0; // 슬로우 완료 후 2초간 정지 화면 유지
-
-      gsap.delayedCall(govHoldTime, () => {
-        updateStatus('v-dir', '■ 세이프티 기어 작동 (레일 파지)', '#f85149');
-        const d = _deviceWorld();
-        // 승강로 외벽을 통과하지 않고 전면/측면 개방 뷰를 통해 부드럽게 카 세이프티 기어로 전환
-        _camTo(d.x + 0.60, d.y + 0.22, d.z + 0.85, d.x - 0.02, d.y, d.z, 2.0, 'power2.inOut', () => {
-          // 세이프티 기어 레일 파지 상태를 3초간 클로즈업 관람 후 복귀
-          gsap.delayedCall(3.0, () => _restoreCam(1.8));
-        });
+      moving=true;
+      // Electrical cut-off is visible first; mechanical motion continues in slow time.
+      let previousWheel=govHandles().wheel.rotation.z;
+      ovsDemo.trip=governorTrip(spinDir,()=>{
+        estop=true;moving=false;currentState=ELEVATOR_STATE.ESTOP;
+        ovsStage('로프 고정 → 카의 상대 하강이 링크를 당깁니다.');
+        ovsDemo.inset='governor';setOVSCutaway(true);
+        const d=_deviceWorld();
+        _camTo(d.x-0.42,d.y-0.24,d.z-0.52,d.x,d.y,d.z,1.25);
+        engageDeviceStop(spinDir,btn,{duration:4.0,onComplete:()=>{
+          ovsStage('제동 완료 · 네 쐐기가 레일을 파지했습니다. RST로 복귀합니다.');
+          ovsDemo.stage='stopped';
+          // Keep the arrested mechanism visible for inspection until RST.
+          controls.enabled=true;
+        }});
+      },{
+        onStage:stage=>{
+          ovsDemo.stage=stage;
+          const captions={centrifugal:'과속 감지 · 원심 진자가 벌어집니다.',
+            electrical:'과속 스위치 타격 · 접점이 열리고 레버가 떨어집니다.',
+            pawl:'멈춤쇠가 톱니에 걸려 캐치 레버를 해제합니다.',
+            'rope-grip':'캐치슈가 조속기 로프를 눌러 고정합니다.'};
+          ovsStage(captions[stage]);
+          if(stage==='electrical'){MACH.motorOff();estop=true;currentState=ELEVATOR_STATE.ESTOP;}
+        },
+        onUpdate:()=>{
+          const w=govHandles().wheel.rotation.z,deltaY=-(w-previousWheel)*mrGrp.userData.govR;previousWheel=w;
+          carGrp.position.y+=deltaY;cwtGrp.position.y-=deltaY;
+          spinTractionSheaves(deltaY);
+          if(tensionSheaveGrp)tensionSheaveGrp.rotation.x-=deltaY/mrGrp.userData.govR;
+          refreshRopes();refreshGovernorRope();
+        }
       });
     }
 
-    // 로프 고정 순간: 조속기 로프 장력에 의해 작동 샤프트 회전 + 리프트 상승 + 웨지가 레일을 물어 카 완벽 급정지
-    function engageDeviceStop(spinDir, btn) {
-      let prevY = carGrp.position.y;
-      const sg = carGrp.userData.safetyGear;
-      const stopTween = gsap.to(carGrp.position, {
-        y: carGrp.position.y - 0.25, duration: 0.85, ease: 'power2.out',
-        onUpdate: () => {
-          const deltaY = carGrp.position.y - prevY; prevY = carGrp.position.y;
-          cwtGrp.position.y -= deltaY;
-          // 조속기 로프는 떡판에 파지되어 정지, 권상 로프는 카를 따라 계속 움직인다
+    function engageDeviceStop(spinDir, btn, options={}) {
+      const sg=carGrp.userData.safetyGear,linkage=carGrp.userData.safetyLinkage;
+      if(!sg||!linkage)return null;
+      const startY=carGrp.position.y,stroke=linkage.clampLift;
+      const drive={distance:0};let previousY=startY;
+      const tween=gsap.to(drive,{distance:stroke,duration:options.duration||0.85,ease:'power2.out',
+        onUpdate:()=>{
+          const distance=Math.max(0,Math.min(stroke,drive.distance));
+          carGrp.position.y=startY-distance;
+          const deltaY=carGrp.position.y-previousY;previousY=carGrp.position.y;cwtGrp.position.y-=deltaY;
           spinTractionSheaves(deltaY);
-          const p = stopTween.progress(); // 0 ~ 1
-          if (sg && sg.shaft) {
-            sg.shaft.rotation.x = SG_TRIP_ROT * p;      // 조속기 로프 견인 → 작동 샤프트 덜컥 회전
-                                                        // (elevator.js refreshCarSafetyLinkage 가 이 각도로 상부 장죽·캠·스위치를 맞춘다)
-            sg.liftL.position.y = 0.055 * p;            // 리프트 그룹 상승 → 웨지가 테이퍼로 파고듦
-            sg.liftR.position.y = 0.055 * p;
-            (sg.springs || []).forEach(spr => { spr.scale.y = 1 - 0.35 * p; });   // U-스프링 압축
-            (sg.wedges || []).forEach(w => {            // 웨지가 레일 핀 쪽(Z)으로 강력 파지
-              const gd = Math.sign(0.04 - w.userData.z0);
-              w.position.z = w.userData.z0 + gd * 0.012 * p;
-            });
+          const half=linkage.dimensions.half,ratio=distance/stroke;
+          const p=(Math.asin(-Math.sin(half)+2*Math.sin(half)*ratio)+half)/(2*half);
+          sg.shaft.rotation.x=SG_TRIP_ROT*p;
+          refreshRopes();refreshGovernorRope();
+          if(overspeedActive&&p>0.12&&ovsDemo.stage!=='wedges'){
+            ovsDemo.stage='wedges';ovsStage('안전 스위치 해제 → 링크·인상 핀 → 쐐기 상승 → 레일 파지');
           }
-          refreshRopes(); refreshGovernorRope();
         },
-        onComplete: () => {
-          MACH.brakeSet(); // 세이프티 기어 쐐기 걸림 → 최종 급정지
-          updateStatus('v-spd', '0 m/min', '#f0883e');
-          btn.disabled = false; btn.textContent = 'RST';
+        onComplete:()=>{
+          MACH.brakeSet();updateStatus('v-spd','0 m/min','#f0883e');
+          btn.disabled=false;btn.textContent='RST';options.onComplete?.();
         }
       });
+      ovsDemo.stop=tween;return tween;
     }
 
     function resetGovernorFault(btn) {
       btn.disabled = true;
+      ovsDemo.inset=null;ovsDemo.stage='resetting';setOVSCutaway(false);
+      if(ovsDemo.fallTick){gsap.ticker.remove(ovsDemo.fallTick);ovsDemo.fallTick=null;}
+      ovsDemo.trip?.kill();ovsDemo.stop?.kill();
+      const caption=document.getElementById('ovs-stage');if(caption)caption.hidden=true;
       _restoreCam(1.0); // 디바이스 클로즈업 중 즉시 복귀 눌러도 카메라 원위치
       updateStatus('v-dir', '조속기 복귀 중…', '#f0883e');
       governorReset(() => {
         estop = false; overspeedActive = false;
+        ovsDemo.stage='rest';
         btn.disabled = false; btn.textContent = 'OVS';
         rescueToNearestFloor();
       });
@@ -561,6 +618,7 @@
     }
 
     function moveElevator(fIdx) {
+      if(overspeedActive)return;
       if (insMode) { updateStatus('v-dir', '점검운전 중 — 자동 호출 무효', '#f0883e'); return; }
       if (moving || estop || fIdx === curFloor) return;
       if (doorOpen || gsap.isTweening(carDoorL.position)) { closeDoors(() => moveElevator(fIdx)); return; }

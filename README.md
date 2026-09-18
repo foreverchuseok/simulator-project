@@ -5,6 +5,8 @@ Three.js로 승강로, 카, 도어, 기계실, 피트와 안전장치를 구성�
 
 문서와 코드가 다르면 현재 코드가 기준이다.
 
+현재 단계는 **1단계 — 웹 최적화와 기본 사용 경험 정리**이며, 로프 형상 재사용과 PC 전후 측정을 완료했다. 레일 브라켓에 이어 카·승장 고정 부품 묶음과 운행·Live Server 검증을 마쳤다. 그림자·화면 구성 개선과 실제 모바일 검증이 남아 있다. 전체 순서와 다음 작업은 [공유 로드맵](docs/ROADMAP.md)을 참고한다.
+
 ## 빠른 시작
 
 1. 프로젝트 루트에서 Live Server로 `index.html`을 연다.
@@ -16,9 +18,10 @@ Three.js로 승강로, 카, 도어, 기계실, 피트와 안전장치를 구성�
 
 ## 문서 안내
 
+- [docs/ROADMAP.md](docs/ROADMAP.md): 웹 운영 방향, 전체 개발 순서, 현재 단계와 인계 상태의 원본.
 - `AGENTS.md`: Claude Code, Google Antigravity, Codex, Cursor가 따르는 공통 규칙. Codex·Cursor 전용 md는 없다.
-- `CLAUDE.md`: Claude Code 진입점.
-- `GEMINI.md`: Google Antigravity 진입점.
+- `CLAUDE.md`: Claude Code 입구. 내용은 `AGENTS.md`를 읽으라는 한 줄이다.
+- `GEMINI.md`: Google Antigravity 입구. 내용은 `AGENTS.md`를 읽으라는 한 줄이다.
 - `blender/BLENDER-WORKFLOW.md`: Blender Python에서 GLB를 만들고 연결하는 절차.
 - `PLAN.md`: 사용자가 이 파일에 담아 달라고 지정했을 때만 쓰는 로컬 임시 계획. Git에는 포함하지 않는다.
 - `docs/DOOR-REBUILD.md`: 도어 재공사 기록. 원본 코드는 `js/archive/doors.js`.
@@ -41,6 +44,7 @@ simmul/
 │     ├─ doors.js                 도어 재공사 원본 (앱 미로드)
 │     └─ car.js                   카 재공사 원본 (앱 미로드)
 ├─ docs/
+│  ├─ ROADMAP.md                  전체 개발 순서·현재 단계·다음 작업
 │  ├─ DOOR-REBUILD.md             도어 재공사 안내
 │  ├─ CAR-REBUILD.md              카 재공사 안내
 │  ├─ CAR-CONTROLS.md             카 탑 박스·OPB·하중 감지

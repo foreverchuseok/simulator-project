@@ -50,7 +50,7 @@ const HallInterlock = (() => {
       });
       state.spring = base.getObjectByName('Spring');
       state.springSeat = pivot.getObjectByName('SpringSeat');
-      state.springWasher = base.getObjectByName('SpringBottomWasher');
+      state.springWasher = base.getObjectByName('SpringBottomWasher') || pivot.getObjectByName('SpringBottomWasher');
       state.springTop = new THREE.Vector3(...data.spring.top);
       state.springRest = data.spring.restLength;
       state.linkPin = pivot.getObjectByName('LinkPin');

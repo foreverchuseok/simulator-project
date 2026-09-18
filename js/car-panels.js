@@ -92,7 +92,7 @@ function buildCarPanels(parent) {
   buildCarControls(parent,{floorY:bottom,frontZ,sideX});
 }
 
-/* 부품설계 221–226p + 현장 참고. 외형만 구현: 표시 4, 1~4층 버튼, A타입 포텐셜미터 PM1/PM2.
+/* 부품설계 221–223p + 현장 참고. 외형만 구현: 표시 4, 1~4층 버튼, 하중 스위치 30/50/100/110.
    전기회로/FSM 연결은 docs/CAR-CONTROLS.md 참고. */
 function buildCarControls(parent,{floorY,frontZ,sideX}) {
   const root=new THREE.Group(); root.name='carControlEquipment'; parent.add(root);
@@ -223,86 +223,38 @@ function buildCarControls(parent,{floorY,frontZ,sideX}) {
     cable('travelJunctionToTopBox',[[p.x+0.05,p.y,p.z],[tx-0.12,p.y,p.z],[tx,ty-0.325,tz-0.11]]);
   }
 
-  // 224–226p 18.5 포텐셜 미터 설치(LOAD-CP): A 타입 대각 취부 2개(PM1 좌·전방, PM2 우·후방).
-  // 223p 하중 스위치 대신 사용한다(226p: POTENTIAL METER / LOAD CELL / NO USE 중 택1).
-  // 플랫폼 측면 채널이 플랭크 위에 얹히는 모서리에서, 플랭크 웹에 붙인 ㄱ자 취부 브라켓·라이너 위에
-  // 센서를 두고 플런저가 채널 하단에 약 3mm 눌리도록 맞춘다(225p: 눌림량 2~4mm, 필요시 라이너 삽입).
-  // 기존 안전기 샤프트(Z -0.15)·트립 레버(X ±1.2835)·크랭크 암(X ±1.2575)과 겹치지 않는다.
+  // 223p: 플랫폼의 하중 감지 볼트와 플랭크 전면 취부판에 고정한 하중 스위치 4조.
+  // 기존 안전기 샤프트(-Z), 중앙 완충 타격면은 피하고 전면(+Z)에 취부한다.
   const load=new THREE.Group();load.name='carOverloadAssembly';root.add(load);
-  const plankY=-S.CAR_H/2-0.16, plankZ=0.04, plankHalfD=0.05;   // elevator.js 세이프티 플랭크와 동일
-  const channelBottomY=-S.CAR_H/2-0.085;                        // 플랫폼 외곽 채널 하단 (pltH 0.085)
-  const channelX=S.CAR_W/2-0.02;                                // 플랫폼 측면 채널 중심 X
-  const pressMm=3, plungerH=0.012, bodyH=0.040, linerT=0.006, shelfT=0.006;
-  const pmPaint=M.paint(0x2b3f52); pmPaint.clearcoat=0;
-  const sensors=[{id:'PM1',sx:-1,sz:1},{id:'PM2',sx:1,sz:-1}];
-  const sensorLeads=[];
-  for(const {id,sx,sz} of sensors) {
-    const x=sx*channelX, faceZ=plankZ+sz*plankHalfD, cz=faceZ+sz*0.028;
-    const pm=new THREE.Group();pm.name='carLoadSensor_'+id;load.add(pm);
-    pm.userData={type:'car-load-potentiometer',channel:id,board:'GT-DINV',connector:id,mountType:'A',pressMm,visualOnly:true};
-    // 플런저 상단 = 채널 하단. 눌림 3mm는 몸체 안으로 들어간 것으로 본다.
-    const plungerTop=channelBottomY, plungerCY=plungerTop-plungerH/2;
-    const bodyTop=plungerTop-plungerH, bodyCY=bodyTop-bodyH/2, bodyBottom=bodyTop-bodyH;
-    const linerCY=bodyBottom-linerT/2, shelfCY=bodyBottom-linerT-shelfT/2;
-    // ㄱ자 취부 브라켓: 플랭크 웹에 붙는 세로 다리 + 수평 선반. 선반 상면이 플랭크 위·아래 사이에 있다.
-    box('loadSensorShelf',0.070,shelfT,0.056,metal,x,shelfCY,faceZ+sz*0.028,pm);
-    box('loadSensorShelfLeg',0.070,0.050,0.006,metal,x,shelfCY+0.022,faceZ+sz*0.003,pm);
-    box('loadSensorLiner',0.050,linerT,0.040,metal,x,linerCY,cz,pm);
-    box('loadSensorFlange',0.050,0.003,0.036,metal,x,bodyBottom+0.0015,cz,pm);
-    box('loadSensorBody',0.028,bodyH,0.028,pmPaint,x,bodyCY,cz,pm);
-    cyl(0.007,0.004,metal,x,bodyTop+0.002,cz,pm).name='loadSensorBush';
-    cyl(0.0045,plungerH,metal,x,plungerCY,cz,pm).name='loadSensorPlunger';
-    label(id,0.024,0.010,x,bodyCY+0.008,cz+sz*0.0145,pm,'#e8eef3').rotation.y=sz>0?0:Math.PI;
-    // M6x30 볼트(헤드 상부)·평와셔·스프링와셔·너트(선반 아래) 2조
-    for(const dx of [-0.019,0.019]) {
-      cyl(0.003,0.023,metal,x+dx,shelfCY+0.0005,cz,pm).name='loadSensorBolt';
-      const head=new THREE.Mesh(new THREE.CylinderGeometry(0.0055,0.0055,0.004,6),metal);
-      head.position.set(x+dx,bodyBottom+0.005,cz);pm.add(head);
-      cyl(0.0065,0.0015,metal,x+dx,shelfCY-shelfT/2-0.00075,cz,pm);
-      cyl(0.0055,0.0015,metal,x+dx,shelfCY-shelfT/2-0.00225,cz,pm);
-      const nut=new THREE.Mesh(new THREE.CylinderGeometry(0.0055,0.0055,0.005,6),metal);
-      nut.position.set(x+dx,shelfCY-shelfT/2-0.0055,cz);pm.add(nut);
-    }
-    sensorLeads.push({id,start:[x-sx*0.014,bodyCY-0.010,cz],x,sx,sz,faceZ});
+  const baseY=-S.CAR_H/2, loadZ=0.195;
+  const thresholds=[30,50,100,110];
+  const boltDrop={30:0.213,50:0.207,100:0.203,110:0.201};
+  const switchX=[-0.42,-0.14,0.14,0.42];
+  box('loadBoltUpperPlate',1.10,0.012,0.13,metal,0,baseY-0.092,loadZ,load);
+  for(const x of [-0.28,0.28])cyl(0.007,0.035,metal,x,baseY-0.086,loadZ,load);
+  box('loadSwitchMountShelf',1.10,0.012,0.18,metal,0,baseY-0.222,0.17,load);
+  for(const x of [-0.50,0.50]){
+    box('loadSwitchBeamBracket',0.05,0.12,0.012,metal,x,baseY-0.165,0.096,load);
+    cyl(0.007,0.020,metal,x,baseY-0.14,0.11,load,'z');
   }
-  // 직선 구간과 작은 라운드만 사용해 케이블이 프레임 사이로 처지지 않게 한다.
-  function securedCable(name,points,radius=0.004) {
-    const pts=points.map(p=>new THREE.Vector3(...p)),path=new THREE.CurvePath();
-    let start=pts[0];
-    for(let i=1;i<pts.length-1;i++) {
-      const p=pts[i],prev=pts[i-1],next=pts[i+1];
-      const bend=Math.min(0.018,p.distanceTo(prev)*0.25,p.distanceTo(next)*0.25);
-      const a=p.clone().add(prev.clone().sub(p).normalize().multiplyScalar(bend));
-      const b=p.clone().add(next.clone().sub(p).normalize().multiplyScalar(bend));
-      path.add(new THREE.LineCurve3(start,a));path.add(new THREE.QuadraticBezierCurve3(a,p,b));start=b;
-    }
-    path.add(new THREE.LineCurve3(start,pts[pts.length-1]));
-    const mesh=new THREE.Mesh(new THREE.TubeGeometry(path,160,radius,8,false),dark);
-    mesh.name=name;mesh.userData.route=points;root.add(mesh);return mesh;
-  }
-  function wireClip(x,y,z,axis='x') {
-    const clip=box('loadHarnessClip',0.012,0.018,0.018,metal,x,y,z);
-    if(axis==='z')clip.rotation.y=Math.PI/2;
-    if(axis==='y')clip.rotation.z=Math.PI/2;
-    cyl(0.003,0.004,metal,x,y-0.011,z,root);
-  }
-  // 배선: PM2 리드는 플랭크 후면을 따라 좌측으로 와서 플랭크 밑을 돌아 PM1 리드와 합류한다.
-  // 합류점 → 플랫폼 밑 → 측면 채널 바깥 → 좌측 외판 바깥(장애인 OPB 하니스와 20mm 이격) → 카 탑 박스.
-  const runY=plankY+0.030, underY=plankY-0.0975, joinX=-1.12;
-  const pm1=sensorLeads.find(l=>l.id==='PM1'), pm2=sensorLeads.find(l=>l.id==='PM2');
-  const pm1RunZ=pm1.faceZ+0.028, pm2RunZ=pm2.faceZ-0.028;
-  const join=[joinX,runY,pm1RunZ];
-  securedCable('loadSensorLead_PM1',[pm1.start,[pm1.x+0.020,runY,pm1RunZ],join],0.0025);
-  securedCable('loadSensorLead_PM2',[pm2.start,[pm2.x-0.020,runY,pm2RunZ],[joinX,runY,pm2RunZ],
-    [joinX,underY,pm2RunZ],[joinX,underY,pm1RunZ],join],0.0025);
-  const wallX=-sideX-0.008, wallZ=0.27;
-  securedCable('loadSensorHarness',[join,[joinX,runY,0.16],[joinX,-S.CAR_H/2-0.0905,0.20],
-    [-channelX-0.035,-S.CAR_H/2-0.0905,0.25],[-channelX-0.035,-S.CAR_H/2-0.012,0.25],
-    [wallX,-S.CAR_H/2+0.08,wallZ],[wallX,S.CAR_H/2-0.08,wallZ],
-    [wallX+0.05,S.CAR_H/2+0.055,wallZ+0.05],[tx,ty-0.325,tz+0.13]],0.0035);
-  for(let x=-0.90;x<1.0;x+=0.45)wireClip(x,runY,pm2RunZ);
-  for(const y of [floorY+0.30,floorY+1.20])wireClip(wallX,y,wallZ,'y');
-  load.userData={sensorType:'potentiometer',mountType:'A',channels:['PM1','PM2'],board:'GT-DINV',pressMm,visualOnly:true,
-    reference:'부품설계.pdf 224–226'};
-  root.userData={reference:'부품설계.pdf 221–226',visualOnly:true};
+  thresholds.forEach((threshold,i)=>{
+    const x=switchX[i];
+    const sw=new THREE.Group();sw.name='carLoadSwitch_'+threshold;
+    sw.userData={type:'car-load-switch',thresholdPercent:threshold,connector:'CC26',visualOnly:true};load.add(sw);
+    box('loadSwitchBody',0.13,0.038,0.065,dark,x,baseY-0.247,loadZ,sw);
+    cyl(0.008,0.020,metal,x,baseY-0.222,loadZ,sw);
+    for(const dx of [-0.048,0.048])cyl(0.005,0.049,brass,x+dx,baseY-0.246,loadZ,sw);
+    // 무부하 상태에서 스위치 접점 간격. 감지 볼트 길이로 30/50/100/110을 구분한다.
+    const boltBottom=baseY-boltDrop[threshold],boltTop=baseY-0.09;
+    cyl(0.005,boltTop-boltBottom,brass,x,(boltTop+boltBottom)/2,loadZ,sw);
+    for(const y of [baseY-0.101,baseY-0.113])cyl(0.010,0.007,brass,x,y,loadZ,sw);
+    cyl(0.014,0.005,brass,x,boltBottom,loadZ,sw);
+    label(threshold+'%',0.09,0.025,x,baseY-0.246,loadZ+0.034,sw,'#eeeeee','#252c31');
+    cable('loadSwitchLead_'+threshold,[[x+0.065,baseY-0.248,loadZ],[x+0.10,baseY-0.25,loadZ+0.045],
+      [0.44,baseY-0.25,loadZ+0.045],[0.48,baseY-0.12,0.28],
+      [opbX,baseY-0.10,frontZ-0.04],[opbX,floorY+0.25,frontZ+0.018]]);
+  });
+  load.userData={sensorType:'load-switch',thresholds,connector:'CC26',visualOnly:true,
+    reference:'부품설계.pdf 223'};
+  root.userData={reference:'부품설계.pdf 221–223',visualOnly:true};
 }

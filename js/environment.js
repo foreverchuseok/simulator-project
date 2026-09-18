@@ -2301,7 +2301,7 @@
         createBox(doorHoleW + 0.18, 0.10, 0.028, jambSs, 0, fy + 2.56, facadeZ + 0.002, wallGrp);
 
         // 층별 수평 코니스 — 단조로운 흰 수직면을 분절하는 따뜻한 테라코타 띠
-        createBox(totalWallW + 0.08, 0.11, 0.035, terracottaMat,
+        createBox(totalWallW, 0.11, 0.035, terracottaMat,
           0, fy + fh - 0.055, facadeZ + 0.004, wallGrp);
 
         // 로비 대리석 바닥 — 상면만 타일 텍스처 (전면벽 이동에 맞춰 깊이 보정)
@@ -2312,9 +2312,9 @@
         // 천장 Y 좌표 (해당 층 바닥 + 층고)
         const ceilingY = fy + fh;
 
-        // 4층(최상층) 천장 캐노피 슬래브 추가
+        // 4층(최상층) 천장 캐노피 슬래브 추가 (타 층 슬래브와 동일 레벨 및 재질로 일체화)
         if (i === FLOORS - 1) {
-          createBox(totalWallW, 0.12, lobbyDepth, M.conc(0xb9a783), 0, ceilingY + 0.06, wallZ + S.WALL_T / 2 + lobbyDepth / 2, wallGrp);
+          createBox(totalWallW, 0.12, lobbyDepth, lobbyMarbleFaceMats(totalWallW, lobbyDepth), 0, ceilingY - 0.06, wallZ + S.WALL_T / 2 + lobbyDepth / 2, wallGrp);
         }
 
         // 전 층 승강장 앞 LED 다운라이트 (천장에 부착)
@@ -2369,6 +2369,89 @@
       scene.add(sign);
 
       scene.add(wallGrp);
+    }
+
+    function mergeStaticMeshBucket(meshes, worldSpace = false) {
+      const parts = meshes.map(mesh => mesh.geometry.clone().applyMatrix4(worldSpace ? mesh.matrixWorld : mesh.matrix));
+      const geometry = new THREE.BufferGeometry();
+      for (const name of Object.keys(parts[0].attributes)) {
+        const first = parts[0].getAttribute(name);
+        const array = new first.array.constructor(parts.reduce((n, part) => n + part.getAttribute(name).array.length, 0));
+        let offset = 0;
+        for (const part of parts) {
+          const values = part.getAttribute(name).array;
+          array.set(values, offset); offset += values.length;
+        }
+        geometry.setAttribute(name, new THREE.BufferAttribute(array, first.itemSize, first.normalized));
+      }
+      const indices = [], sourceRanges = [];
+      let vertexOffset = 0;
+      parts.forEach((part, i) => {
+        const count = part.index ? part.index.count : part.attributes.position.count;
+        sourceRanges.push({ name: meshes[i].name, sourceId: meshes[i].id, start: indices.length, count });
+        for (let j = 0; j < count; j++) indices.push(vertexOffset + (part.index ? part.index.getX(j) : j));
+        vertexOffset += part.attributes.position.count;
+      });
+      geometry.setIndex(indices);
+      geometry.computeBoundingBox(); geometry.computeBoundingSphere();
+      const mesh = new THREE.Mesh(geometry, meshes[0].material);
+      mesh.castShadow = meshes[0].castShadow; mesh.receiveShadow = meshes[0].receiveShadow;
+      mesh.renderOrder = meshes[0].renderOrder; mesh.layers.mask = meshes[0].layers.mask;
+      mesh.frustumCulled = meshes[0].frustumCulled;
+      mesh.userData.sourceRanges = sourceRanges;
+      parts.forEach(part => part.dispose());
+      return mesh;
+    }
+
+    // 명시한 고정 조립체에만 적용한다. 이름·userData·자식이 있는 부품은 개별 유지한다.
+    // 부모 로컬 좌표로 묶으므로 카 이동 및 층별 그룹의 표시/숨김을 그대로 따른다.
+    function batchStaticChildren(parent, label) {
+      const buckets = new Map();
+      for (const mesh of parent.children) {
+        if (!mesh.isMesh || mesh.isSkinnedMesh || mesh.isInstancedMesh || mesh.name ||
+            mesh.children.length || Object.keys(mesh.userData).length || !mesh.visible ||
+            Array.isArray(mesh.material) || mesh.material.transparent || mesh.material.opacity !== 1 ||
+            Object.keys(mesh.geometry.morphAttributes).length || mesh.geometry.drawRange.start !== 0 ||
+            mesh.geometry.drawRange.count !== Infinity) continue;
+        const attributes = Object.entries(mesh.geometry.attributes);
+        if (attributes.some(([, a]) => a.isInterleavedBufferAttribute)) continue;
+        mesh.updateMatrix();
+        if (mesh.matrix.determinant() <= 0) continue;
+        const signature = attributes.map(([name, a]) => [name, a.itemSize, a.normalized, a.array.constructor.name]);
+        const key = JSON.stringify([mesh.material.uuid, mesh.castShadow, mesh.receiveShadow,
+          mesh.renderOrder, mesh.layers.mask, mesh.frustumCulled, signature]);
+        if (!buckets.has(key)) buckets.set(key, []);
+        buckets.get(key).push(mesh);
+      }
+      let batchIndex = 0;
+      for (const meshes of buckets.values()) {
+        if (meshes.length < 2) continue;
+        const merged = mergeStaticMeshBucket(meshes);
+        merged.name = 'staticBatch_' + label + '_' + batchIndex++;
+        meshes.forEach(mesh => parent.remove(mesh));
+        parent.add(merged);
+      }
+    }
+
+    // 고정 브라켓 전용: GLB 원본과 각 설치 그룹의 userData는 유지한다.
+    function batchRailBracket(source) {
+      source.updateMatrixWorld(true);
+      const buckets = new Map();
+      source.traverse(mesh => {
+        if (!mesh.isMesh) return;
+        const key = mesh.material.uuid;
+        if (!buckets.has(key)) buckets.set(key, []);
+        buckets.get(key).push(mesh);
+      });
+      const result = new THREE.Group();
+      result.name = source.name;
+      for (const meshes of buckets.values()) {
+        const mesh = mergeStaticMeshBucket(meshes, true);
+        mesh.name = 'railBracketBatch_' + mesh.material.name;
+        mesh.castShadow = true; mesh.receiveShadow = true;
+        result.add(mesh);
+      }
+      return result;
     }
 
     function buildGuideRails() {
@@ -2459,14 +2542,25 @@
 
       // 3. 레일 브라켓 어셈블리 로드 및 배치 (현장 실무 기준 2.7m 간격, 벽이 있는 카 좌측만 설치)
       gltfLoader.load('models/gltf/rail_bracket.glb', (gltf) => {
-        const bktScene = gltf.scene;
+        const bktScene = batchRailBracket(gltf.scene);
         bktScene.traverse(o => {
           if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
         });
 
         // 2.7m 간격 브라켓 높이 6단 배열 — 원본은 index.html RAIL_BRACKET_Y
         // (buildLimitSwitches 의 캠·자석판 암이 같은 배열을 보고 이 단을 피한다)
-        const bktHeights = RAIL_BRACKET_Y;
+        // ★역으로 브라켓이 스위치 트립 높이와 겹치는 경우(예: 최상단 14.85가 ULS/UFL 14.86~14.87과
+        //   12~17mm 차) 암만 피해서는 부족하다 — 브라켓 옆리브가 넓게 뻗어 나와 스위치 위로
+        //   튀어나온 것처럼 보인다. 그 단만 스위치에서 충분히 떨어뜨린다(현장에서도 브라켓
+        //   피치를 국소 조정해 부속물을 피한다).
+        const BKT_SWITCH_CLEAR = 0.20;
+        const bktHeights = RAIL_BRACKET_Y.map(by => {
+          for (const sw of TERMINAL_SWITCHES) {
+            const d = by - sw.y;
+            if (Math.abs(d) < BKT_SWITCH_CLEAR) return sw.y + (d < 0 ? -1 : 1) * BKT_SWITCH_CLEAR;
+          }
+          return by;
+        });
 
         bktHeights.forEach(by => {
           const bkt = bktScene.clone(true);
@@ -2507,10 +2601,8 @@
        각 스위치 = 레일 클립 1조 + 슬롯 암 1본 + 수직 취부판 + 스위치 본체 + 롤러 레버.
        높이 원본은 index.html TERMINAL_SWITCHES (트립점 ± 캠 끝단 로컬 Y).
 
-       ★설치 기준 (138p 3항)
-         · 리미트: 종단 바닥레벨에서 30~50mm 지난 지점에 카가 있을 때 캠이 밟는다.
-         · 파이널: 그보다 더 지난 90~99mm (부품설계 196~197p).
-         · 강제감속: 60m/min 1500mm (부품설계 200~201p). 캠이 길어 종단까지 눌린 채 유지.
+       구형 일렬 배치의 모델 트립점은 index.html의 LS_TRIP/FLS_OVERTRAVEL/SLD_DIST.
+       기존 MR 병렬 배치 수치를 중복 입력하지 않는다.
        ========================================================================== */
     function buildLimitSwitches() {
       limitGrp = new THREE.Group();
@@ -2526,10 +2618,17 @@
       const armMat   = M.ss(0x9aa3ad);
       const clipMat  = M.gold();
       const boltMat  = M.ss(0xb8bec6);
-      const swBodyMat = M.paint(0xd8c400);       // 리미트 스위치 하우징 (황색)
-      const swCapMat  = M.paint(0x2b3138);
+      const swBodyMat = M.ss(0x8a9196);          // 구형 다이캐스트 몸체
+      const swCapMat  = M.paint(0x972d27);       // 적갈색 회전 헤드
       const leverMat  = M.ss(0xc0c7ce);
       const rollerMat = new THREE.MeshStandardMaterial({ color: 0x22262b, roughness: 0.62, metalness: 0.12 });
+      function roundedOutline(w,h,r,Path=THREE.Shape) {
+        const p=new Path(),x=-w/2,y=-h/2;
+        p.moveTo(x+r,y);p.lineTo(x+w-r,y);p.quadraticCurveTo(x+w,y,x+w,y+r);
+        p.lineTo(x+w,y+h-r);p.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+        p.lineTo(x+r,y+h);p.quadraticCurveTo(x,y+h,x,y+h-r);
+        p.lineTo(x,y+r);p.quadraticCurveTo(x,y,x+r,y);return p;
+      }
 
       /* 레일 클립 1조 — 베이스 플랜지 양쪽을 물고 M12 볼트로 암에 조인다 (195p, 202p) */
       function addRailClips(y) {
@@ -2557,11 +2656,17 @@
         const z0 = CAR_RAIL_Z - Math.sign(targetZ - CAR_RAIL_Z) * 0.075; // 레일 반대쪽 짧은 물림부
         const zc = (z0 + targetZ) / 2;
         const len = Math.abs(targetZ - z0);
-        createBox(armT, armH, len, armMat, armX, y, zc, limitGrp);
-        // 장공(길이 조절 슬롯) 표현 — 암 앞면에 어두운 홈 2개
+        const outline=roundedOutline(len,armH,0.002);
+        // 검은 사각형 대신 실제 관통 장공을 낸 아연도금 평철.
         [0.30, 0.62].forEach(t => {
-          createBox(0.002, 0.010, 0.050, M.paint(0x2b3038), armX + armT / 2, y, z0 + (targetZ - z0) * t, limitGrp);
+          const hole=roundedOutline(0.050,0.010,0.005,THREE.Path);
+          const shift=-(z0+(targetZ-z0)*t-zc);
+          hole.curves.forEach(c=>{for(const key of ['v0','v1','v2','v3'])if(c[key])c[key].x+=shift;});
+          outline.holes.push(hole);
         });
+        const arm=new THREE.Mesh(new THREE.ExtrudeGeometry(outline,{depth:armT,bevelEnabled:false,curveSegments:6}),armMat);
+        arm.rotation.y=Math.PI/2;arm.position.set(armX-armT/2,y,zc);arm.name='terminalRailArm';
+        arm.userData.type='terminal-rail-arm';limitGrp.add(arm);
         addRailClips(y);
       }
 
@@ -2571,28 +2676,50 @@
       const bodyW = 0.046, bodyH = 0.105, bodyD = 0.038;
       function addLimitSwitch(spec) {
         const laneZ  = FLS_Z + spec.dz;              // 이 스위치의 레버 레인
-        const leverZ = laneZ + 0.018;                // 레버 회전 평면
-        const bodyZ  = laneZ - 0.014;                // 본체 중심 (레버 옆)
+        const leverZ = laneZ;                        // 공용 캠 중앙과 롤러 중심 일치
+        const bodyZ  = laneZ - 0.027;                // 본체는 레버 뒤쪽
         const pivotY = spec.y;
         const bodyY  = pivotY - 0.050;               // 축은 본체 상단 근처
         const bodyX  = FLS_PIVOT_X - 0.004;
 
         // (a) 레일 클립 + 슬롯 암 (레일 브라켓 단 회피) + 수직 취부판
+        //     ★브라켓 단과 겹쳐 armY가 크게 밀리면(예: ULS/UFL이 상단 브라켓과 5cm 이내)
+        //     연결판이 그만큼 길어진다 — 폭 75mm 통판 그대로 늘리면 덩어리가 튀어나와 보이므로
+        //     늘어난 길이만큼 폭을 좁혀 얇은 스탠드오프 스트럿처럼 보이게 한다(하부와 같은 인상).
         const armY = clearOfBracket(bodyY);
         addSlotArm(armY, laneZ);
         const plateX = railX - 0.012;
-        const plateH = Math.abs(armY - bodyY) + 0.130;
-        createBox(0.010, plateH, 0.075, armMat, plateX, (armY + bodyY) / 2, laneZ - 0.010, limitGrp);
-        [-0.030, 0.030].forEach(dy => {
-          createBox(0.002, 0.052, 0.010, M.paint(0x2b3038), plateX + 0.005, bodyY + dy, laneZ - 0.010, limitGrp);
-        });
+        const stretch = Math.abs(armY - bodyY);
+        const plateH  = stretch + 0.130;
+        const plateD  = Math.max(0.028, 0.075 * (0.130 / plateH));
+        createBox(0.010, plateH, plateD, armMat, plateX, (armY + bodyY) / 2, laneZ - 0.010, limitGrp);
+        if (stretch < 0.010) {
+          [-0.030, 0.030].forEach(dy => {
+            createBox(0.002, 0.052, 0.010, M.paint(0x2b3038), plateX + 0.005, bodyY + dy, laneZ - 0.010, limitGrp);
+          });
+        }
         // 암 ↔ 판 볼트
         createCylinder(0.005, 0.005, 0.030, boltMat, armX + 0.004, armY, laneZ, limitGrp).rotation.z = Math.PI / 2;
 
         // (b) 스위치 본체 + 케이블 글랜드 + 판 고정 볼트 2개
-        createBox(bodyW, bodyH, bodyD, swBodyMat, bodyX, bodyY, bodyZ, limitGrp);
+        const body = new THREE.Mesh(new THREE.ExtrudeGeometry(roundedOutline(bodyW-0.002,bodyH-0.002,0.004),
+          {depth:bodyD-0.002,bevelEnabled:true,bevelSize:0.001,bevelThickness:0.001,bevelSegments:2,steps:1}),swBodyMat);
+        body.position.set(bodyX,bodyY,bodyZ-bodyD/2+0.001);limitGrp.add(body);
+        body.name = 'terminalBody_' + spec.name;
+        body.userData = {type:'terminal-switch', name:spec.name, kind:spec.kind};
+        createBox(bodyW-0.005,bodyH-0.026,0.002,M.paint(0x34383a),bodyX,bodyY-0.005,bodyZ+bodyD/2+0.001,limitGrp);
+        for(const dx of [-0.016,0.016]) for(const dy of [-0.038,0.029]) {
+          createCylinder(0.0028,0.0028,0.003,boltMat,bodyX+dx,bodyY+dy,bodyZ+bodyD/2+0.003,limitGrp).rotation.x=Math.PI/2;
+        }
         createBox(bodyW + 0.002, 0.020, bodyD + 0.002, swCapMat, bodyX, bodyY + bodyH / 2 - 0.010, bodyZ, limitGrp);
-        createCylinder(0.010, 0.010, 0.028, swCapMat, bodyX, bodyY - bodyH / 2 - 0.012, bodyZ, limitGrp);
+        createCylinder(0.008, 0.008, 0.019, boltMat, bodyX, bodyY - bodyH / 2 - 0.009, bodyZ, limitGrp);
+        // 현장처럼 암 뒷면으로 정리한 검정 배선과 레일 배면 수직 간선.
+        const cablePts=[new THREE.Vector3(bodyX,bodyY-bodyH/2-0.019,bodyZ),
+          new THREE.Vector3(armX-0.012,bodyY-bodyH/2-0.030,bodyZ),
+          new THREE.Vector3(armX-0.012,armY-0.027,bodyZ),
+          new THREE.Vector3(armX-0.012,armY-0.027,CAR_RAIL_Z-0.065)];
+        const cable=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(cablePts),28,0.003,8,false),M.paint(0x202124));
+        cable.name='terminalCable_'+spec.name;limitGrp.add(cable);
         [-0.032, 0.032].forEach(dy => {
           createCylinder(0.004, 0.004, 0.014, boltMat, plateX + 0.010, bodyY + dy, bodyZ, limitGrp).rotation.z = Math.PI / 2;
         });
@@ -2610,10 +2737,13 @@
         createCylinder(0.009, 0.009, 0.018, M.ss(0xd0d6dc), FLS_LEVER_L, 0, 0, lever).rotation.x = Math.PI / 2;
         roller.userData = { type: 'terminal-switch', name: spec.name, kind: spec.kind };
 
-        terminalDevices.switches.push({ ...spec, lever, ratio: 0 });
+        terminalDevices.switches.push({ ...spec, lever, body, ratio: 0 });
       }
 
       TERMINAL_SWITCHES.forEach(addLimitSwitch);
+      const cableLo=TERMINAL_SWITCHES[0].y-0.15, cableHi=TERMINAL_SWITCHES[5].y+0.12;
+      const trunk=createCylinder(0.005,0.005,cableHi-cableLo,M.paint(0x202124),armX-0.012,(cableHi+cableLo)/2,CAR_RAIL_Z-0.065,limitGrp);
+      trunk.name='terminalFixedCableTrunk';
 
       scene.add(limitGrp);
     }
@@ -4009,6 +4139,7 @@
         };
         const wheelPivot = g.getObjectByName('Pulley').position.clone(); // = (0, gWY, 0)
         mount('Pulley', govWheelGrpL);
+        mount('Ratchet', govRatchetGrp);
         mount('PendA', govPendA, wheelPivot);
         mount('PendB', govPendB, wheelPivot);
         // 연동 링크 — 대기 위치는 govSetLinkage 가 매번 다시 잡으므로 장착만 한다
@@ -4032,7 +4163,17 @@
           if (n) govBodyGrp.add(n);
           else console.error('[gov glb] 노드 없음:', name);
         });
-        console.log('[gov glb] v3.6 장착 완료 — 투명 오각 커버, 상방 꺾임 액추에이터');
+        const mechanism=g.getObjectByName('BaseFrame')?.userData.mechanism || govBodyGrp.getObjectByName('BaseFrame')?.userData.mechanism;
+        const handle=mrGrp.userData.governor;
+        if(mechanism){
+          handle.mechanism=mechanism;
+          Object.assign(handle.pose.trip,{pendulum:mechanism.pendulum,pawl:mechanism.pawl,
+            topArm:mechanism.releaseArm,gripArm:mechanism.gripArm,switchRot:mechanism.switchRot,ratchet:mechanism.drag});
+          handle.geom.toothStep=mechanism.toothStep;
+        }
+        handle.ready=true;
+        handle.switchLever.userData.contactClosed=true;
+        console.log('[gov glb] independent ratchet and mechanical pose loaded');
       }, undefined, (err) => {
         console.error('[gov glb] 로드 실패 — 조속기 외형 없음:', err);
       });

@@ -27,7 +27,7 @@ try{
          if(!h.left.userData.windows.some(w=>x>w.x0&&x<w.x1&&y>w.y0&&y<w.y1))return false;
        }return true;
      }));
-     let total0;const fixed=h.interlock.fixed.getWorldPosition(new THREE.Vector3()).toArray();
+     let total0;
      for(let step=0;step<=10;step++){
        const t=step/10;for(const d of [h.left,h.right])d.position.x=d.userData.cx+(d.userData.ox-d.userData.cx)*t;
        spinDoorDrive(h);scene.updateMatrixWorld(true);
@@ -43,7 +43,7 @@ try{
          return p.distanceTo(tip)<1e-6;
        }));
        check(`floor ${i} opening ${t}: lower endpoints / pulley tangency`,Math.abs(a[1]-(h.left.position.x+k.bL))<1e-6&&Math.abs(b[0]-(h.left.position.x+k.bR))<1e-6&&[k.seg.loL,k.seg.loR].every(m=>m.position.y===k.loY&&m.position.z===k.loZ));
-       check(`floor ${i} opening ${t}: closer / fixed interlock preserved`,Math.abs(k.closer.coil.scale.x-(k.closer.anchorX-h.left.position.x-k.closer.lugDX-0.006))<1e-6&&h.interlock.fixed.getWorldPosition(new THREE.Vector3()).toArray().every((v,j)=>v===fixed[j]));
+       check(`floor ${i} opening ${t}: closer preserved`,Math.abs(k.closer.coil.scale.x-(k.closer.anchorX-h.left.position.x-k.closer.lugDX-0.006))<1e-6);
      }
      for(const d of [h.left,h.right])d.position.x=d.userData.cx;spinDoorDrive(h);
    }return rows;

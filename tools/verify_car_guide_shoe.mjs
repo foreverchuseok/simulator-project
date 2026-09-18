@@ -60,6 +60,8 @@ try {
         oiler: model.getObjectByName('Oiler').visible, intersections,
         clearance: data.channelHalfWidth - data.railHalfWidth,
         height: data.guideHeight, meshes: meshes.length, hitNames: [...hitNames],
+        lowerDesign: data.lowerDesign || null,
+        legacyAdjuster: !!model.getObjectByName('Adjuster') || !!model.getObjectByName('RubberStop'),
         materials: meshes.flatMap(m => (Array.isArray(m.material) ? m.material : [m.material]).map(mat => mat.name)) };
     });
     // 2026-09-11 재생성된 safety_gear.glb에는 옛 하부 슈 박스(0.13×0.075×0.10)가 없어야 한다.
@@ -71,13 +73,18 @@ try {
       if (Math.abs(ls.x - 0.13) < 1e-5 && Math.abs(ls.y - 0.075) < 1e-5 && Math.abs(ls.z - 0.10) < 1e-5) legacyShoeMeshes++;
     });
     const sg = carGrp.userData.safetyGear;
-    return { reports, legacyShoeMeshes, safety: [!!sg.shaft, !!sg.liftL, !!sg.liftR, !!sg.clamp, sg.wedges.length, sg.springs.length], carY: carGrp.position.y };
+    return { reports, legacyShoeMeshes, bottomCoverVisible:carGrp.getObjectByName('safetyPlankBottomCover').visible,
+      webCount:carGrp.getObjectByName('carFrameGrp').children.filter(o=>o.name==='safetyPlankWeb').length,
+      safety: [!!sg.shaft, !!sg.liftL, !!sg.liftR, !!sg.clamp, sg.wedges.length, sg.springs.length], carY: carGrp.position.y };
   };
   const initial = await page.evaluate(inspect);
   console.log(JSON.stringify(initial));
   assert.equal(initial.reports.length, 4);
   assert.equal(initial.legacyShoeMeshes, 0);
-  assert.deepEqual(initial.safety, [true, true, true, true, 4, 4]);
+  assert.equal(initial.bottomCoverVisible, false);
+  assert.equal(initial.webCount, 2);
+  // 조속기 클램프는 하부 JS 링크가 제공하며 안전기 GLB에는 없다.
+  assert.deepEqual(initial.safety, [true, true, true, false, 4, 4]);
   for (const shoe of initial.reports) {
     assert.equal(shoe.parent, 'carFrameGrp');
     assert.deepEqual(shoe.scale, [1, 1, 1]);
@@ -86,6 +93,10 @@ try {
     assert.ok(Math.abs(shoe.clearance - 0.0005) < 1e-8);
     assert.equal(shoe.height, 0.12);
     assert.ok(shoe.materials.every(name => name.startsWith('Shoe_')), 'Missing GLB material');
+    if(shoe.name.endsWith('Lower')){
+      assert.equal(shoe.lowerDesign,'enclosed-yellow-zinc');
+      assert.equal(shoe.legacyAdjuster,false);
+    }
   }
   const focus = async (name, lower = false) => {
     await page.evaluate(({ name, lower }) => {
@@ -120,6 +131,11 @@ try {
     assert.equal(shoe.intersections, 0);
     assert.ok(Math.abs(shoe.world[1] - initial.reports[i].world[1] - (state.carY - initial.carY)) < 1e-7);
   });
+  await page.evaluate(()=>{controls.maxPolarAngle=Math.PI;controls.enableDamping=false;});
+  await focus('CarGuideShoe_L_Lower',true);
+  await page.screenshot({path:path.join(out,'lower-left-enclosed.png')});
+  await focus('CarGuideShoe_R_Lower',true);
+  await page.screenshot({path:path.join(out,'lower-right-enclosed.png')});
   await page.setViewportSize({ width: 390, height: 844 });
   await focus('CarGuideShoe_L_Upper');
   await page.screenshot({ path: path.join(out, 'mobile-upper.png') });

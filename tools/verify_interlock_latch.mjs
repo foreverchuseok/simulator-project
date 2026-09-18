@@ -16,6 +16,8 @@ const page = await browser.newPage({ viewport: { width: 900, height: 600 } });
 page.on('pageerror', e => console.log('PAGEERROR:', e.message));
 page.on('console', m => { if (m.type() === 'error') console.log('CONSOLE:', m.text()); });
 await page.goto(`${BASE}?doorcam=1`, { waitUntil: 'networkidle' });
+/* networkidle 은 GLB 부착까지 기다려 주지 않는다 — 마커가 없어 죽는 경합이 났다. */
+await page.waitForFunction(fi => hatchDoors?.[fi]?.interlock?.ready === true, FI, { timeout: 30000 });
 
 const data = await page.evaluate((fi) => {
   const h = hatchDoors[fi];

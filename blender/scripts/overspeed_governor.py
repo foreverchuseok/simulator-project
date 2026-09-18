@@ -6,6 +6,8 @@
 import bpy
 import math
 import os
+import re
+from pathlib import Path
 
 OUTPUT_PATH = r"C:\Users\goodm\Desktop\simmul\models\gltf\overspeed_governor.glb"
 
@@ -269,6 +271,19 @@ SPR_BASE  = (CATCH_PIV[0] + 0.112 * math.cos(LEV_TILT),
 SPR_REACH = 0.114
 SHOE_X    = 0.106
 SHOE_Y0, SHOE_Y1 = 0.185, 0.255    # 휠 중심(0.225) 2~3시 방향으로 상향 조정
+# Mechanism pose, exported with the model; JS reads these instead of a second copy.
+TRIP_PENDULUM, TRIP_PAWL, CATCH_RELEASE = 0.45, 0.60, 0.12
+_root=Path(__file__).resolve().parents[2]
+_rope_d=float(re.search(r'const GOV_ROPE_D\s*=\s*([0-9.]+)',(_root/'index.html').read_text(encoding='utf-8')).group(1))
+ROPE_RADIUS_LOCAL = _rope_d / 2 / 1.5   # existing governor mount scale contract
+# The bottom inner pad corner first touches the rope; solve its rigid rotation.
+_lo, _hi = -0.20, 0.0
+for _ in range(60):
+    _a=(_lo+_hi)/2
+    _x=SHOE_X*math.cos(_a)-(SHOE_Y0+0.002-CATCH_PIV[1])*math.sin(_a)
+    if _x < 0.100+ROPE_RADIUS_LOCAL: _lo=_a
+    else: _hi=_a
+CATCH_GRIP=(_lo+_hi)/2
 
 BASE_L    = -0.175
 SW_X, SW_Y, SW_Z = -0.139, 0.220, 0.050
@@ -650,8 +665,9 @@ def build_pulley():
     p.append(add_cyl(0.0026, 0.0018, T(bx, by, z_ear), MAT_CHROME, rot=AX, verts=14))
 
     # ── 날(라쳇) — 얇고 작게, 진자 바로 앞 면 ────────────────────────────────
-    p.append(add_plate(cam_pts_hook(), CAM_T, MAT_CAM, loc=(0, -Z_CAM, GWY),
-                       bevel_w=0.0008, name="camStar"))
+    star=add_plate(cam_pts_hook(), CAM_T, MAT_CAM, loc=(0, -Z_CAM, GWY),
+                       bevel_w=0.0008, name="camStar")
+    join_group([star], "Ratchet", origin=T(0,GWY,0))
     return join_group(p, "Pulley", origin=T(0, GWY, 0))
 
 # =============================================================================
@@ -708,6 +724,8 @@ def build_pendulum(name, pivot_ang, release_tab=False, tie_cx=0.0, spr_cx=0.0):
         # 3. 상단 정사각형 네모 머리 볼트 (Square head stopper block striking switch lever)
         r_head = PEND_W_R + 0.0145
         p_head = (dx + ux * r_head, dy + uy * r_head)
+        global RELEASE_TAB_POINT
+        RELEASE_TAB_POINT=(p_head[0],p_head[1],ztab)
         p.append(add_box((0.0088, 0.0088, 0.0088), T(p_head[0], p_head[1], ztab),
                          MAT_STEEL, rot=(0, -ang, 0)))
     # ── 피벗 볼트 — 휠을 관통해 뒤로 (앞: 육각 머리 / 뒤: 링크·스프링) ────────
@@ -930,12 +948,24 @@ build_catch()
 build_pawl()
 build_spring()
 build_plunger()
+_pp=pend_xy(PEND_ANG_A,0,0)
+_dx,_dy=RELEASE_TAB_POINT[0]-_pp[0],RELEASE_TAB_POINT[1]-_pp[1]
+_tx=_pp[0]+_dx*math.cos(TRIP_PENDULUM)-_dy*math.sin(TRIP_PENDULUM)
+_ty=_pp[1]+_dx*math.sin(TRIP_PENDULUM)+_dy*math.cos(TRIP_PENDULUM)-GWY
+SWITCH_HIT_PHASE=math.atan2(ACT_TIP[1]-GWY,ACT_TIP[0])-math.atan2(_ty,_tx)
+bpy.data.objects['BaseFrame']['mechanism']={
+    'pendulum':TRIP_PENDULUM,'pawl':TRIP_PAWL,'releaseArm':CATCH_RELEASE,
+    'gripArm':CATCH_GRIP,'switchRot':-0.70,'toothStep':_STEP,'drag':0.12,
+    'padPoint':[SHOE_X,SHOE_Y0+0.002,0.0],
+    'ropeFaceX':0.100+ROPE_RADIUS_LOCAL,'switchHitPhase':SWITCH_HIT_PHASE,
+    'strikePoint':list(RELEASE_TAB_POINT),'switchTip':[ACT_TIP[0],ACT_TIP[1],SW_Z],
+    'strikeRadialGap':math.hypot(_tx,_ty)-math.hypot(ACT_TIP[0],ACT_TIP[1]-GWY)}
 
 def export_glb(path):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     bpy.ops.object.select_all(action='DESELECT')
     bpy.ops.export_scene.gltf(filepath=path, export_format='GLB',
-                              use_selection=False, export_apply=True, export_yup=True)
+                              use_selection=False, export_apply=True, export_yup=True, export_extras=True)
     print("[overspeed_governor v5.0] 정밀 실사 내보내기 완료:", path)
 
 export_glb(OUTPUT_PATH)

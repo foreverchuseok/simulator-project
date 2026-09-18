@@ -5,9 +5,9 @@
      (2) 최하층에서 T 케이블 곡면 최하단부가 피트 바닥 +300±50mm (188p 5항).
      (3) 카가 어디에 있든 두 가닥 길이가 양수이고 곡면이 피트 바닥을 뚫지 않는다.
      (4) 종단 스위치(MR_설계.pdf 137~138p, 스위치 방식): 레일 고정 6개가 피트부터
-         DFL → DLS → DSD … USD → ULS → UFL 순이고, 카 캠은 파이프 3본(감속·리미트·파이널)이다.
-         리미트는 착상면 ±30~50mm, 파이널은 ±90~99mm 에서 동작각(50~70°)까지 젖힌다.
-         착상면에서는 리미트·파이널이 닫혀 있다. 가닥 길이가 달라 서로 스위치를 치지 않는다.
+         DFL → DLS → DSD … USD → ULS → UFL 순이고, 카 캠은 공용 1본이다.
+         구형 배치의 모델 트립점은 index.html 원본을 따른다.
+         착상면에서는 리미트·파이널이 닫혀 있다. 스위치 높이 차이로 작동 순서를 만든다.
      (5) 캠 판이 점검 오버런(±350mm) 끝까지 리미트·파이널 롤러를 물고 간다.
      (6) 롤러가 완전히 눌렸을 때 롤러의 카 쪽 면이 캠 면과 일치한다 (동작각 역산 정합).
      (7) 강제감속 스위치는 종단 착상면 1500mm 전(60m/min)에서 눌리기 시작해
@@ -64,6 +64,14 @@ server.listen(PORT, async () => {
                 pitTopY: travelCable.pitTopY, ready: travelCable.ready }
     };
     out.switches = terminalDevices.switches.map(s => ({ name: s.name, kind: s.kind, dir: s.dir, dz: s.dz, y: s.y }));
+    out.sharedFaces=terminalDevices.cam.node.children.filter(o=>o.name==='terminalSharedCamFace').length;
+    out.bodyGaps=[];
+    scene.updateMatrixWorld(true);
+    for(let i=1;i<terminalDevices.switches.length;i++) {
+      const a=new THREE.Box3().setFromObject(terminalDevices.switches[i-1].body);
+      const b=new THREE.Box3().setFromObject(terminalDevices.switches[i].body);
+      out.bodyGaps.push(b.min.y-a.max.y);
+    }
     const camBox = new THREE.Box3().setFromObject(terminalDevices.cam.node);
     out.camBox = { min: camBox.min.toArray(), max: camBox.max.toArray(), carY: carGrp.position.y };
     const levers = () => Object.fromEntries(terminalDevices.switches.map(s => [s.name, s.lever.rotation.z]));
@@ -111,6 +119,7 @@ server.listen(PORT, async () => {
     // 스위치 취부 암 Y 실측 (limitGrp 자식 중 Z 방향으로 긴 평철)
     out.armYs = [];
     limitGrp.traverse(o => {
+      if(o.userData.type==='terminal-rail-arm'){out.armYs.push(o.position.y);return;}
       if (!o.isMesh || !o.geometry.parameters) return;
       const p = o.geometry.parameters;
       if (p.width === 0.008 && p.height === 0.035) out.armYs.push(o.position.y);
@@ -158,8 +167,8 @@ server.listen(PORT, async () => {
   const loBase = C.FLOOR_Y[0] + C.CAR_H / 2, upBase = C.FLOOR_Y[C.FLOORS - 1] + C.CAR_H / 2;
   const V = C.CAM_VANES;
   const lens = Object.fromEntries(Object.entries(V).map(([k, v]) => [k, v.topLY - v.botLY]));
-  ok('(4) 캠 가닥 3본 길이가 다름 (파이널 < 리미트 < 감속)',
-     lens.final < lens.limit && lens.limit < lens.slowdown,
+  ok('(4) 공용 캠 한 개와 동일 레인의 스위치 여섯 개',
+     R.sharedFaces===1 && R.switches.every(s=>s.dz===0) && lens.final===lens.limit && lens.limit===lens.slowdown,
      Object.entries(lens).map(([k, l]) => `${k} ${mm(l)}`).join(' / '));
   ok('(4) 하부 스위치 = 트립점 + 자기 가닥 하단, 상부 = 트립점 + 자기 가닥 상단',
      Math.abs(swY.DLS - (loBase - C.LS_TRIP + V.limit.botLY)) < 1e-9 &&
@@ -173,9 +182,10 @@ server.listen(PORT, async () => {
      swY.DFL < C.FLOOR_Y[1] && swY.DLS < C.FLOOR_Y[1] && swY.DSD < C.FLOOR_Y[2] &&
      swY.USD > C.FLOOR_Y[2] && swY.ULS > C.FLOOR_Y[2] && swY.UFL > C.FLOOR_Y[2],
      `DFL ${mm(swY.DFL)} / UFL ${mm(swY.UFL)}`);
-  ok('(4) 리미트 트립점이 착상면 30~50mm', C.LS_TRIP >= 0.030 && C.LS_TRIP <= 0.050, mm(C.LS_TRIP));
-  ok('(4) 파이널 트립점이 90~99mm',
-     C.FLS_OVERTRAVEL >= 0.090 && C.FLS_OVERTRAVEL <= 0.099, mm(C.FLS_OVERTRAVEL));
+  ok('(4) 일렬 본체가 겹치지 않고 리미트 다음 파이널 동작',
+     R.bodyGaps.every(g=>g>0.030)&&C.FLS_OVERTRAVEL>C.LS_TRIP+C.FLS_LEAD,JSON.stringify(R.bodyGaps));
+  ok('(4) 파이널 완전 눌림이 점검 오버런 안',
+     C.FLS_OVERTRAVEL+C.FLS_LEAD<=0.35,mm(C.FLS_OVERTRAVEL+C.FLS_LEAD));
   ok('(4) 동작각이 50~70° 범위',
      C.FLS_TRIP_ANGLE >= 50 * Math.PI / 180 && C.FLS_TRIP_ANGLE <= 70 * Math.PI / 180, deg(C.FLS_TRIP_ANGLE));
   ok('(4) 고정축~롤러축이 48~52mm',
@@ -206,8 +216,8 @@ server.listen(PORT, async () => {
   });
   ok('(5) 감속 가닥 ≥ 감속거리 + 오버런 + 리드인',
      lens.slowdown >= C.SLD_DIST + 0.35 + C.FLS_LEAD, `감속 ${mm(lens.slowdown)}`);
-  ok('(5) 각 가닥이 자기 Z 레인만 덮는다',
-     C.CAM_VANE_W / 2 < C.FLS_PAIR_DZ - 0.010,
+  ok('(5) 공용 캠 폭이 중앙 롤러 폭 14mm를 덮는다',
+     C.CAM_VANE_W>=0.014 && C.FLS_PAIR_DZ===0,
      `가닥 폭 ${mm(C.CAM_VANE_W)} / 레인 간격 ${mm(C.FLS_PAIR_DZ)}`);
 
   // (6) 롤러 카 쪽 면 = 캠 면

@@ -50,6 +50,9 @@ try{
     });
   };
   const closed=await page.evaluate(inspect);
+  assert.equal(await page.evaluate(()=>hatchDoors.some(h=>
+    h.interlock.fixed.getObjectByName('Hyundai_Nameplate')||
+    h.interlock.fixed.getObjectByName('BS_sticker'))),false,'No solid placeholder labels');
   for(const c of closed){
     assert.ok(Math.abs(c.pocket[1]-c.lip[1]-0.008)<1e-6,'Closed tooth engagement');
     assert.ok(Math.abs(c.pocket[2]-c.lip[2])<1e-6,'Latch plane');
@@ -86,6 +89,7 @@ try{
     assert.ok(lifted[i].springLength<closed[i].springLength-0.003,'Spring actually compresses');
     assert.equal(lifted[i].stockLength,closed[i].stockLength,'Rigid link length');
   }
+  await aim([0.015,0.025,-0.19],true);
   await page.screenshot({path:path.join(out,'lifted-latch.png')});
   const through=await page.evaluate(()=>{
     const s=hatchDoors[1].interlock;
@@ -131,6 +135,19 @@ try{
         return false;
       }finally{materials.forEach((m,i)=>{m.side=sides[i];});}
     }
+    // Test the real stamped claw through its whole rotation, rather than only
+    // the lip marker. This catches a tooth outside the slot or clipping its edge.
+    const arm=s.moving.getObjectByName('hallLatchKeeperArm');
+    const strikes=['hallLatchBar','Keeper_bent_entry'].map(n=>s.opposite.getObjectByName(n));
+    for(let i=0;i<=40;i++){
+      h.hook.rotation.z=-h.latch.liftRad*i/40;
+      HallInterlock.update(h);scene.updateMatrixWorld(true);
+      for(const strike of strikes){
+        if(!new THREE.Box3().setFromObject(arm).intersectsBox(new THREE.Box3().setFromObject(strike)))continue;
+        if(edgeCrosses(arm,strike)||edgeCrosses(strike,arm))
+          result.push({pose:i/40,a:arm.name,b:strike.name});
+      }
+    }
     for(const distance of [0,0.004,0.010,0.03,0.10,0.30,0.754]){
       h.left.position.x=h.left.userData.cx-distance;
       h.right.position.x=h.right.userData.cx+distance;
@@ -143,8 +160,8 @@ try{
         if(bb.isEmpty())continue;
         const d=bb.getSize(new THREE.Vector3());
         if(Math.min(d.x,d.y,d.z)<=0.001)continue;
-        // A rotating concave stamped plate has a greatly inflated AABB.
-        if(b.name==='hallLatchKeeperArm'&&!edgeCrosses(a,b)&&!edgeCrosses(b,a))continue;
+        // A rotating concave stamped plate or curved wire has a greatly inflated AABB.
+        if((b.name==='hallLatchKeeperArm'||a.name.startsWith('Yellow_lead'))&&!edgeCrosses(a,b)&&!edgeCrosses(b,a))continue;
         result.push({distance,a:a.name,b:b.name,mm:d.multiplyScalar(1000).toArray()});
       }
     }
