@@ -2620,7 +2620,7 @@
       createBox(S.CWT_W + 0.3, chH, 0.2, baseMat, 0, Y0 + chH / 2, CWT_CENTER_Z, railGrp);
 
       const startY = Y0 + chH; // 지지 채널 상단 (0.1m)
-      const rh = TOTAL_H - 0.1 - chH; // 레일 총 길이 (약 16.61m)
+      const rh = TOTAL_H - 0.1 - chH; // 기계실 기준 바닥보다 0.1m 아래에서 끝난다.
 
       const gltfLoader = new THREE.GLTFLoader();
 
@@ -2631,7 +2631,7 @@
         railCol.rotation.y = rotY;
 
         const segLen = 5.0;
-        const count = Math.ceil(rh / segLen); // 16.61 / 5 = 4 세그먼트
+        const count = Math.ceil(rh / segLen);
 
         for (let i = 0; i < count; i++) {
           const segY = startY + i * segLen;
@@ -2701,7 +2701,7 @@
           if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
         });
 
-        // 2.7m 간격 브라켓 높이 6단 배열 — 원본은 index.html RAIL_BRACKET_Y
+        // 기존 6단 + 연장된 상부의 지지 브라켓 — 원본은 index.html RAIL_BRACKET_Y
         // (buildLimitSwitches 의 캠·자석판 암이 같은 배열을 보고 이 단을 피한다)
         // ★역으로 브라켓이 스위치 트립 높이와 겹치는 경우(예: 최상단 14.85가 ULS/UFL 14.86~14.87과
         //   12~17mm 차) 암만 피해서는 부족하다 — 브라켓 옆리브가 넓게 뻗어 나와 스위치 위로

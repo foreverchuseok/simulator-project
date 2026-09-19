@@ -664,7 +664,9 @@
     // 층수 및 층고 배열 (피트 1.76m, 1층 4.0m, 2층 3.65m, 3층 3.7m)
     const FLOORS = 4;
     const PIT = 1.76;
-    const OVERHEAD = 3.7; // 4.77에서 다른 층과 동일하게 3.7로 수정 (시각적 밸런스)
+    // 최상층 바닥 → 기계실 기준 바닥. 슬래브 하면까지의 실제 OH는 여기서 0.245m를 뺀다.
+    // 정상 최상층 정차 시 카 천장 위 약 2.17m 확보. 완충기 압축 상태의 법정 여유 검증값은 아니다.
+    const OVERHEAD = 4.77;
     const Y0 = 0; // 최하단 바닥
 
     const FLOOR_Y = [
@@ -736,8 +738,9 @@
     const CAR_RAIL_X = S.CAR_BG / 2;          // 카 가이드레일 중심 X (±)
     const CAR_RAIL_Z = CAR_CTR_Z + 0.04;      // 카 가이드레일 배면 중심 Z (buildGuideRails 원본)
     /* 좌측 카 레일 브라켓 취부 높이 (현장 2.7m 피치). buildGuideRails 가 배치하고,
-       buildLimitSwitches 는 캠·자석판 암이 이 단과 겹치지 않도록 피해 간다. */
-    const RAIL_BRACKET_Y = [1.35, 4.05, 6.75, 9.45, 12.15, 14.85];
+       buildLimitSwitches 는 캠·자석판 암이 이 단과 겹치지 않도록 피해 간다.
+       마지막 단은 연장된 상부 지지용이며 슬래브·천장 배선 아래에 둔다. */
+    const RAIL_BRACKET_Y = [1.35, 4.05, 6.75, 9.45, 12.15, 14.85, Y0 + TOTAL_H - 0.65];
     const RAIL_BRACKET_BAND = 0.13;           // 브라켓 1단이 차지하는 Y 반높이 + 암 여유
 
     /* ── 16.8 CAM ASSY / FLS ASSY (MR_설계.pdf 137~138p, 책 135~136p) — 좌측(-X) 레일, 스위치 방식 ──

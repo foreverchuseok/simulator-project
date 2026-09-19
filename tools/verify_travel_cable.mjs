@@ -12,7 +12,7 @@
      (6) 롤러가 완전히 눌렸을 때 롤러의 카 쪽 면이 캠 면과 일치한다 (동작각 역산 정합).
      (7) 강제감속 스위치는 종단 착상면 1500mm 전(60m/min)에서 눌리기 시작해
          종단 착상까지 눌린 채 유지되고, 중간층에서는 풀려 있다 (200~201p 거리표).
-     (8) 스위치 취부 암이 레일 브라켓 6단과 겹치지 않는다.
+     (8) 스위치 취부 암이 모든 레일 브라켓 단과 겹치지 않는다.
      (9) 이동케이블이 조속기 로프·카 레일과 물리적으로 떨어져 있다.
    사용: node tools/verify_travel_cable.mjs
 */
@@ -41,7 +41,7 @@ const mm = v => (v * 1000).toFixed(1) + 'mm';
 const deg = r => (r * 180 / Math.PI).toFixed(1) + '°';
 
 server.listen(PORT, async () => {
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({args:['--enable-gpu']});
   const page = await browser.newPage({ viewport: { width: 1280, height: 860 } });
   const errs = [];
   page.on('pageerror', e => { errs.push(e.message); console.error(e.stack); });
@@ -252,7 +252,7 @@ server.listen(PORT, async () => {
   R.armYs.forEach(y => {
     C.RAIL_BRACKET_Y.forEach(by => { if (Math.abs(y - by) < C.RAIL_BRACKET_BAND - 1e-9) hit = { y, by }; });
   });
-  ok('(8) 스위치 취부 암이 레일 브라켓 6단을 피한다', !hit,
+  ok('(8) 스위치 취부 암이 모든 레일 브라켓 단을 피한다', !hit,
      hit ? `암 Y=${mm(hit.y)} vs 브라켓 ${mm(hit.by)}` : `암 ${R.armYs.length}개 모두 밴드 밖`);
 
   // (9) 이동케이블 이격
