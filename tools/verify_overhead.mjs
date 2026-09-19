@@ -24,8 +24,26 @@ try {
    const mr=[];mrGrp.traverse(o=>{if(o.isMesh){const b=new THREE.Box3().setFromObject(o);mr.push({name:o.name,min:b.min.toArray(),max:b.max.toArray()});}});
    const rail=[];railGrp.traverse(o=>{if(o.isMesh&&o.name.startsWith('T_Rail_')){const b=new THREE.Box3().setFromObject(o);rail.push(b.max.y);}});
    const roof=carGrp.position.y+S.CAR_H/2;
+   const upperWall=scene.getObjectByName('shaftOverheadFrontWall');
+   if(OVERHEAD>3.7){
+    const bounds=new THREE.Box3().setFromObject(upperWall);
+    if(Math.abs(bounds.min.y-(FLOOR_Y.at(-1)+3.7))>1e-6 || Math.abs(bounds.max.y-SHAFT_CEIL_Y)>1e-6 ||
+       Math.abs(bounds.min.z-FRONT_WALL_INNER_Z)>1e-6)throw new Error('Overhead wall must join the existing facade to the slab');
+   }
    controls.enableDamping=false;controls.target.set(0,roof+.5,CAR_CTR_Z);camera.position.set(8,roof+2,-10);controls.update();
    return {floor:FLOOR_Y,initialCwt,cwt:cwtGrp.position.y,car:carGrp.position.y,ceiling:SHAFT_CEIL_Y,roof,roofGap:SHAFT_CEIL_Y-roof,handrail:box('carHandrail'),junction:box('carCableJunction'),mr,railTop:Math.max(...rail),mainY:mrGrp.userData.mainY,defY:mrGrp.userData.defY,govTop:govRopeData.topY,govBottom:govRopeData.botY,terminal:TERMINAL_SWITCHES,brackets:RAIL_BRACKET_Y};
+  });
+  await page.waitForFunction(()=>getComputedStyle(document.getElementById('loading')).opacity==='0');
+  if(!old)result.wallPerformance=await page.evaluate(async()=>{
+   const wall=scene.getObjectByName('shaftOverheadFrontWall'),samples=[];
+   for(let repeat=0;repeat<3;repeat++)for(const visible of [false,true]){
+    wall.visible=visible;
+    for(let i=0;i<8;i++)await new Promise(requestAnimationFrame);
+    const times=[];let last=await new Promise(requestAnimationFrame),start=last;
+    while(last-start<2000){const now=await new Promise(requestAnimationFrame);times.push(now-last);last=now;}
+    times.sort((a,b)=>a-b);samples.push({repeat,visible,medianMs:times[Math.floor(times.length/2)],calls:renderer.info.render.calls,triangles:renderer.info.render.triangles});
+   }
+   return samples;
   });
   await page.screenshot({path:out+'/'+(old?'before.png':'after.png')});results.push(result);await page.close();
  }

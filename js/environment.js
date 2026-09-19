@@ -2433,6 +2433,14 @@
         // 4층(최상층) 천장 캐노피 슬래브 추가 (타 층 슬래브와 동일 레벨 및 재질로 일체화)
         if (i === FLOORS - 1) {
           createBox(totalWallW, 0.12, lobbyDepth, lobbyMarbleFaceMats(totalWallW, lobbyDepth), 0, ceilingY - 0.06, wallZ + S.WALL_T / 2 + lobbyDepth / 2, wallGrp);
+          // 로비 캐노피는 원래 높이에 두고, 그 위 승강로 전면만 기계실 슬래브까지 막는다.
+          const overheadWallH = SHAFT_CEIL_Y - ceilingY;
+          if (overheadWallH > 0) {
+            const upperWall = createBox(totalWallW, overheadWallH, S.WALL_T,
+              lobbyFrontWallMats(totalWallW, overheadWallH, S.WALL_T),
+              0, ceilingY + overheadWallH / 2, wallZ, wallGrp);
+            upperWall.name = 'shaftOverheadFrontWall';
+          }
         }
 
         // 전 층 승강장 앞 LED 다운라이트 (천장에 부착)
