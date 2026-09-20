@@ -51,7 +51,7 @@ try{
   }
   sg.shaft.rotation.x=0;refreshCarSafetyLinkage();
   const top=carGrp.getObjectByName('carTopBox'),wire=carGrp.getObjectByName('safetySwitchHarness');
-  const end=carGrp.worldToLocal(top.localToWorld(new THREE.Vector3(0,-0.323,-0.11)));
+  const end=new THREE.Vector3(...top.userData.entries.safety);
   const shoeClearances=carGrp.userData.guideShoes.map(mount=>{
    const model=mount.children[0],meta=model.getObjectByName('GuideShoeRoot').userData,meshes=[];
    model.traverseVisible(o=>{if(o.isMesh)meshes.push(o);});

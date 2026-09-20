@@ -64,9 +64,11 @@ function buildCarPanels(parent) {
   const sill=new THREE.Group(); sill.name='carSill'; root.add(sill);
   const sillFront=HALL_SILL_SHAFT_Z-SILL_GAP-CAR_CTR_Z;
   const sillBack=frontZ-0.025, sillD=sillFront-sillBack, sillZ=(sillFront+sillBack)/2;
-  box('sillBase',S.DOOR_W+0.16,0.025,sillD,steel,0,bottom-0.0225,sillZ,sill);
-  const cuts=[-sillD/2,-0.014,-0.004,0.025,0.035,sillD/2];
-  for(let i=0;i<cuts.length-1;i+=2) box('sillLand',S.DOOR_W+0.16,0.01,cuts[i+1]-cuts[i],steel,0,bottom-0.005,sillZ+(cuts[i]+cuts[i+1])/2,sill);
+  const door=CarDoor.dimensions(), groove=door.doorZ-sillZ;
+  box('sillBase',door.sillW,0.025,sillD,steel,0,bottom-0.0225,sillZ,sill);
+  const cuts=[-sillD/2,groove-0.005,groove+0.005,groove+0.023,groove+0.033,sillD/2];
+  for(let i=0;i<cuts.length-1;i+=2) box('sillLand',door.sillW,0.01,cuts[i+1]-cuts[i],steel,0,bottom-0.005,sillZ+(cuts[i]+cuts[i+1])/2,sill);
+  sill.userData={grooveZ:door.doorZ,width:door.sillW,topY:bottom,grooveWidth:0.010};
   // 후면 손잡이: 창 테두리와 중앙 이음 기둥의 고정판에 지지한다.
   const railY=bottom+0.90, railZ=rearZ+0.09, railW=rearWidth-0.16;
   const rail=createCylinder(0.018,0.018,railW,steel,0,railY,railZ,root);
@@ -118,11 +120,6 @@ function buildCarControls(parent,{floorY,frontZ,sideX}) {
     mat.transparent=true;mat.depthWrite=false;mat.toneMapped=false;
     const mesh=new THREE.Mesh(new THREE.PlaneGeometry(w,h),mat);
     mesh.position.set(x,y,z);g.add(mesh);return mesh;
-  }
-  function cable(name,points) {
-    const curve=new THREE.CatmullRomCurve3(points.map(p=>new THREE.Vector3(...p)),false,'centripetal');
-    const mesh=new THREE.Mesh(new THREE.TubeGeometry(curve,64,0.004,8,false),dark);
-    mesh.name=name;root.add(mesh);return mesh;
   }
   // 실내에서 출입구를 바라볼 때 왼쪽 리턴(세계좌표 +X)에 매립형 OPB.
   const opb=new THREE.Group();opb.name='carOPB';
@@ -201,7 +198,10 @@ function buildCarControls(parent,{floorY,frontZ,sideX}) {
   const topBox=new THREE.Group();topBox.name='carTopBox';
   const tx=-(S.CAR_W/2-0.25),ty=S.CAR_H/2+0.59,tz=S.CAR_D/2-0.55;
   topBox.position.set(tx,ty,tz);root.add(topBox);
-  box('carTopBoxBody',0.14,0.62,0.40,metal,0,0,0,topBox);
+  // 하부 인입판의 구멍을 막지 않도록 속이 빈 판금함으로 조립한다.
+  box('carTopBoxBody',.004,.62,.40,metal,-.068,0,0,topBox);
+  for(const z of [-.198,.198])box('carTopBoxSide',.132,.62,.004,metal,0,0,z,topBox);
+  box('carTopBoxTop',.132,.004,.392,metal,0,.308,0,topBox);
   box('carTopBoxLid',0.005,0.595,0.375,metal,0.073,0,0,topBox);
   box('carTopBoxUpperSeam',0.006,0.003,0.375,dark,0.077,0.16,0,topBox);
   for(const y of [-0.11,0.31])for(const z of [-0.145,0.145]){
@@ -209,18 +209,33 @@ function buildCarControls(parent,{floorY,frontZ,sideX}) {
     cyl(0.006,0.07,metal,-0.105,y,z,topBox,'x');
   }
   const badge=label('CAR TOP',0.17,0.04,0.078,0.22,0,topBox,'#1e2428');badge.rotation.y=Math.PI/2;
-  for(const z of [-0.11,0.11])cyl(0.013,0.028,dark,0,-0.323,z,topBox);
-  // 탑 박스 → OPB: 천장 가장자리와 전면 리턴 뒤로 내려가는 검정 하니스.
-  const roofY=S.CAR_H/2+0.025;
-  // 장애인 OPB 하니스는 불투명 외판 바깥으로 올라가 탑 박스에 인입한다.
-  cable('accessibleOPBToTopBox',[[ -sideX-0.008,floorY+0.85,0.25],[-sideX-0.008,S.CAR_H/2-0.08,0.25],
-    [-sideX+0.05,roofY+0.03,0.30],[tx,ty-0.325,tz+0.11]]);
-  cable('topBoxToOPBHarness',[[tx,ty-0.324,tz+0.11],[tx,roofY+0.04,tz+0.11],
-    [tx,roofY,frontZ-0.06],[opbX,roofY,frontZ-0.06],[opbX,floorY+1.97,frontZ+0.018]]);
+  CarWiring.init(topBox,{sideX,frontZ});CarWiring.entryPlate(metal,dark);
+  const q=CarWiring.layout;
+  const sideWall=parent.getObjectByName('carWallLeft');
+  parent.updateMatrixWorld(true);
+  const servicePoint=new THREE.Vector3(-sideX,floorY+.85,.25);
+  let serviceSkin;
+  sideWall.traverse(o=>{if(o.name==='opaqueSkin'){
+    const p=o.worldToLocal(parent.localToWorld(servicePoint.clone()));
+    if(Math.abs(p.x)<o.geometry.parameters.width/2)serviceSkin=o;
+  }});
+  CarWiring.serviceEntry(parent,serviceSkin,servicePoint.toArray(),'x',dark);
+  CarWiring.serviceEntry(parent,parent.getObjectByName('carPanel_11'),[opbX,floorY+1.97,frontZ],'z',dark);
+  // 외판 뒤의 서비스 인입 → 좌측 전면 모서리. 천장 중앙은 비운다.
+  CarWiring.run(root,'accessibleOPBToTopBox',[
+    [-sideX+.014,floorY+.85,.25],[-q.outerX,floorY+.85,.25],
+    [-q.outerX,floorY+.85,q.frontLane-.06],[-q.outerX,q.overY,q.frontLane-.06],
+    [CarWiring.laneX('accessible'),q.overY,q.frontLane-.06],
+    [CarWiring.laneX('accessible'),q.roofY,q.frontLane-.06],...CarWiring.toBox('accessible')]);
+  CarWiring.run(root,'topBoxToOPBHarness',[
+    [opbX,floorY+1.97,frontZ-.016],[opbX,floorY+1.97,frontZ+.032],[opbX,q.overY,frontZ+.032],
+    [opbX,q.overY,q.frontLane],[opbX,q.roofY,q.frontLane],
+    [CarWiring.laneX('opb'),q.roofY,q.frontLane],...CarWiring.toBox('opb')]);
   const junction=parent.getObjectByName('carCableJunction');
   if(junction){
     const p=junction.position;
-    cable('travelJunctionToTopBox',[[p.x+0.05,p.y,p.z],[tx-0.12,p.y,p.z],[tx,ty-0.325,tz-0.11]]);
+    CarWiring.run(root,'travelJunctionToTopBox',[[p.x+.05,p.y,p.z],[CarWiring.laneX('travel'),p.y,p.z],
+      [CarWiring.laneX('travel'),q.roofY,p.z],...CarWiring.toBox('travel')]);
   }
 
   // 223p: 플랫폼의 하중 감지 볼트와 플랭크 전면 취부판에 고정한 하중 스위치 4조.
@@ -250,11 +265,16 @@ function buildCarControls(parent,{floorY,frontZ,sideX}) {
     for(const y of [baseY-0.101,baseY-0.113])cyl(0.010,0.007,brass,x,y,loadZ,sw);
     cyl(0.014,0.005,brass,x,boltBottom,loadZ,sw);
     label(threshold+'%',0.09,0.025,x,baseY-0.246,loadZ+0.034,sw,'#eeeeee','#252c31');
-    cable('loadSwitchLead_'+threshold,[[x+0.065,baseY-0.248,loadZ],[x+0.10,baseY-0.25,loadZ+0.045],
-      [0.44,baseY-0.25,loadZ+0.045],[0.48,baseY-0.12,0.28],
-      [opbX,baseY-0.10,frontZ-0.04],[opbX,floorY+0.25,frontZ+0.018]]);
+    const leadZ=.278+i*.009;
+    CarWiring.run(root,'loadSwitchLead_'+threshold,[[x+.065,baseY-.248,loadZ],
+      [x+.083,baseY-.248,loadZ],[x+.083,baseY-.248,leadZ],
+      [x+.083,baseY-.195,leadZ],[-.55,baseY-.195,leadZ]],{radius:.003,bend:.008});
   });
   load.userData={sensorType:'load-switch',thresholds,connector:'CC26',visualOnly:true,
     reference:'부품설계.pdf 223'};
+  box('loadWiringJunction',.075,.05,.055,dark,-.55,baseY-.195,.292);
+  CarWiring.run(root,'loadSensorHarness',[[-.55,baseY-.195,.285],[-q.outerX,baseY-.195,.285],
+    [-q.outerX,q.underY,.285],[-q.outerX,q.underY,q.frontLane-.025],
+    ...CarWiring.leftRiser('load',q.frontLane-.025)]);
   root.userData={reference:'부품설계.pdf 221–223',visualOnly:true};
 }

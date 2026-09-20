@@ -28,19 +28,21 @@ try{
  const result=await page.evaluate(()=>{
   const parts=[];scene.traverse(o=>{if(o.isMesh&&!['outdoorGround','outdoorBackground','skyDome'].some(name=>{let p=o;while(p){if(p.name===name)return true;p=p.parent;}return false;}))parts.push([o.uuid,o.visible]);});
   window.viewParts=parts;
-  return {detailed:outdoorPresentation.detailed,calls:renderer.info.render.calls,triangles:renderer.info.render.triangles};
+  const groundTop=new THREE.Box3().setFromObject(outdoorPresentation.floor).max.y;
+  return {detailed:outdoorPresentation.detailed,calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,groundGap:Y0-groundTop};
  });
  assert.equal(result.detailed,false);
+ assert.ok(Math.abs(result.groundGap-.03)<1e-6,'Outdoor ground stays 30mm below the pit foundation');
  await page.screenshot({animations:'disabled',path:path.join(out,label+'-simple.png')});
  await page.click('[data-menu="dd-cam"]');
  await page.click('#c-background');
- await page.waitForFunction(()=>outdoorPresentation.detailed&&renderer.info.render.triangles>1500000);
+ await page.waitForFunction(()=>outdoorPresentation.detailed&&outdoorPresentation.sky.visible);
  const detailed=await page.evaluate(()=>({calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,
   lightingRestored:outdoorPresentation.lighting.every(e=>e.light.intensity===e.original)&&renderer.toneMappingExposure===outdoorPresentation.exposure}));
  assert.equal(detailed.lightingRestored,true);
  await page.screenshot({animations:'disabled',path:path.join(out,label+'-landscape.png')});
  await page.click('#c-background');
- await page.waitForFunction(()=>!outdoorPresentation.detailed&&renderer.info.render.triangles<1000000);
+ await page.waitForFunction(()=>!outdoorPresentation.detailed&&!outdoorPresentation.sky.visible);
  for(const id of ['c-mr','c-pit','c-car','c-car-top','c-governor','c-shaft']){
   await page.click('#'+id);
   await page.waitForFunction(()=>gsap.getTweensOf(camera.position).length===0&&gsap.getTweensOf(controls.target).length===0);
@@ -60,8 +62,20 @@ try{
   return {partsUnchanged:viewParts.every(([id,visible])=>actual.get(id)?.visible===visible),state:currentState,near:camera.near,minDistance:controls.minDistance,detail:outdoorPresentation.detailed,
    studioRestored:outdoorPresentation.lighting.every(e=>e.light.intensity===e.studio)&&renderer.toneMappingExposure===outdoorPresentation.simpleExposure};
  });
- assert.equal(restored.partsUnchanged,true);assert.equal(restored.state,'IDLE');assert.equal(restored.near,.002);assert.equal(restored.minDistance,.04);
+ assert.equal(restored.partsUnchanged,true);assert.equal(restored.state,'IDLE');assert.equal(restored.near,.1);assert.equal(restored.minDistance,.04);
  assert.equal(restored.studioRestored,true);
+ // 원거리 깊이 정밀도와 4cm 근접 관찰을 모두 유지한다.
+ const clipping=await page.evaluate(()=>{
+  const saved=camera.position.clone(),direction=camera.position.clone().sub(controls.target).normalize();
+  const values=[0.04,0.5,10].map(distance=>{
+   camera.position.copy(controls.target).addScaledVector(direction,distance);
+   controls.update();
+   return camera.near;
+  });
+  camera.position.copy(saved);controls.update();
+  return values;
+ });
+ for(const [i,expected] of [0.002,0.01,0.1].entries())assert.ok(Math.abs(clipping[i]-expected)<1e-6,'Camera clipping follows observation distance');
  const mobile=await browser.newContext({viewport:{width:800,height:1280},deviceScaleFactor:1,isMobile:true,hasTouch:true});
  const tablet=await mobile.newPage();tablet.on('pageerror',e=>errors.push(e.message));
  await tablet.goto(process.env.SIMULATOR_URL||`http://127.0.0.1:${server.address().port}/index.html`,{waitUntil:'networkidle'});
@@ -91,5 +105,5 @@ try{
   await tablet.screenshot({path:path.join(out,`${label}-focus-touch-${viewport.width}.png`)});
  }
  await mobile.close();assert.deepEqual(errors,[]);
- fs.writeFileSync(path.join(out,label+'-views.json'),JSON.stringify({result,detailed,restored,errors},null,2));console.log(JSON.stringify({result,detailed,restored,errors}));
+ fs.writeFileSync(path.join(out,label+'-views.json'),JSON.stringify({result,detailed,restored,clipping,errors},null,2));console.log(JSON.stringify({result,detailed,restored,clipping,errors}));
 }finally{await browser?.close();await new Promise(r=>server.close(r));}

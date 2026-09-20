@@ -7,6 +7,8 @@ Claude Code, Google Antigravity, Codex, Cursor는 도어 작업을 시작하기 
 
 ## 현재 화면 상태
 
+- 카 도어 복원(2026-09-19): `js/car-door.js`에 카문·행거·모터/벨트·CDL 클러치/카도어락·스위치·해제 와이어를 올렸다. 상세 계약과 검증은 [CAR-DOOR.md](CAR-DOOR.md)를 따른다. 카문 구동값에서 물린 층의 승장문 위치를 계산하며, 아래의 과거 카문 스텁 및 승장문 독립 트윈 설명을 대체한다.
+
 - 렌더링 최적화(2026-09-18): 실 서포트·실·토가드·삼방틀의 이름 없는 고정 메시만 `batchStaticChildren()`으로 묶는다. 층별 부모 위치·그룹과 표시기 텍스처를 유지하고, 행거·도어·인터록·삼각키 가동부는 이 묶음에 포함하지 않는다. 상세 결과는 [공유 로드맵](ROADMAP.md)의 렌더링 2차 기록을 참고한다.
 
 걷어낸 것:
@@ -113,21 +115,18 @@ Claude Code, Google Antigravity, Codex, Cursor는 도어 작업을 시작하기 
     - 벽체 L-브라켓 돌출 깊이(`spanZ`)를 약 22.5mm로 대폭 축소하여 승강로 전면 벽체에 단단하게 밀착
     - 허공 선반을 완전 삭제하고 행거판 하단 34mm L-플랜지와 M8 볼트 2세트가 도어 상단 탭 플레이트/심 라이너와 직접 일체 결합
 
-아직 올리지 않은 것:
-
-- 카 도어 클러치(벌림형 베인) 및 카 도어 오퍼레이터(카 재공사 연계)
+카 도어 클러치와 오퍼레이터는 2026-09-19 복원했다. 전자 제어 보드의 내부 제어와 장애물 감지는 이번 구현 범위 밖이다.
 
 그대로 둔 것:
 
 - 로비 전면벽 개구부, 출입 프레임, 홀버튼, 점자 — `js/environment.js` `buildFrontWallAndLobby()`
 - 도어 치수 `S.DOOR_W` 1.50, `S.DOOR_H` 2.10 — `js/config.js`
-- 운행 FSM `openDoors()` / `closeDoors()` — 카 도어는 빈 그룹만 움직인다.
-  승장 행거판 트윈에는 `spinDoorDrive(h)` 가 `onUpdate`/`onComplete` 로 물려 있다(연동로프 갱신).
+- 운행 FSM `openDoors()` / `closeDoors()`는 `CarDoor.open()` / `CarDoor.close()`를 호출한다. 카문 위치에서 승장문 위치를 먼저 갱신한 뒤 `spinDoorDrive(h)`를 호출한다.
 - 스티커 PNG `assets/bg/hand.png`, `assets/bg/lean.png` — 삭제 금지
 
 카 에이프런·카 실·체대는 카 재공사로 `js/archive/car.js` / `docs/CAR-REBUILD.md` 로 옮겼다.
 
-`buildCarDoors()`는 운행 코드가 참조하는 빈 `THREE.Group`만 만든다. `buildHatchDoors()`는 실·삼방틀·행거 케이스와 좌·우 행거 플레이트·승장 도어 패널을 올린다.
+`buildCarDoors()`는 `CarDoor.build()`를 호출한다. `buildHatchDoors()`가 먼저 실·삼방틀·행거 케이스와 좌·우 행거 플레이트·승장 도어 패널을 올리고, 카도어가 GLB 롤러 위치를 읽어 조립한다.
 
 ## 행거 케이스 계약 (에이전트 필수)
 
@@ -251,8 +250,7 @@ Claude Code, Google Antigravity, Codex, Cursor는 도어 작업을 시작하기 
 - `userData.cx`, `userData.ox`
 - `spinDoorDrive(h)` — **더 이상 no-op 이 아니다.** 승장 연동로프 마디·양단 풀리 회전·폐문 스프링 길이를
   `h.link` 핸들로 갱신한다. `h.link` 가 없으면 즉시 return 하므로 카 오퍼레이터 복원 시에도 안전하다.
-  `ui.js` 의 `openDoors()`/`closeDoors()` 에서 **승장 행거판(`h.right`) 트윈의 `onUpdate`/`onComplete`** 로
-  호출한다. ★카도어 트윈에만 물리면 한 프레임 밀려서 로프 끝이 고정단에서 어긋난 채 멈춘다.
+  `CarDoor.pose()`에서 승장 행거판 위치를 갱신한 직후 호출한다. 카문/승장문/로프의 갱신 순서를 바꾸지 않는다.
 - `h.hook`, `h.triKey`, `h.doorWeight`, `h.relPulley` 는 없어도 `ui.js`가 통과한다
 
 ## 관련 파일

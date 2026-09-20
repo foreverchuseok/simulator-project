@@ -48,9 +48,9 @@ function buildCarLevelingSensors(parent) {
   const junction=parent.getObjectByName('carCableJunction');
   if(junction){
     const p=junction.position;
-    const curve=new THREE.CatmullRomCurve3([new THREE.Vector3(x+0.039,y-LCD_SENSOR_PITCH-0.018,z+0.106),
-      new THREE.Vector3(x+0.05,y-0.12,z+0.16),new THREE.Vector3(p.x,y-0.08,p.z-0.1),new THREE.Vector3(p.x,p.y-0.12,p.z)]);
-    const wire=new THREE.Mesh(new THREE.TubeGeometry(curve,40,0.004,8,false),black);wire.name='levelingSignalHarness';parent.add(wire);
+    const sy=y-LCD_SENSOR_PITCH-.018,sz=z+.106;
+    CarWiring.run(parent,'levelingSignalHarness',[[x+.039,sy,sz],[p.x,sy,sz],
+      [p.x,sy,p.z],[p.x,p.y-.12,p.z]],{radius:.004,bend:.012});
   }
   carSensors.leveling=g;
   elevatorState.leveling=levelingSystem.state;

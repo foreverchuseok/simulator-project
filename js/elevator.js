@@ -274,6 +274,8 @@
 
       // Z방향 하부 종통 보강 채널 6본 (도면 93p)
       const stringerX = [-0.85, -0.51, -0.17, 0.17, 0.51, 0.85];
+      platformGrp.name = 'carPlatform';
+      platformGrp.userData = { stringerX, bottomY: pltMidY - (pltH - 0.01) / 2 };
       stringerX.forEach(sx => {
         createBox(0.045, pltH - 0.01, D - 0.08, pltMat, sx, pltMidY, 0, platformGrp);
       });
@@ -478,25 +480,14 @@
     }
 
     /* ==========================================================================
-       도어 재공사 (2026-08-17): 형상은 화면에서 제거.
-       원본: js/archive/doors.js   안내: docs/DOOR-REBUILD.md
+       카 도어 재공사: js/car-door.js에서 형상과 구동부를 생성한다.
+       과거 원본: js/archive/doors.js   현재 계약: docs/CAR-DOOR.md
        카 에이프런은 카 재공사로 `js/archive/car.js` 에 옮겼다.
        스티커 PNG: assets/bg/hand.png, assets/bg/lean.png (삭제 금지)
-       운행 FSM(openDoors/closeDoors)이 참조하는 빈 그룹만 유지한다.
+       운행 FSM(openDoors/closeDoors)은 CarDoor의 개폐 완료와 잠금을 확인한다.
        ========================================================================== */
     function buildCarDoors() {
-      const dw = S.DOOR_W / 2 + 0.02;
-      const cx = dw / 2 + 0.006, ox = dw * 1.5 - 0.01;
-      carDoorL = new THREE.Group();
-      carDoorR = new THREE.Group();
-      carDoorL.name = 'carDoorL_stub';
-      carDoorR.name = 'carDoorR_stub';
-      carDoorL.userData = { cx: -cx, ox: -ox, archived: true };
-      carDoorR.userData = { cx: cx, ox: ox, archived: true };
-      carDoorL.position.set(-cx, 0, 0);
-      carDoorR.position.set(cx, 0, 0);
-      carGrp.add(carDoorL, carDoorR);
-      carGrp.userData.doorDrive = null;
+      CarDoor.build();
     }
 
     /* ──────────────────────────────────────────────────────────────
@@ -836,8 +827,7 @@
          헤더(행거 케이스) 폭은 "활짝 열린 행거판이 아직 레일 위에 있는" 조건에서 역산한다.
          예전 값 S.DOOR_W + 0.40 = 1.90m 는 행정 ±1.145m 보다 좁아, 문을 열면
          행거판과 연동로프 고정단이 레일 밖 허공으로 튀어나갔다. */
-      const dw = S.DOOR_W / 2 + 0.02;
-      const cx = dw / 2 + 0.006, ox = dw * 1.5 - 0.01;
+      const {cx,ox} = CarDoor.dimensions();
       const HP_W = 0.380; // 행거 플레이트 폭 (buildHangerAssembly 베이스판과 동일 원본)
 
       // ── 승장 도어 오퍼레이터 (행거 케이스 + 양단 브라켓 + C레일 속 롤러) ──

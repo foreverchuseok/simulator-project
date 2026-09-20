@@ -1054,11 +1054,14 @@
       // 화면 고정 background 대신 하늘 돔 — 저각도에서도 지평선 아래가 horizon 색으로 이어짐
       const skyTex = createBgGradientTexture(4, 256, (ctx, w, h) => {
         const g = ctx.createLinearGradient(0, 0, 0, h);
+        // 캔버스 위=천정, 0.5=수평선, 아래=지평선 아래 하늘.
+        // 천공섬이라 지평선 아래도 그대로 보이므로 흰 안개로 덮지 않고 옅은 하늘색으로 내려간다.
         g.addColorStop(0.00, '#3f9fe8');
-        g.addColorStop(0.45, '#7fc4f2');
-        g.addColorStop(0.62, '#c8e8fa');
-        g.addColorStop(0.72, '#eef7fc');
-        g.addColorStop(1.00, '#eef7fc'); // 하부 반구 = horizon (안개색과 연속)
+        g.addColorStop(0.35, '#7fc4f2');
+        g.addColorStop(0.47, '#cfe8fa');
+        g.addColorStop(0.52, '#eef7fc'); // 수평선 밝은 띠
+        g.addColorStop(0.64, '#cfe6f6');
+        g.addColorStop(1.00, '#9cc8e6');
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, w, h);
       });
@@ -1071,7 +1074,8 @@
           map: skyTex,
           side: THREE.BackSide,
           fog: false,
-          depthWrite: false
+          depthWrite: false,
+          toneMapped: false // ACES 톤매핑에 물들면 하늘이 잿빛으로 바랜다
         })
       );
       skyDome.name = 'skyDome';
@@ -1115,7 +1119,7 @@
         maxY = Math.max(maxY, p.getY(i));
       }
       // 아래는 청회색, 위는 흰색
-      const cBot = new THREE.Color(0xc9d8e6);
+      const cBot = new THREE.Color(0xeaf2f9); // 안개처럼 보이도록 아랫면 음영도 거의 없앤다
       const cTop = new THREE.Color(0xffffff);
       const colors = new Float32Array(p.count * 3);
       const tmp = new THREE.Color();
@@ -1134,12 +1138,18 @@
       cloudGrp.name = 'softClouds';
       cloudGrp.userData = { type: 'bg-clouds' };
 
-      const mat = stylizedMat(0.9, 0.22); // 구름은 밝고 음영 약하게
+      // 구름은 덩어리가 아니라 엷은 안개다. 반투명 언릿 + 흐린 정점 컬러.
+      const mat = new THREE.MeshBasicMaterial({
+        vertexColors: true, transparent: true, opacity: 0.30, depthWrite: false
+      });
       // [각도(도), 반경, 높이, 스케일] — 어느 방향에서 봐도 구름이 보이도록 링 배치
       const placements = [
         [15, 70, 30, 7], [55, 85, 36, 9], [100, 75, 28, 6.5],
         [150, 90, 38, 10], [195, 80, 32, 8], [240, 72, 27, 6],
-        [285, 88, 40, 9.5], [330, 78, 33, 7.5]
+        [285, 88, 40, 9.5], [330, 78, 33, 7.5],
+        // 섬 아래 구름 바다 — 섬보다 작고 멀찍이 깔아 천공섬이 구름 위에 떠 보이게 한다.
+        [35, 34, -11, 3.5], [95, 46, -18, 4.5], [160, 30, -8, 3], [215, 54, -23, 5.5],
+        [270, 40, -14, 4], [320, 62, -27, 6], [10, 72, -31, 7], [125, 80, -36, 8]
       ];
       placements.forEach(([deg, rad, y, s], i) => {
         const a = deg * Math.PI / 180;
@@ -1841,10 +1851,10 @@
       if (!outdoorPresentation) return;
       const p = outdoorPresentation;
       p.detailed = Boolean(enabled);
-      p.landscape.visible = p.detailed;
-      p.buildings.visible = p.detailed;
+      // 천공섬 배경에서는 지면에 서 있던 지형·주변 건물이 두 모드 모두 나오지 않는다.
+      if (p.landscape) p.landscape.visible = false;
+      if (p.buildings) p.buildings.visible = false;
       p.sky.visible = p.detailed;
-      p.floor.material = p.detailed ? p.floorMaterial : p.simpleFloorMaterial;
       scene.background = p.detailed ? p.background : p.simpleBackground;
       scene.fog = p.detailed ? p.fog : p.simpleFog;
       renderer.toneMappingExposure = p.detailed ? p.exposure : p.simpleExposure;
@@ -1856,24 +1866,134 @@
       }
     }
 
+    /* ── 공중 지반(네모난 땅덩어리) ──────────────────────────────────
+       넓은 지면 대신 승강로 + 보도블록 광장 footprint 만 남긴 사각 지반을 세운다.
+       상면은 기존 외부 지면과 같은 Y0-0.03 레벨이라 보도블록·계단·램프 높이는 그대로다.
+       옆면은 수직 절벽으로 곧게 내려가다 아래쪽에서 안개에 녹는다. */
+    const BUILD_GROUND_SCENERY = false; // 지면이 사라졌으므로 지형·풀밭·개울·주변 건물은 만들지 않는다(코드는 보존).
+    const PLINTH_MARGIN = 4.0;          // 보도블록·승강로 바깥으로 남는 흙·잔디 테두리 폭
+    const PLINTH_BACK_MARGIN = 7.5;     // 승강로 후면(Z-)은 광장이 없어 좁아 보이므로 더 넓게 뺀다
+    const PLINTH_STEP = 1.3;            // 절벽 정점 간격(둘레 방향)
+    // [깊이(m), 수평 배율] — 거의 수직으로 내려가며 아주 조금만 좁아진다.
+    const PLINTH_PROFILE = [
+      [0.00, 1.000], [0.55, 0.998], [2.20, 0.987], [5.50, 0.972],
+      [10.00, 0.955], [16.00, 0.935], [24.00, 0.910], [34.00, 0.890]
+    ];
+    const ISLAND_COLORS = {
+      grass: new THREE.Color(0x6c8f4d), dirt: new THREE.Color(0x6b5540),
+      rock: new THREE.Color(0x7d7870), deep: new THREE.Color(0x4e4b52),
+      haze: new THREE.Color(0xc4dcec) // 아래쪽이 녹아드는 안개색
+    };
+
+    // 사각 둘레를 일정 간격으로 훑는다. 네 모서리는 반드시 정점으로 남는다.
+    function rectPerimeter(hw, hd, step) {
+      const corners = [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]];
+      const pts = [];
+      for (let c = 0; c < 4; c++) {
+        const [x1, z1] = corners[c], [x2, z2] = corners[(c + 1) % 4];
+        const n = Math.max(2, Math.round(Math.hypot(x2 - x1, z2 - z1) / step));
+        for (let i = 0; i < n; i++) {
+          const t = i / n;
+          pts.push([x1 + (x2 - x1) * t, z1 + (z2 - z1) * t]);
+        }
+      }
+      return pts;
+    }
+
+    // 깊이에 따른 잔디→흙→바위→그늘→안개 정점 컬러. 1.6m 간격 지층 얼룩을 섞는다.
+    function plinthTone(target, v, seed) {
+      const d = -v.y;
+      if (d < 0.55) target.copy(ISLAND_COLORS.grass).lerp(ISLAND_COLORS.dirt, smooth01(d / 0.55));
+      else if (d < 3.2) target.copy(ISLAND_COLORS.dirt).lerp(ISLAND_COLORS.rock, smooth01((d - 0.55) / 2.65));
+      else target.copy(ISLAND_COLORS.rock).lerp(ISLAND_COLORS.deep, smooth01((d - 3.2) / 9.0));
+      if (d < 0.05) target.multiplyScalar(0.93 + 0.14 * vertHash(v.x * 0.55, 2, v.z * 0.55, seed + 7)); // 잔디 얼룩
+      if (d > 0.55) { // 수평 지층
+        const band = Math.floor(d / 1.6);
+        target.multiplyScalar(0.90 + 0.20 * vertHash(band * 3.7, 1, 2, seed + 11));
+      }
+      // 아래로 갈수록 안개에 잠긴다.
+      return target.lerp(ISLAND_COLORS.haze, smooth01((d - 11) / 20) * 0.88);
+    }
+
+    // 사각 둘레 + 깊이 프로파일 → 상면 + 수직 절벽 + 바닥 (비인덱스, 로우폴리 음영)
+    function makePlinthGeometry(hw, hd, seed) {
+      const base = rectPerimeter(hw, hd, PLINTH_STEP);
+      const seg = base.length;
+      const rings = PLINTH_PROFILE.map(([depth, scale], k) => base.map(([bx, bz], i) => {
+        // 상면은 평평해야 보도블록이 앉는다. 옆면만 살짝 깨뜨린다.
+        const jig = k === 0 ? 0 : (vertHash(i * 1.7, k * 3.3, 2.2, seed + 5) - 0.5) * 0.34
+          + (vertHash(i * 5.3, k * 1.9, 4.7, seed + 21) - 0.5) * 0.16;
+        const f = scale + jig / Math.max(hw, hd);
+        const y = k === 0 ? 0 : -depth * (1 + (vertHash(i * 2.9, k * 5.1, 1.3, seed + 9) - 0.5) * 0.06);
+        return new THREE.Vector3(bx * f, y, bz * f);
+      }));
+
+      const pos = [], col = [];
+      const tmp = new THREE.Color();
+      let facet = 1;
+      const push = v => {
+        pos.push(v.x, v.y, v.z);
+        plinthTone(tmp, v, seed).multiplyScalar(facet);
+        col.push(tmp.r, tmp.g, tmp.b);
+      };
+      // 면 단위로 같은 음영을 주면 로우폴리 암반처럼 각진 반점이 생긴다.
+      // 상·하면은 부채꼴 이음매가 드러나므로 면 음영을 주지 않는다.
+      let faceted = true;
+      const tri = (a, b, c) => {
+        facet = faceted ? 0.88 + 0.24 * vertHash(a.x + b.x, a.y + c.y, b.z + c.z, seed + 3) : 1;
+        push(a); push(b); push(c);
+      };
+
+      const top = rings[0];
+      const topC = new THREE.Vector3(0, 0, 0);
+      faceted = false;
+      for (let i = 0; i < seg; i++) tri(topC, top[(i + 1) % seg], top[i]); // 상면(+Y)
+      faceted = true;
+      for (let k = 0; k < rings.length - 1; k++) {
+        const up = rings[k], lo = rings[k + 1];
+        for (let i = 0; i < seg; i++) {
+          const j = (i + 1) % seg;
+          tri(up[i], up[j], lo[j]);                                       // 절벽(바깥면)
+          tri(up[i], lo[j], lo[i]);
+        }
+      }
+      const last = rings[rings.length - 1];
+      const botC = new THREE.Vector3(0, last[0].y, 0);
+      faceted = false;
+      for (let i = 0; i < seg; i++) tri(botC, last[i], last[(i + 1) % seg]); // 바닥(-Y)
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+      geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(col), 3));
+      geo.computeVertexNormals();
+      return geo;
+    }
+
+    function buildSkyIsland(parent, cover, topY) {
+      const body = new THREE.Mesh(makePlinthGeometry(cover.hw, cover.hd, 17), stylizedMat(0.62, 0.5));
+      body.name = 'skyIslandBody';
+      body.position.set(cover.cx, topY, cover.cz);
+      body.userData = { type: 'sky-island' };
+      parent.add(body);
+      return body;
+    }
+
     function buildOutdoorGround(parent) {
       const g = new THREE.Group();
       g.name = 'outdoorGround';
       g.userData = { type: 'outdoor-ground' };
 
-      const span = 280;
-      const floor = createBox(span, 0.25, span, M.conc(0x3d3a36), 0, Y0 - 0.125, 0, g);
-      floor.name = 'outdoorBase';
       const landscape = new THREE.Group();
       landscape.name = 'outdoorLandscape';
       g.add(landscape);
 
-      // 구릉 지형 + 풀밭 + 들꽃 (스타일라이즈드 자연 배경)
-      buildTerrain(landscape);
-      buildGrassField(landscape);
-      buildFlowerField(landscape);
-
-      buildStreamAndRocks(landscape);
+      if (BUILD_GROUND_SCENERY) {
+        // 구릉 지형 + 풀밭 + 들꽃 (스타일라이즈드 자연 배경)
+        buildTerrain(landscape);
+        buildGrassField(landscape);
+        buildFlowerField(landscape);
+        buildStreamAndRocks(landscape);
+      }
 
       // 승강로 전면 및 계단/나선형 휠체어 램프 진입 광장 포장 — 보도블록 확장 (폭 13.0m, 깊이 11.5m)
       const paverW = 13.0;
@@ -1881,6 +2001,25 @@
       const paverCX = 2.10; // 계단 및 우측 나선 램프 중심
       const paverCZ = S.SHAFT_D / 2 + paverD / 2 + 0.2;
       createBox(paverW, 0.03, paverD, makePaverMaterial(paverW, paverD), paverCX, Y0 + 0.04, paverCZ, g);
+
+      // 섬이 받쳐야 할 지상 footprint = 보도블록 광장 ∪ 승강로 외벽 (여유 0.9m)
+      const wallOut = S.SHAFT_W / 2 + S.WALL_T;
+      const minX = Math.min(paverCX - paverW / 2, -wallOut);
+      const maxX = Math.max(paverCX + paverW / 2, wallOut);
+      const minZ = Math.min(paverCZ - paverD / 2, SHAFT_BACK_Z - S.WALL_T);
+      const maxZ = Math.max(paverCZ + paverD / 2, FRONT_WALL_INNER_Z + S.WALL_T);
+      // 테두리를 면마다 더한 뒤 중심·반폭을 다시 낸다(후면만 더 넓어 중심이 뒤로 간다).
+      const edgeMinX = minX - PLINTH_MARGIN, edgeMaxX = maxX + PLINTH_MARGIN;
+      const edgeMinZ = minZ - PLINTH_BACK_MARGIN, edgeMaxZ = maxZ + PLINTH_MARGIN;
+      const cover = {
+        cx: (edgeMinX + edgeMaxX) / 2, cz: (edgeMinZ + edgeMaxZ) / 2,
+        hw: (edgeMaxX - edgeMinX) / 2, hd: (edgeMaxZ - edgeMinZ) / 2
+      };
+      // 피트 기초 상면(Y0)과 공면이 되지 않도록 섬 상면도 30mm 낮춘다(기존 지면 레벨 유지).
+      buildSkyIsland(g, cover, Y0 - 0.03);
+
+      // 구름은 두 배경 모드에서 모두 보인다(상세 배경 그룹이 아니라 여기에 붙인다).
+      buildSoftClouds(g);
 
       parent.add(g);
     }
@@ -1900,12 +2039,11 @@
 
       const bg3dGrp = new THREE.Group();
       bg3dGrp.name = 'bg3d';
-      if (!(typeof USE_PHOTO_BG_PREVIEW !== 'undefined' && USE_PHOTO_BG_PREVIEW)) {
-        buildMountainRange(bg3dGrp);
-        buildSoftClouds(bg3dGrp);
+      if (BUILD_GROUND_SCENERY) {
+        if (!(typeof USE_PHOTO_BG_PREVIEW !== 'undefined' && USE_PHOTO_BG_PREVIEW)) buildMountainRange(bg3dGrp);
+        buildKoelsaTowerCampus(bg3dGrp);
+        buildKoelsaHQ(bg3dGrp);
       }
-      buildKoelsaTowerCampus(bg3dGrp);
-      buildKoelsaHQ(bg3dGrp);
       bgGrp.add(bg3dGrp);
 
       if (typeof USE_PHOTO_BG_PREVIEW !== 'undefined' && USE_PHOTO_BG_PREVIEW) {
@@ -1913,21 +2051,36 @@
       }
 
       scene.add(bgGrp);
-      const floor = scene.getObjectByName('outdoorBase');
-      const studioHorizon = '#4c6373';
-      // 별도 3D 배경이나 후처리 없이 작은 텍스처로 관찰용 공간의 명암을 만든다.
-      const studioBackground = createBgGradientTexture(4, 256, (ctx, w, h) => {
+      const floor = scene.getObjectByName('skyIslandBody'); // 지면 기준면 = 섬 상면(Y0-0.03)
+      const studioHorizon = '#cfe3ef';
+      // 최초 한 번 그리는 하늘. 구름용 메시·애니메이션·후처리 패스는 추가하지 않는다.
+      const studioBackground = createBgGradientTexture(1024, 1024, (ctx, w, h) => {
         const gradient = ctx.createLinearGradient(0, 0, 0, h);
-        gradient.addColorStop(0, '#293d4d');
-        gradient.addColorStop(0.58, studioHorizon);
-        gradient.addColorStop(1, '#617887');
+        gradient.addColorStop(0, '#5b93c2');
+        gradient.addColorStop(0.5, '#9ac6de');
+        gradient.addColorStop(0.78, studioHorizon);
+        gradient.addColorStop(1, '#e6f2f8'); // 섬 아래도 먼 하늘 아지랑이로 읽히게 한다
         ctx.fillStyle = gradient; ctx.fillRect(0, 0, w, h);
+        // 옅고 넓은 구름을 주변에 두어 중앙의 구조물 윤곽을 가리지 않는다.
+        const clouds = [[0.08,0.24,0.25,0.065],[0.83,0.15,0.29,0.075],[0.92,0.45,0.21,0.035],[0.18,0.60,0.26,0.025]];
+        for (const [x,y,rx,ry] of clouds) {
+          for (let i=0;i<7;i++) {
+            ctx.save();
+            ctx.translate((x+(i-3)*rx*0.19)*w,(y+Math.sin(i*2.1)*ry*0.25)*h);
+            ctx.scale(rx*w*0.43,ry*h*(1+Math.sin(i*1.7)*0.25));
+            const glow=ctx.createRadialGradient(0,0,0,0,0,1);
+            glow.addColorStop(0,'rgba(255,253,241,0.34)');
+            glow.addColorStop(0.55,'rgba(255,253,241,0.19)');
+            glow.addColorStop(1,'rgba(255,253,241,0)');
+            ctx.fillStyle=glow;ctx.fillRect(-1,-1,2,2);ctx.restore();
+          }
+        }
       });
+      studioBackground.encoding = THREE.sRGBEncoding;
       outdoorPresentation = {
         detailed: false, buildings: bgGrp, landscape: scene.getObjectByName('outdoorLandscape'),
-        sky: scene.getObjectByName('skyDome'), floor, floorMaterial: floor.material,
-        simpleFloorMaterial: M.conc(0x121c24), background: scene.background, fog: scene.fog,
-        simpleBackground: studioBackground, simpleFog: new THREE.FogExp2(studioHorizon, 0.0045),
+        sky: scene.getObjectByName('skyDome'), floor, background: scene.background, fog: scene.fog,
+        simpleBackground: studioBackground, simpleFog: new THREE.FogExp2(studioHorizon, 0.009),
         exposure: renderer.toneMappingExposure, simpleExposure: 0.95,
         lighting: environmentLighting.map((light, i) => ({ light, original: light.intensity, studio: [0.7, 1.8, 0.65, 0.45][i] }))
       };

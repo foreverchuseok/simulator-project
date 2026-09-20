@@ -522,6 +522,14 @@
     .c-btn:disabled:active {
       transform: none;
     }
+    #hall-panel { position:fixed; top:100px; left:78px; z-index:110; width:230px; max-height:calc(100dvh - 120px); overflow:auto; padding:12px; border-radius:14px; background:rgba(245,249,253,.96); color:#182533; box-shadow:0 8px 30px #0004; font-size:13px; }
+    #hall-panel[hidden] { display:none; }
+    #hall-panel button, #hall-panel select { min-height:44px; border:1px solid #a8b6c6; border-radius:8px; background:#fff; color:#182533; padding:6px; cursor:pointer; }
+    #hall-panel .hall-row { display:flex; gap:6px; margin:8px 0; }
+    #hall-panel .hall-row > * { flex:1; min-width:0; }
+    #hall-opening { width:100%; min-height:44px; }
+    #hall-message { display:block; margin:8px 0; }
+    @media(max-width:600px) { #hall-panel { top:12px; left:8px; width:min(230px,calc(100vw - 112px)); max-height:calc(100dvh - 110px); } }
   </style>
 </head>
 
@@ -623,6 +631,12 @@
         <button class="c-btn warn" id="btn-ins" title="점검(수동)운전">INS</button>
         <button class="c-btn" id="btn-ins-up" title="점검 상승 (누르는 동안 서행)" disabled>▲</button>
         <button class="c-btn" id="btn-ins-dn" title="점검 하강 (누르는 동안 서행)" disabled>▼</button>
+        <label for="bypass-mode" style="font-size:9px;line-height:1.4;text-align:center;color:#182533;font-weight:700">바이패스<br>BYPASS</label>
+        <select id="bypass-mode" aria-label="바이패스 접점 선택" style="width:100%;min-height:44px;background:#283646;color:white;border-radius:8px">
+          <option value="off">해제</option><option value="hall">승장문</option><option value="car">카문</option>
+        </select>
+        <output id="bypass-status" aria-live="polite" style="font-size:10px;color:#182533;text-align:center;font-weight:700">BYPASS 해제</output>
+        <button class="c-btn" id="hall-toggle" title="층별 승장문 수동 개방">문 점검</button>
         <button class="c-btn red" title="도어 고장">DR</button>
         <button class="c-btn red" id="btn-overspeed" title="과속(조속기)">OVS</button>
         <button class="c-btn red" title="세이프티 기어">SAF</button>
@@ -647,6 +661,16 @@
   </div>
 
   <!-- 라이브러리 로드 -->
+  <section id="hall-panel" aria-label="승장문 점검" hidden>
+    <div class="hall-row"><strong>승장문 점검</strong><button id="hall-dismiss" aria-label="점검 패널 접기">접기</button></div>
+    <label for="hall-floor">대상 층</label><div class="hall-row"><select id="hall-floor"></select><button id="hall-observe">관찰 위치</button></div>
+    <div class="hall-row"><button id="hall-key">삼각키 해제</button></div>
+    <label for="hall-opening">승장문 개방량</label><input id="hall-opening" type="range" min="0" max="100" value="0" aria-label="승장문 개방량">
+    <div class="hall-row"><button id="hall-open">완전 열기</button><button id="hall-close">닫기</button></div>
+    <output id="hall-message" aria-live="polite"></output>
+    <p>삼각키 해제 → 문 열기 → 승장문 BYPASS → ▲·▼를 누르는 동안 이동.</p>
+    <p>복귀: 닫기 → 재잠금 → BYPASS 해제 → AUT.</p>
+  </section>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
@@ -654,11 +678,16 @@
   <script src="js/config.js"></script>
   <script src="js/environment.js"></script>
   <script src="js/hall-interlock.js"></script>
+  <script src="js/car-door-transmission.js"></script>
+  <script src="js/car-door.js"></script>
+  <script src="js/car-wiring.js"></script>
+  <script src="js/car-underbody.js"></script>
   <script src="js/car-panels.js"></script>
   <script src="js/leveling-sensors.js"></script>
   <script src="js/safety-device.js"></script>
   <script src="js/elevator.js"></script>
   <script src="js/ui.js"></script>
+  <script src="js/hall-manual.js"></script>
 
   <script>
     // 층수 및 층고 배열 (피트 1.76m, 1층 4.0m, 2층 3.65m, 3층 3.7m)
@@ -1087,8 +1116,11 @@
       buildMachineRoom();       // 기계실 및 도르래
       buildCarCabin();          // 재공사 스텁 — 원본 js/archive/car.js
       buildPassenger();         // 재공사 스텁 — 탑승자 원본 동일 파일
-      buildCarDoors();          // 재공사 스텁 — 원본 js/archive/doors.js
       buildHatchDoors();        // 재공사 스텁 — 헤더·페시아·토가드 포함 원본 동일 파일
+      buildCarDoors();          // 카 오퍼레이터 → 베인 → 착상층 승장문 연동
+      CarUnderbody.build();     // 에이프런과 카 하부 CC27 바이패스 경광등
+      DoorBypass.bind();
+      HallManual.bind();
       buildShaftCableHarness(); // 도어 접점 검정 배선 · 조명 · 상하 스위치 박스
       buildCounterWeight();     // 후면 균형추
       buildTravelCable();       // 이동케이블(T-Cable) U 곡면 — 카·균형추 위치에서 길이 역산 (16.4)
@@ -1116,6 +1148,7 @@
     function renderLoop() {
       requestAnimationFrame(renderLoop);
       HallInterlock.updateAll(hatchDoors);
+      DoorBypass.update();
       // 시브 자전은 여기서 시간 기반으로 흉내내지 않는다.
       // 카가 실제로 움직인 만큼만 ui.js spinSheaves(deltaY)가 4개 시브를 돌린다
       // (방향·속도가 로프와 물리적으로 일치하고, 카가 멈추면 시브도 즉시 멈춘다).

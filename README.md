@@ -27,7 +27,10 @@ Three.js로 승강로, 카, 도어, 기계실, 피트와 안전장치를 구성�
 - `blender/BLENDER-WORKFLOW.md`: Blender Python에서 GLB를 만들고 연결하는 절차.
 - `PLAN.md`: 사용자가 이 파일에 담아 달라고 지정했을 때만 쓰는 로컬 임시 계획. Git에는 포함하지 않는다.
 - `docs/DOOR-REBUILD.md`: 도어 재공사 기록. 원본 코드는 `js/archive/doors.js`.
+- `docs/CAR-DOOR.md`: 카 도어 오퍼레이터·베인·카도어락·승장문 연동과 검증.
 - `docs/CAR-REBUILD.md`: 카 재공사 기록. 원본 코드는 `js/archive/car.js`.
+- `js/car-underbody.js`: 카 에이프런·CC27 빨간 경광등과 BYPASS 점검운전 경보. 고장 메뉴에서 우회할 문을 선택하고 ▲▼를 누른다.
+- `js/car-wiring.js`: 카 고정 검은 배선의 모서리 경로·고정 새들과 카탑 박스 하부의 단일 묶음 인입구/보호 부시. `tools/verify_car_wiring.mjs`로 형상·간섭을 확인한다.
 - `docs/CAR-CONTROLS.md`: 카 탑 박스·OPB·하중 감지.
 - `docs/LEVELING-SENSORS.md`: 레벨링 센서.
 - `docs/TRAVEL-CABLE-TERMINAL.md`: 이동케이블·종단 리미트 스위치(파이널·리미트·강제감속, 스위치 방식) (MR_설계.pdf 137~138p, 부품설계.pdf 184~204p).
@@ -41,6 +44,7 @@ simmul/
 │  ├─ config.js                   카·도어 치수와 공통 재질
 │  ├─ environment.js              배경, 승강로, 센서, 기계실, 피트, 조속기 마운트
 │  ├─ elevator.js                 카·도어 스텁, 균형추, 로프, 조속기 동작
+│  ├─ car-door.js                 카문·오퍼레이터·CDL·승장문 종동 운동학
 │  ├─ ui.js                       운행, 도어, HUD, 사운드, 과속 고장 시퀀스
 │  └─ archive/
 │     ├─ doors.js                 도어 재공사 원본 (앱 미로드)
@@ -214,7 +218,7 @@ Three.js → OrbitControls → GLTFLoader → GSAP
 
 ```text
 openDoors() / closeDoors()
-  → 카 도어 carDoorL/R (스텁)
+  → 카 도어 carDoorL/R (CarDoor 오퍼레이터·착상층 승장문 연동)
   → 현재 층 hatchDoors (스텁)
   → spinDoorDrive() (no-op)
 ```
@@ -269,7 +273,7 @@ ESTOP
 | HUD 모양 | `index.html` | HTML과 `<style>` |
 | 카 실내·프레임·에이프런 | `js/elevator.js` 스텁, 원본 `js/archive/car.js` | `buildCarCabin()` |
 | 카 재공사 안내 | `docs/CAR-REBUILD.md` | 부품별 복원 규칙 |
-| 카 도어·오퍼레이터 | `js/elevator.js` 스텁, 원본 `js/archive/doors.js` | `buildCarDoors()`, `spinDoorDrive()` |
+| 카 도어·오퍼레이터 | `js/car-door.js`, `docs/CAR-DOOR.md` | `buildCarDoors()`, `CarDoor.pose()`, `spinDoorDrive()` |
 | 승장문·헤더·페시아·토가드 | `js/elevator.js`, 원본 `js/archive/doors.js` | `buildHatchDoors()` |
 | 승장 행거 케이스 | `js/elevator.js` | `createHangerCaseAssembly()` — 계약은 `docs/DOOR-REBUILD.md` |
 | 도어 재공사 안내 | `docs/DOOR-REBUILD.md` | 부품별 복원 규칙 |

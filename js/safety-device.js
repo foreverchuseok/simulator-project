@@ -171,34 +171,14 @@ function buildHyundaiSafetyLinkage(car, frame, H, BG) {
     const top=car.getObjectByName('carTopBox');
     if(!top||group.getObjectByName('safetySwitchHarness'))return;
     car.updateMatrixWorld(true);
-    const end=car.worldToLocal(top.localToWorld(new THREE.Vector3(0,-0.323,-0.11)));
-    // 후면에서 왼쪽으로 빔 끝까지 노출 직선 배선 → 카 외벽 → 천장 → 실제 글랜드.
-    const sideX=S.CAR_W/2+0.034,routeZ=d.webZ-0.019,roofY=H/2+0.075;
-    const pts=[[swX+0.076,swY,routeZ],[sideX,swY,routeZ],
-      [sideX,roofY,routeZ],[sideX,roofY,end.z],[end.x,roofY,end.z],
-      [end.x,end.y,end.z]].map(p=>new THREE.Vector3(...p));
-    const curve=new THREE.CurvePath();
-    let last=pts[0];
-    for(let i=1;i<pts.length-1;i++){
-      const p=pts[i],r=Math.min(0.012,p.distanceTo(pts[i-1])/3,p.distanceTo(pts[i+1])/3);
-      const a=p.clone().addScaledVector(pts[i-1].clone().sub(p).normalize(),r);
-      const b=p.clone().addScaledVector(pts[i+1].clone().sub(p).normalize(),r);
-      curve.add(new THREE.LineCurve3(last,a));curve.add(new THREE.QuadraticBezierCurve3(a,p,b));last=b;
-    }
-    curve.add(new THREE.LineCurve3(last,pts[pts.length-1]));
-    const wire=new THREE.Mesh(new THREE.TubeGeometry(curve,320,0.003,8,false),dark);
-    wire.name='safetySwitchHarness';wire.userData={endpoint:end.toArray(),route:pts.map(p=>p.toArray())};group.add(wire);
-    // 직선 구간마다 일정 간격으로 고정. 빔에는 새들, 외벽에는 짧은 스탠드오프를 둔다.
-    for(let x=pts[0].x+0.10;x<sideX-0.08;x+=0.25){
-      createBox(0.012,0.014,0.008,steel,x,swY,routeZ,group).name='safetyHarnessClip';
-      createBox(0.012,0.022,0.004,paint,x,swY,d.webZ-0.006,group);
-      cylinder(0.0025,0.006,steel,x,swY+0.009,d.webZ-0.009,group);
-    }
-    for(let y=-H/2+0.10;y<roofY-0.05;y+=0.30){
-      createBox(0.014,0.012,0.014,steel,sideX,y,routeZ,group).name='safetyHarnessClip';
-      createBox(0.034,0.012,0.012,paint,sideX-0.017,y,routeZ,group);
-    }
-    for(let x=end.x+0.10;x<sideX-0.08;x+=0.30)createBox(0.012,0.012,0.014,steel,x,roofY,end.z,group).name='safetyHarnessClip';
+    const q=CarWiring.layout,routeZ=d.webZ-.019;
+    // 빔 후면 → 우측 하부 채널 → 후면 모서리 상승 → 후면/좌측 토보드 밖.
+    // 중앙 천장과 보행 공간을 가로지르지 않는다.
+    CarWiring.run(group,'safetySwitchHarness',[
+      [swX+.076,swY,routeZ],[swX+.088,swY,routeZ],[swX+.088,q.underY,routeZ],
+      [q.outerX,q.underY,routeZ],[q.outerX,q.underY,q.rearZ],[q.outerX,q.overY,q.rearZ],
+      [q.edgeX,q.overY,q.rearZ],[q.edgeX,q.roofY,q.rearZ],
+      [CarWiring.laneX('safety'),q.roofY,q.rearZ],...CarWiring.toBox('safety')],{radius:.004});
   }
   createBox(0.10,0.038,0.001,dark,0,d.baseY+0.045,d.webZ-0.002,group).name='safetyBarcodeLabel';
 

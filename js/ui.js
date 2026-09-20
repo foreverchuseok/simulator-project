@@ -1,6 +1,15 @@
 // 엘리베이터 상태 제어와 UI 이벤트 로직을 정의한다.
 const MANUAL_CAMERA = Object.freeze({ minDistance: 0.04, near: 0.002 });
 
+function updateManualCameraNear() {
+  if (overspeedActive || !controls.enabled) return;
+  // 원거리에서는 깊이 정밀도를 높이고, 가까이 볼 때만 근접 클리핑을 낮춘다.
+  const near = THREE.MathUtils.clamp(camera.position.distanceTo(controls.target) * 0.02, MANUAL_CAMERA.near, 0.1);
+  if (Math.abs(camera.near - near) < 0.00001) return;
+  camera.near = near;
+  camera.updateProjectionMatrix();
+}
+
     /* ─────────────────────────────────────────────────────────────
        기계 구동음 엔진 (Web Audio) — 브레이크 개방·구동·가감속·체결을
        카의 실제 운동 속도(0~1)에 프레임 단위로 동기시켜 "핀트"를 맞춘다.
@@ -113,83 +122,37 @@ const MANUAL_CAMERA = Object.freeze({ minDistance: 0.04, near: 0.002 });
     function updateStatus(id, txt, col) { const e = document.getElementById(id); if (e) { e.textContent = txt; if (col) e.style.color = col; } console.log("Current FSM State:", currentState); }
 
     function openDoors(cb) {
+      if (DoorBypass.mode !== 'off') return;
       // 점검 운전 중에는 도어 오퍼레이터 회로가 차단된다 (착상 위치가 아닐 수 있음)
       if (insMode) { updateStatus('v-door', '점검운전 중 — 도어 조작 불가', '#f0883e'); return; }
-      if (gsap.isTweening(carDoorL.position) || moving || estop) return;
-      // GLB extras supply the release angle; wait for that contract before moving.
-      if (!hatchDoors[curFloor]?.interlock?.ready) return;
+      if (doorOpen || moving || estop || !CarDoor.canOpen()) return;
       currentState = ELEVATOR_STATE.DOOR_OPENING;
       doorOpen = true; updateStatus('v-door', '열리는 중', '#f0883e'); clearTimeout(autoTimer);
-      currentState = ELEVATOR_STATE.DOOR_OPEN;
-      const h = hatchDoors[curFloor];
-      /* 인터록 해정: 클러치가 록 레버를 젖힌다.
-         사각 턱이 걸쇠 네모 포켓에 8mm 물려 있으므로 그만큼 + 도면 179p 여유 4mm 를
-         들어 올려야 실제로 빠진다. 각도는 elevator.js 의 래치 계약에서 온다. */
-      if (h && h.hook) {
-        const liftRad = h.latch.liftRad;
-        gsap.killTweensOf(h.hook.rotation);
-        gsap.to(h.hook.rotation, { z: -liftRad, duration: 0.22, ease: 'power1.out' });
-      }
-      snd.doorOpen.currentTime = 0; snd.doorOpen.play();
-      gsap.to(carDoorL.position, { x: carDoorL.userData.ox, duration: 1.15, ease: 'power2.out', delay: 0.22 });
-      gsap.to(carDoorR.position, {
-        x: carDoorR.userData.ox, duration: 1.15, ease: 'power2.out', delay: 0.22,
-        onUpdate: () => spinDoorDrive(h),
-        onComplete: () => {
-          updateStatus('v-door', '완전 개방', '#3fb950'); if (cb) cb();
-          autoTimer = setTimeout(() => { if (doorOpen && !moving) closeDoors(); }, 3500);
-        }
+      snd.doorOpen.currentTime = 0; snd.doorOpen.play().catch(e=>console.log(e));
+      CarDoor.open(() => {
+        currentState = ELEVATOR_STATE.DOOR_OPEN;
+        updateStatus('v-door', '완전 개방', '#3fb950');
+        autoTimer = setTimeout(() => { if (doorOpen && !moving) closeDoors(); }, 3500);
+        if (cb) cb();
       });
-      // 승장 행거판 — 연동로프·풀리·폐문 스프링은 이 트윈에 물려 같이 갱신한다
-      if (h) {
-        gsap.to(h.left.position, { x: h.left.userData.ox, duration: 1.15, ease: 'power2.out', delay: 0.22 });
-        gsap.to(h.right.position, {
-          x: h.right.userData.ox, duration: 1.15, ease: 'power2.out', delay: 0.22,
-          onUpdate: () => spinDoorDrive(h), onComplete: () => spinDoorDrive(h)
-        });
-      }
     }
 
     function closeDoors(cb) {
+      if (DoorBypass.mode !== 'off') return;
+      if (estop) return;
       if (!doorOpen) { if (cb) cb(); return; }
+      if (currentState === ELEVATOR_STATE.DOOR_CLOSING) { CarDoor.afterClose(cb); return; }
       currentState = ELEVATOR_STATE.DOOR_CLOSING;
       clearTimeout(autoTimer); updateStatus('v-door', '닫히는 중', '#f0883e');
       const h = hatchDoors[curFloor];
       snd.doorVoice.currentTime = 0; snd.doorVoice.play().catch(e=>console.log(e));
       snd.doorClose.currentTime = 0; snd.doorClose.play().catch(e=>console.log(e));
-      gsap.to(carDoorL.position, { x: carDoorL.userData.cx, duration: 0.95, ease: 'power2.inOut' });
-      gsap.to(carDoorR.position, {
-        x: carDoorR.userData.cx, duration: 0.95, ease: 'power2.inOut',
-        onUpdate: () => spinDoorDrive(h),
-        onComplete: () => {
-          doorOpen = false; updateStatus('v-door', '닫힘', '#3fb950');
-          currentState = ELEVATOR_STATE.IDLE;
-        }
-      });
-      // 승장 행거판 — 연동로프·풀리·폐문 스프링은 이 트윈에 물려 같이 갱신한다
-      if (h) {
-        gsap.to(h.left.position, { x: h.left.userData.cx, duration: 0.95, ease: 'power2.inOut' });
-        gsap.to(h.right.position, {
-          x: h.right.userData.cx, duration: 0.95, ease: 'power2.inOut',
-          onUpdate: () => spinDoorDrive(h),
-          onComplete: () => {
-            spinDoorDrive(h);
-            // 인터록 재잠금: 도어 닫힘 정위치에서 후크 낙하 체결 및 접점 브리지 도킹
-            if (h.hook) {
-              gsap.killTweensOf(h.hook.rotation);
-              if (h.keyRatio) setEmergencyKey(curFloor, 0);
-              gsap.to(h.hook.rotation, {
-                z: 0, duration: 0.20, ease: 'power1.in',
-                onComplete: () => { if (cb) cb(); }
-              });
-            } else {
-              if (cb) cb();
-            }
-          }
-        });
-      } else {
+      if (h?.keyRatio) setEmergencyKey(curFloor, 0);
+      CarDoor.close(() => {
+        doorOpen = false; updateStatus('v-door', '닫힘', '#3fb950');
+        currentState = ELEVATOR_STATE.IDLE;
         if (cb) cb();
-      }
+      });
     }
 
     /* ─────────────────────────────────────────────────────────────
@@ -268,6 +231,7 @@ const MANUAL_CAMERA = Object.freeze({ minDistance: 0.04, near: 0.002 });
 
     // 프레임 단위 등속 이동 (가감속 없이 일정 서행 — 점검 운전 특성)
     function insTick(time, deltaMs) {
+      if (!DoorBypass.canInspect()) { insStop('바이패스 — 미우회 접점/카문 닫힘 확인'); return; }
       // 저사양·저FPS에서도 서행 속도가 유지되도록 최대 0.1초까지 델타 인정
       const dt = Math.min((deltaMs || 16.7) / 1000, 0.1);
       const lim = insLimits();
@@ -294,12 +258,15 @@ const MANUAL_CAMERA = Object.freeze({ minDistance: 0.04, near: 0.002 });
 
     function insStart(dir) {
       if (!insMode || estop || overspeedActive || insDir === dir) return;
+      if (DoorBypass.mode !== 'off' && !DoorBypass.canInspect()) return;
       // 도어가 열려 있으면 먼저 닫고, 그때까지 버튼을 계속 누르고 있는 경우에만 출발
-      if (doorOpen || gsap.isTweening(carDoorL.position)) {
+      if (DoorBypass.mode === 'off' && (doorOpen || gsap.isTweening(carDoorL.position))) {
         updateStatus('v-dir', '도어 폐쇄 중 — 계속 누르고 대기', '#f0883e');
         closeDoors(() => { if (insHold === dir) insStart(dir); });
         return;
       }
+      if (DoorBypass.mode === 'off' && !DoorBypass.canInspect()) return;
+      if (DoorBypass.mode !== 'off') DoorBypass.unlockAudio();
       if (insDir !== 0) gsap.ticker.remove(insTick); // 방향 전환
 
       insDir = dir; moving = true;
@@ -310,6 +277,7 @@ const MANUAL_CAMERA = Object.freeze({ minDistance: 0.04, near: 0.002 });
     }
 
     function insStop(msg) {
+      DoorBypass.stop();
       if (insDir === 0) return;
       gsap.ticker.remove(insTick);
       insDir = 0; moving = false;
@@ -324,6 +292,7 @@ const MANUAL_CAMERA = Object.freeze({ minDistance: 0.04, near: 0.002 });
 
     // 점검 스위치 ON/OFF. ON: 자동 운전 즉시 차단 / OFF: 착상 위치가 아니면 최근접 층 착상
     function setInspectionMode(on) {
+      if (!on && (DoorBypass.mode !== 'off' || !DoorBypass.hallSecured())) { updateStatus('v-dir', '승장문 닫기·재잠금 및 BYPASS 해제 후 AUT 전환', '#f0883e'); return; }
       if(overspeedActive)return;
       if (insMode === on) return;
       insMode = on;
@@ -590,6 +559,8 @@ const MANUAL_CAMERA = Object.freeze({ minDistance: 0.04, near: 0.002 });
     // 구출 운전 — 최근접 층까지 서행 이동 후 도어 개방
     // (점검→자동 복귀 착상에도 재사용: label/openAfter 로 문구·도어 개방 여부 조정)
     function rescueToNearestFloor(label = '구출 운전 (서행)', openAfter = true) {
+      if (!DoorBypass.hallSecured()) return;
+      if (DoorBypass.mode !== 'off') return;
       const nf = insNearestFloor();
       const ty = FLOOR_Y[nf] + S.CAR_H / 2;
       moving = true; currentState = ELEVATOR_STATE.MOVING;
@@ -619,10 +590,12 @@ const MANUAL_CAMERA = Object.freeze({ minDistance: 0.04, near: 0.002 });
     }
 
     function moveElevator(fIdx) {
+      if (DoorBypass.mode !== 'off') return;
       if(overspeedActive)return;
       if (insMode) { updateStatus('v-dir', '점검운전 중 — 자동 호출 무효', '#f0883e'); return; }
       if (moving || estop || fIdx === curFloor) return;
       if (doorOpen || gsap.isTweening(carDoorL.position)) { closeDoors(() => moveElevator(fIdx)); return; }
+      if (!CarDoor.secured() || !DoorBypass.hallSecured()) { updateStatus('v-door', '카문·승장문 닫힘 및 잠금 확인 대기', '#f0883e'); return; }
 
       moving = true;
       currentState = ELEVATOR_STATE.MOVING;
@@ -783,12 +756,15 @@ const MANUAL_CAMERA = Object.freeze({ minDistance: 0.04, near: 0.002 });
         if (estop) {
           insHold = 0; insStop();
           gsap.killTweensOf(carGrp.position); gsap.killTweensOf(cwtGrp.position); moving = false;
+          CarDoor.pause();
           MACH.motorOff(); MACH.brakeSet();
           currentState = ELEVATOR_STATE.ESTOP;
           updateStatus('v-dir', '■ 비상정지', '#f85149'); updateStatus('v-spd', '0 m/min');
           e.target.textContent = '▶'; e.target.className = 'c-btn blue';
         } else {
           e.target.textContent = '■'; e.target.className = 'c-btn red'; updateStatus('v-dir', '정지 대기', '#8b949e');
+          const doorAction=CarDoor.resume();
+          currentState=doorAction==='open'?ELEVATOR_STATE.DOOR_OPENING:doorAction==='close'?ELEVATOR_STATE.DOOR_CLOSING:doorOpen?ELEVATOR_STATE.DOOR_OPEN:ELEVATOR_STATE.IDLE;
         }
       });
 
@@ -859,23 +835,7 @@ const MANUAL_CAMERA = Object.freeze({ minDistance: 0.04, near: 0.002 });
         while (grp && grp.name !== 'EmergencyTriangleKey') grp = grp.parent;
         const fIdx = hatchDoors.findIndex(h => h.right.userData.triKey?.group === grp);
         if (fIdx < 0) return;
-        const h = hatchDoors[fIdx];
-        if (!h.interlock?.ready) return;
-        const unlocking = !(h.keyRatio > 0.5);
-        if (!h.keyTween) h.keyTween = { r: 0 };
-        h.keyTween.r = h.keyRatio || 0;
-        gsap.killTweensOf(h.keyTween);
-        gsap.to(h.keyTween, {
-          r: unlocking ? 1 : 0,
-          duration: 0.4,
-          ease: 'power1.inOut',
-          onUpdate: () => setEmergencyKey(fIdx, h.keyTween.r),
-          onComplete: () => {
-            setEmergencyKey(fIdx, unlocking ? 1 : 0);
-            if (unlocking && fIdx === curFloor && !doorOpen) openDoors();
-            else if (!unlocking && fIdx === curFloor && doorOpen) closeDoors();
-          }
-        });
+        HallManual.pick(fIdx);
       });
     }
 
@@ -890,6 +850,8 @@ const MANUAL_CAMERA = Object.freeze({ minDistance: 0.04, near: 0.002 });
         gsap.killTweensOf(controls.target);
       };
       controls.addEventListener('start', cancelMotion);
+      controls.addEventListener('change', updateManualCameraNear);
+      updateManualCameraNear();
       canvas.addEventListener('pointerdown', e => {
         if (e.button !== 0) { lastTap = null; return; }
         pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, time: performance.now(), invalid: false });
