@@ -7,13 +7,21 @@ const CarDoor = (() => {
     eccentricGap:0.0005, rollerR:0.026, rollerPitch:0.28, plateW:0.40,
     plateH:0.15, vaneH:0.52,
     runningGap:0.006, zone:0.005, gateGap:0.007, bladeT:0.004,
-    fixedCamOffset:0.1026, camGap:0.006, keeperGap:0.023 });
+    fixedCamOffset:0.1026, camGap:0.006,
+    edgeWireR:0.0012, releaseWireR:0.0006, shoeW:0.060, shoeT:0.007,
+    shoeBottom:0.008, shoeTop:0.012, shoeGrooveOffset:0.028 });
+  // 165414 field-reference video: upper lock only. Local coordinates use its pivot.
+  const lockSpec=Object.freeze({pivotFromFirstVane:-.018,pivotAboveCentre:.12,pivotZ:.044,
+    caseX:-.260,caseY:.084,caseW:.260,caseH:.192,backZ:-.040,coverZ:.032,
+    hookT:.006,toothL:-.200,toothR:-.177,toothBottom:.030,strikeY:.046,
+    slotL:-.207,slotR:-.168,slotHalfZ:.006,releaseAngle:.26,
+    contactX:-.280,contactY:.076,contactZ:-.012});
   function dimensions() {
     const dw=S.DOOR_W/2+0.02, cx=dw/2+0.006, ox=dw*1.5-0.01;
     const front=S.CAR_D/2-0.055, floor=-S.CAR_H/2+0.004;
     // Jamb fold outer face + drawing's 5 mm running gap + half panel thickness.
     const doorZ=front+0.0325+0.005+spec.panelT/2;
-    return {cx,ox,stroke:ox-cx,width:cx*2-spec.gap,doorZ,floor,
+    return {cx,ox,stroke:ox-cx,width:cx*2-spec.gap,doorZ,guideZ:doorZ+spec.shoeGrooveOffset,floor,
       bottom:floor+spec.bottomGap,top:floor+S.DOOR_H,
       sillW:2*(ox+cx)+0.02,headerW:2*(ox+spec.plateW/2+0.075),
       trackY:floor+S.DOOR_H+0.09};
@@ -24,6 +32,9 @@ const CarDoor = (() => {
     const d=dimensions(), root=new THREE.Group();root.name='carDoorOperator';carGrp.add(root);
     const steel=M.ss(0x87929c), zinc=M.ss(0x8d8559), dark=M.paint(0x242c32), rubber=M.paint(0x161b1e);
     zinc.metalness=.55;zinc.roughness=.38;
+    const clutchMetal=M.ss(0x514a2c), linkMetal=M.ss(0x343a3d);
+    clutchMetal.metalness=.48;clutchMetal.roughness=.43;
+    linkMetal.metalness=.55;linkMetal.roughness=.36;
     const skin=M.silverHairline(0xc8d0d8), wire=M.ss(0x9b9b92), green=M.paint(0x284c3b);
     const box=(name,w,h,t,mat,x,y,z,p=root)=>{const m=createBox(w,h,t,mat,x,y,z,p);m.name=name;return m;};
     const group=(name,x,y,z,p=root)=>{const g=new THREE.Group();g.name=name;g.position.set(x,y,z);p.add(g);return g;};
@@ -45,9 +56,9 @@ const CarDoor = (() => {
       const m=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map(v=>new THREE.Vector3(...v))),40,r,6,false),mat);
       m.name=name;p.add(m);return m;
     }
-    function rod(name,length,width,z,p=root) {
+    function rod(name,length,width,z,p=root,mat=zinc) {
       const g=group(name,0,0,z,p);
-      plate(name+'Plate',[[-width/2,-width/2],[length+width/2,-width/2],[length+width/2,width/2],[-width/2,width/2]],0.004,zinc,0,g,[[0,0,0.005],[length,0,0.005]]);
+      plate(name+'Plate',[[-width/2,-width/2],[length+width/2,-width/2],[length+width/2,width/2],[-width/2,width/2]],0.004,mat,0,g,[[0,0,0.005],[length,0,0.005]]);
       bolt(0,0,0.007,g);bolt(length,0,0.007,g);return g;
     }
     // Folded header, actual track, two fixing brackets on transom/return panels.
@@ -62,7 +73,7 @@ const CarDoor = (() => {
       box('operatorFixingReturn',0.004,0.23,headerZ-bracketBack,zinc,x+side*0.03,d.trackY+0.075,(headerZ+bracketBack)/2);
       for(const y of [d.trackY-0.02,d.trackY+0.17])bolt(x,y,headerZ+0.005);
     }
-    const rollers=[], hangers=[];
+    const rollers=[], hangers=[], edgeTails=[];
     [carDoorL,carDoorR]=[-1,1].map(side=>{
       const g=group(side<0?'carDoorL':'carDoorR',side*d.cx,0,0,carGrp);
       g.userData={cx:side*d.cx,ox:side*d.ox,type:'car-door',side};
@@ -76,9 +87,16 @@ const CarDoor = (() => {
       for(const x of [-d.width*0.28,d.width*0.28]) {
         box('doorReinforcementWeb',0.032,h-0.06,0.002,zinc,x,mid,d.doorZ+0.007,g);
         for(const dx of [-0.016,0.016])box('doorReinforcementFold',0.002,h-0.06,0.017,zinc,x+dx,mid,d.doorZ-0.001,g);
-        box('doorGuideShoeBracket',0.065,0.030,0.022,zinc,x,d.bottom+0.015,d.doorZ,g);
-        box('doorGuideShoe',0.050,0.016,0.007,rubber,x,d.floor-0.002,d.doorZ,g);
-        bolt(x,d.bottom+0.02,d.doorZ+0.015,g);
+        const shoe=group('doorGuideShoeAssembly',x,0,0,g);
+        plate('doorGuideShoeBracket',[[-.039,d.bottom+.012],[.039,d.bottom+.012],[.039,d.bottom+.069],
+          [.027,d.bottom+.078],[-.027,d.bottom+.078],[-.039,d.bottom+.069]],.003,linkMetal,d.doorZ+.018,shoe,
+          [[-.023,d.bottom+.053,.004],[.023,d.bottom+.053,.004]]);
+        for(const dx of [-.023,.023])bolt(dx,d.bottom+.053,d.doorZ+.024,shoe,.0035);
+        box('doorGuideShoeReturn',.060,.003,d.guideZ-d.doorZ-.018,clutchMetal,0,d.bottom+.014,(d.guideZ+d.doorZ+.018)/2,shoe);
+        box('doorGuideShoeTongue',.048,.021,.003,steel,0,d.floor+.0085,d.guideZ,shoe);
+        box('doorGuideShoe',spec.shoeW,spec.shoeTop+spec.shoeBottom,spec.shoeT,rubber,
+          0,d.floor+(spec.shoeTop-spec.shoeBottom)/2,d.guideZ,shoe)
+          .userData={type:'car-door-guide-shoe',grooveZ:d.guideZ};
       }
       const hp=group('carHangerPlate',0,d.trackY-0.020,d.doorZ+0.006,g);hangers.push(hp);
       plate('hangerStampedPlate',[[-.2,-.075],[.2,-.075],[.2,.055],[.17,.075],[-.17,.075],[-.2,.055]],.0035,zinc,0,hp,
@@ -103,9 +121,25 @@ const CarDoor = (() => {
         .userData={type:'door-light-curtain',visualOnly:true};
       for(let y=d.bottom+0.07;y<d.top-0.06;y+=0.10)cyl('beamLens',0.003,0.001,green,beamX,y,d.doorZ+0.0355,g,8);
       box('doorMeetingRubber',0.003,h-0.012,0.008,rubber,edgeX,mid,d.doorZ,g);
-      cable('edgeCable',[[beamX,d.top-0.03,d.doorZ+0.031],[beamX+side*.12,d.top-.20,d.doorZ+.023],
-        [side*.20,d.top-.28,d.doorZ+.023],[side*.26,d.top-.1,d.doorZ+.023]],.002,g);
-      for(const x of [beamX+side*.12,side*.20])box('edgeCableClamp',0.015,0.006,0.007,zinc,x,d.top-.20,d.doorZ+.026,g);
+      // Thin lower leads follow the user's 八-shaped route; nothing loops over the leaves.
+      const leadZ=d.doorZ+.030;
+      cable('edgeCable',[[beamX,d.bottom+h*.49,leadZ],[beamX+side*.014,d.bottom+h*.30,leadZ],
+        [beamX+side*.050,d.bottom+.24,leadZ],[beamX+side*.16,d.bottom+.13,leadZ],
+        [side*.28,d.bottom+.095,leadZ]],spec.edgeWireR,g)
+        .userData={type:'door-edge-lead',side,radius:spec.edgeWireR};
+      for(const [cx,cy] of [[beamX+side*.014,d.bottom+h*.30],[side*.28,d.bottom+.095]])
+        box('edgeCableClamp',.008,.004,.004,linkMetal,cx,cy,leadZ,g);
+      const anchorX=side*(d.sillW/2+.025),outsideZ=HALL_SILL_SHAFT_Z-SILL_GAP-CAR_CTR_Z+.012;
+      const tail=cable('edgeCableFlex'+side,[[side*(d.cx+.28),d.bottom+.095,leadZ],
+        [side*(d.cx+.34),d.bottom+.06,outsideZ],[side*(d.cx+.39),d.floor-.075,outsideZ],
+        [anchorX,d.floor-.09,outsideZ],[anchorX,CarWiring.layout.underY,d.doorZ-.06]],spec.edgeWireR);
+      tail.userData={type:'door-edge-flex',side};
+      edgeTails.push({mesh:tail,side});
+      const w=CarWiring.layout,outer=side*w.outerX,backZ=d.doorZ-.06;
+      CarWiring.run(root,'edgeCableReturn'+side,[[anchorX,w.underY,backZ],[outer,w.underY,backZ],
+        [outer,w.underY,w.frontLane],[outer,w.overY,w.frontLane],
+        [CarWiring.laneX('door'),w.overY,w.frontLane],[CarWiring.laneX('door'),w.roofY,w.frontLane],
+        ...CarWiring.toBox('door')],{radius:spec.edgeWireR});
       return g;
     });
     const transmission=CarDoorTransmission.build(d,{box,group,cyl,bolt,plate,cable,rod},{steel,zinc,dark,rubber,guide:M.paint(0xb8b6a8)});
@@ -140,8 +174,12 @@ const CarDoor = (() => {
     box('gateSwitchCover',.078,.071,.017,cover,0,0,.012,gate);
     for(const y of [-.020,.020]){const pin=cyl('gateContact',.004,.013,wire,.0355,y,.006,gate,12);pin.rotation.set(0,0,Math.PI/2);bolt(-.026,y,.023,gate,.003);}
     box('gateContactBridge',.024,.052,.006,zinc,-d.cx+.01025,d.trackY-.030,d.doorZ+.053,carDoorR);
+    const gateMate=group('carGateMatingSwitch',-d.cx+.049,d.trackY-.030,d.doorZ+.045,carDoorR);
+    box('gateMatingBase',.067,.068,.016,dark,0,0,0,gateMate);
+    box('gateMatingCover',.069,.071,.002,cover,0,0,.021,gateMate);
+    for(const yy of [-.020,.020])bolt(.023,yy,.023,gateMate,.003);
     drive={root,d,spec,ready:false,release:0,coupledFloor:-1,locked:true,gateClosed:true,
-      sensors,rollers,transmission,gate,helpers:{box,group,cyl,bolt,plate,cable,rod},materials:{steel,zinc,dark,rubber},busy:false};
+      sensors,rollers,edgeTails,transmission,gate,helpers:{box,group,cyl,bolt,plate,cable,rod},materials:{steel,zinc,dark,rubber,clutchMetal,linkMetal},busy:false};
     carGrp.userData.doorDrive=drive;
     // Hall assets are async; dimensions come from their actual tread geometry.
     drive.promise=Promise.all(hatchDoors.map(h=>h.interlock.promise)).then(()=>{
@@ -170,7 +208,7 @@ const CarDoor = (() => {
     q.clutch=clutch;q.contact={upper,lower,z,cy};
     const x=lower.p.x;
     f.plate('clutchBase',[[x-.11,cy-.31],[x+.075,cy-.31],[x+.075,cy-.13],[x+.14,cy-.07],
-      [x+.14,cy+.04],[x+.10,cy+.12],[x+.10,cy+.23],[x-.11,cy+.23]],.004,m.zinc,baseZ,clutch,
+      [x+.14,cy+.04],[x+.10,cy+.12],[x+.10,cy+.23],[x-.11,cy+.23]],.004,m.clutchMetal,baseZ,clutch,
       [[x-.065,cy+.18,.006],[x+.054,cy+.18,.006],[x+.05,cy-.25,.006]]);
     for(const y of [cy-.26,cy+.18])for(const dx of [-.065,.054])f.bolt(x+dx,y,baseZ+.008,clutch);
     // Stand-offs reach the hall roller plane; pivot/backplate stay behind the tread.
@@ -186,6 +224,12 @@ const CarDoor = (() => {
     q.rightVane=f.group('carCDLReactionVane',rightFace,cy,z,clutch);
     for(const [v,side] of [[q.leftVane,-1],[q.rightVane,1]]) {
       f.box('vaneBlade',spec.bladeT,spec.vaneH,.014,m.zinc,side*spec.bladeT/2,0,0,v);
+      // Folded flange sits behind the roller contact plane, exposing a broad darker face.
+      f.box('vaneFoldedWeb',.025,spec.vaneH,.003,m.clutchMetal,side*.014,0,-.009,v);
+      for(const yy of [-.20,.16]){
+        f.cyl('vanePivotBush',.014,.005,m.linkMetal,side*.018,yy,-.012,v);
+        f.bolt(side*.018,yy,-.008,v,.0035);
+      }
       for(const sy of [-1,1]){
         const tip=f.box('vaneEntryFlare',spec.bladeT,.035,.014,m.zinc,side*.004,sy*(spec.vaneH/2+.016),0,v);
         tip.rotation.z=-side*sy*.22;
@@ -202,33 +246,111 @@ const CarDoor = (() => {
     q.vaneLinks=[];
     for(const side of [-1,1])for(const yy of [-.20,.16]) {
       const a={x:x+side*.018,y:cy+yy}, len=.055;
-      const link=f.rod('vaneParallelLink',len,.018,lower.z0-.020,clutch);
+      const link=f.rod('vaneParallelLink',len,.018,lower.z0-.020,clutch,m.linkMetal);
       q.vaneLinks.push({link,a,len,side});
     }
     // Fixed cam outer face = centre +102.6 mm, with 6 mm actuator spacing (p233).
     f.box('CDLFixedCam',.010,.19,.012,m.zinc,spec.fixedCamOffset-.005,cy-.08,baseZ+.013,clutch);
     q.cam=f.group('CDLCam',x+.055,cy-.13,baseZ+.022,clutch);
-    f.plate('CDLCamPlate',[[-.03,-.026],[.034,-.027],[.135,.10],[.12,.128],[.08,.115],[-.028,.025]],.005,m.zinc,0,q.cam,[[0,0,.006],[.115,.108,.005]]);
+    f.plate('CDLCamPlate',[[-.03,-.026],[.034,-.027],[.135,.10],[.12,.128],[.08,.115],[-.028,.025]],.005,m.clutchMetal,0,q.cam,[[0,0,.006],[.115,.108,.005]]);
     f.bolt(0,0,.009,q.cam);
     const actuator=f.box('CDLActuatorCam',.010,.19,.010,m.zinc,spec.fixedCamOffset+spec.camGap+.005,cy-.08,baseZ+.025,clutch);
     q.actuator=actuator;
-    q.carHook=f.group('carDoorLockHook',x+.03,cy+.205,baseZ+.024,clutch);
-    f.plate('carDoorHookPlate',[[-.16,-.019],[-.16,.010],[.022,.018],[.031,0],[.018,-.014],[-.13,-.007],[-.13,-.019]],.005,m.zinc,0,q.carHook,[[0,0,.006]]);
-    f.bolt(0,0,.009,q.carHook);
-    const keeperX=x+.03-.13+spec.keeperGap+.007;
-    q.keeper=f.box('carDoorLockKeeper',.014,.025,.018,m.zinc,keeperX,cy+.202,baseZ+.023,rootOf(q));
+    buildUpperLock(q,leftFace,cy,baseZ,clutch);
     // Release lever and wire (p237), anchored to the moving leaf.
     q.releaseLever=f.group('carDoorReleaseLever',x-.065,cy+.06,baseZ+.046,clutch);
-    f.plate('releaseLever',[[-.10,-.17],[-.10,-.145],[-.025,-.145],[-.025,.012],[.013,.012],[.013,-.16],[-.025,-.17]],.003,m.zinc,0,q.releaseLever,[[0,0,.004]]);
-    f.cable('carDoorReleaseWire',[[x-.15,d.bottom+.03,baseZ+.05],[x-.15,cy-.095,baseZ+.05],[x-.065,cy+.06,baseZ+.05]],.0009,clutch,m.steel);
-    for(const y of [d.bottom+.04,d.bottom+.55,cy-.10])f.box('releaseWireClamp',.018,.007,.006,m.zinc,x-.15,y,baseZ+.05,clutch);
+    f.plate('releaseLever',[[-.10,-.17],[-.10,-.145],[-.025,-.145],[-.025,.012],[.013,.012],[.013,-.16],[-.025,-.17]],.003,m.linkMetal,0,q.releaseLever,[[0,0,.004]]);
+    q.releaseTip=new THREE.Vector3(-.087,-.158,.005);
+    f.cyl('releaseWireFerrule',.0025,.005,m.steel,...q.releaseTip.toArray(),q.releaseLever,12);
+    q.releaseWire=f.cable('carDoorReleaseWire',[[x-.152,cy-.098,baseZ+.051],
+      [.025,cy-.20,baseZ+.051],[.025,d.bottom+.055,baseZ+.051]],spec.releaseWireR,clutch,m.steel);
+    q.releaseWire.userData={type:'car-door-release-wire',radius:spec.releaseWireR};
+    q.releaseWirePoints=q.releaseWire.geometry.parameters.path.points;
+    for(const y of [d.bottom+.10,d.bottom+.55])f.box('releaseWireGuide',.006,.004,.004,m.linkMetal,.025,y,baseZ+.051,clutch);
+    f.cable('releaseWirePullLoop',[[.025,d.bottom+.055,baseZ+.051],[.020,d.bottom+.037,baseZ+.051],
+      [.025,d.bottom+.025,baseZ+.051],[.030,d.bottom+.037,baseZ+.051],[.025,d.bottom+.055,baseZ+.051]],spec.releaseWireR,clutch,m.steel);
     // Spring between cam follower and clutch base (geometry reused throughout).
     const pts=[];for(let i=0;i<=160;i++){const a=i/160*Math.PI*2*16;pts.push(new THREE.Vector3(.005*Math.cos(a),i/160,.005*Math.sin(a)));}
     q.spring=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),192,.0007,5,false),m.steel);
     q.spring.name='CDLReturnSpring';q.spring.position.set(x+.062,cy-.22,baseZ+.042);q.spring.scale.y=.25;clutch.add(q.spring);
     q.clutch.userData={reference:'부품설계 232–233,237',adaptedToExistingHallRollers:true};
   }
+  function buildUpperLock(q,firstVane,cy,baseZ,clutch) {
+    const {helpers:f,materials:m}=q,L=lockSpec;
+    const gold=M.ss(0x9c783c);gold.metalness=.58;gold.roughness=.32;
+    const white=M.paint(0xe9e5d7),brass=M.ss(0xa88740),red=M.paint(0x743b2e);
+    const px=firstVane+L.pivotFromFirstVane,py=cy+L.pivotAboveCentre,pz=baseZ+L.pivotZ;
+    q.lockSpec=L;q.carHook=f.group('carDoorLockHook',px,py,pz,clutch);
+    // The first-vane pivot carries a bent arm and a downward tooth, like the field lock.
+    const s=new THREE.Shape();s.moveTo(L.toothL,.095);s.lineTo(-.046,.095);
+    s.quadraticCurveTo(-.033,.095,-.025,.083);s.lineTo(.018,.031);
+    s.quadraticCurveTo(.032,.010,.019,-.013);s.quadraticCurveTo(.008,-.027,-.012,-.019);
+    s.lineTo(-.027,.029);s.lineTo(-.057,.064);s.lineTo(L.toothR,.064);
+    s.lineTo(L.toothR,L.toothBottom+.004);s.quadraticCurveTo(L.toothR,L.toothBottom,L.toothR-.004,L.toothBottom);
+    s.lineTo(L.toothL+.004,L.toothBottom);s.quadraticCurveTo(L.toothL,L.toothBottom,L.toothL,L.toothBottom+.004);s.closePath();
+    const bore=new THREE.Path();bore.absarc(0,0,.006,0,Math.PI*2,true);s.holes.push(bore);
+    const hook=new THREE.Mesh(new THREE.ExtrudeGeometry(s,{depth:L.hookT,bevelEnabled:true,bevelThickness:.0004,bevelSize:.0004,bevelSegments:2,steps:1,curveSegments:12}),gold);
+    hook.name='carDoorHookPlate';hook.userData={type:'car-lock-hook'};hook.castShadow=hook.receiveShadow=true;q.carHook.add(hook);q.lockHookMesh=hook;
+    f.cyl('lockPivotCollar',.014,.004,m.steel,0,0,.009,q.carHook);f.bolt(0,0,.012,q.carHook);
+    // Fixed assembly uses the same local frame as the closed hook, independently of the leaf.
+    q.keeper=f.group('carDoorLockKeeper',px,py,pz,rootOf(q));
+    const fixed=q.keeper;
+    const slot=new THREE.Shape();slot.moveTo(-.373,-.015);slot.lineTo(-.149,-.015);slot.lineTo(-.149,.015);slot.lineTo(-.373,.015);slot.closePath();
+    const opening=new THREE.Path();opening.moveTo(L.slotL,-L.slotHalfZ);opening.lineTo(L.slotL,L.slotHalfZ);opening.lineTo(L.slotR,L.slotHalfZ);opening.lineTo(L.slotR,-L.slotHalfZ);opening.closePath();slot.holes.push(opening);
+    const strike=new THREE.Mesh(new THREE.ExtrudeGeometry(slot,{depth:.003,bevelEnabled:false}),gold);
+    strike.name='carLockSlottedStrike';strike.userData={type:'car-lock-strike'};strike.rotation.x=Math.PI/2;strike.position.set(0,L.strikeY,L.hookT/2);strike.castShadow=strike.receiveShadow=true;fixed.add(strike);q.lockStrike=strike;
+    f.plate('carLockStrikeBentEnd',[[-.149,L.strikeY],[-.138,L.strikeY+.010],[-.135,L.strikeY+.009],[-.146,L.strikeY-.003]],.030,gold,-.012,fixed);
+    f.box('carLockStrikeBracket',.038,.047,.003,gold,-.355,L.strikeY+.021,-.032,fixed);
+    for(const xx of [-.366,-.345])f.bolt(xx,L.strikeY+.022,-.026,fixed,.003);
+    const lockCase=f.group('carLockContactHousing',0,0,0,fixed);
+    f.box('lockContactBacking',L.caseW,L.caseH,.003,gold,L.caseX,L.caseY,L.backZ,lockCase);
+    const depth=L.coverZ-L.backZ;
+    for(const yy of [L.caseY-L.caseH/2,L.caseY+L.caseH/2])f.box('lockCaseReturn',L.caseW,.003,depth,gold,L.caseX,yy,(L.coverZ+L.backZ)/2,lockCase);
+    // Transparent dust cover and separate white fixed/moving contact carriers.
+    const clear=M.glass();clear.transmission=0;clear.opacity=.13;clear.depthWrite=false;clear.roughness=.18;
+    f.box('lockContactClearCover',L.caseW-.006,L.caseH-.009,.0015,clear,L.caseX,L.caseY,L.coverZ,lockCase);
+    f.box('lockCoverSide',.0015,L.caseH-.009,depth,clear,L.caseX-L.caseW/2,L.caseY,(L.coverZ+L.backZ)/2,lockCase);
+    for(const xx of [L.caseX-L.caseW/2+.012,L.caseX+L.caseW/2-.012])f.bolt(xx,L.caseY+L.caseH/2-.012,L.coverZ+.003,lockCase,.0025);
+    f.box('lockFixedInsulator',.064,.042,.020,white,-.332,L.contactY+.008,L.contactZ,lockCase);
+    for(const xx of [-.350,-.318]){
+      f.cyl('lockTerminalWasher',.006,.001,m.steel,xx,L.contactY+.009,L.contactZ+.012,lockCase);
+      f.cyl('lockTerminalScrew',.004,.003,m.steel,xx,L.contactY+.009,L.contactZ+.014,lockCase);
+      f.box('lockScrewSlot',.006,.001,.0005,m.dark,xx,L.contactY+.009,L.contactZ+.016,lockCase);
+    }
+    q.lockMovingInsulator=f.box('lockMovingInsulator',.145,.020,.019,white,-.232,L.contactY+.014,L.contactZ,q.carHook);
+    q.lockMovingInsulator.userData={type:'car-lock-insulator',side:'moving'};
+    for(const xx of [-.183,-.163])f.bolt(xx,L.contactY+.014,L.contactZ+.014,q.carHook,.0025);
+    q.lockContactPads=[];
+    for(const dz of [-.006,.006]){
+      f.box('lockContactLeaf',.037,.0015,.004,brass,-.282,L.contactY-.00175,L.contactZ+dz,lockCase);
+      const pad=f.box('lockFixedContact',.008,.001,.004,brass,L.contactX,L.contactY-.0005,L.contactZ+dz,lockCase);
+      pad.userData={type:'car-lock-contact',side:'fixed'};q.lockContactPads.push(pad);
+    }
+    q.lockContactBridge=f.box('lockMovingContact',.014,.004,.018,brass,L.contactX,L.contactY+.002,L.contactZ,q.carHook);
+    q.lockContactBridge.userData={type:'car-lock-contact',side:'moving'};
+    for(const [xx,yy] of [[-.351,.069],[-.318,.069]])f.cable('lockTerminalLead',[[xx,yy,L.contactZ],[xx-.012,.040,L.backZ+.005],[-.340,.022,L.backZ+.005]],.001,lockCase,red);
+    q.lockTooth=f.group('carLockToothTip',(L.toothL+L.toothR)/2,L.toothBottom,L.hookT/2,q.carHook);
+    q.lockFixedContactPoint=new THREE.Vector3(L.contactX,L.contactY,L.contactZ);
+    fixed.userData={type:'car-lock-fixed',reference:'165414 field video',slot:[L.slotL,L.slotR],strikeY:L.strikeY};
+  }
   function rootOf(q){return q.root;}
+  // Reuse each tube's buffers when the door/lever moves; no geometry allocations.
+  const cablePoint=new THREE.Vector3(), cableTangent=new THREE.Vector3(), cableN=new THREE.Vector3(), cableB=new THREE.Vector3();
+  function refreshCable(mesh) {
+    const g=mesh.geometry,{path,tubularSegments:n,radialSegments:k,radius}=g.parameters;
+    const pos=g.attributes.position,normal=g.attributes.normal;
+    for(let i=0;i<=n;i++) {
+      path.getPoint(i/n,cablePoint);path.getTangent(i/n,cableTangent);
+      cableN.set(0,0,1);if(Math.abs(cableTangent.z)>.95)cableN.set(1,0,0);
+      cableN.cross(cableTangent).normalize();cableB.crossVectors(cableTangent,cableN).normalize();
+      for(let j=0;j<=k;j++) {
+        const a=j/k*Math.PI*2,c=-Math.cos(a),s=Math.sin(a),idx=i*(k+1)+j;
+        const nx=cableN.x*c+cableB.x*s,ny=cableN.y*c+cableB.y*s,nz=cableN.z*c+cableB.z*s;
+        pos.setXYZ(idx,cablePoint.x+radius*nx,cablePoint.y+radius*ny,cablePoint.z+radius*nz);normal.setXYZ(idx,nx,ny,nz);
+      }
+    }
+    pos.needsUpdate=true;normal.needsUpdate=true;g.computeBoundingSphere();if(g.boundingBox)g.computeBoundingBox();
+  }
   function alignedFloor() {
     const bottom=carGrp.position.y-S.CAR_H/2;
     return FLOOR_Y.findIndex(y=>Math.abs(bottom-y)<=spec.zone);
@@ -273,7 +395,19 @@ const CarDoor = (() => {
     q.shoes[0].position.y=ly-q.leftVane.position.y;
     q.shoes[1].position.y=upper.p.y-q.rightVane.position.y;
     q.cam.rotation.z=-.18*r;q.actuator.position.x=spec.fixedCamOffset+spec.camGap+.005+.004*r;
-    q.carHook.rotation.z=-.26*unlock;q.releaseLever.rotation.z=-.12*unlock;q.spring.scale.y=.25-.014*r;
+    q.carHook.rotation.z=-lockSpec.releaseAngle*unlock;q.releaseLever.rotation.z=-.12*unlock;q.spring.scale.y=.25-.014*r;
+    if(q.wireRelease!==r){
+      q.releaseLever.updateMatrix();q.releaseWirePoints[0].copy(q.releaseTip).applyMatrix4(q.releaseLever.matrix);
+      refreshCable(q.releaseWire);q.wireRelease=r;
+    }
+    if(q.wireTravel!==s){
+      for(const {mesh,side} of q.edgeTails){
+        const p=mesh.geometry.parameters.path.points,cx=side*(q.d.cx+s);
+        p[0].x=cx+side*.28;p[1].x=cx+side*.34;p[2].x=cx+side*.39;
+        refreshCable(mesh);
+      }
+      q.wireTravel=s;
+    }
 
   }
   function canOpen() {

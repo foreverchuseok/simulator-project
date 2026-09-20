@@ -66,9 +66,10 @@ function buildCarPanels(parent) {
   const sillBack=frontZ-0.025, sillD=sillFront-sillBack, sillZ=(sillFront+sillBack)/2;
   const door=CarDoor.dimensions(), groove=door.doorZ-sillZ;
   box('sillBase',door.sillW,0.025,sillD,steel,0,bottom-0.0225,sillZ,sill);
-  const cuts=[-sillD/2,groove-0.005,groove+0.005,groove+0.023,groove+0.033,sillD/2];
+  const guideGroove=door.guideZ-sillZ;
+  const cuts=[-sillD/2,groove-0.005,groove+0.005,guideGroove-0.005,guideGroove+0.005,sillD/2];
   for(let i=0;i<cuts.length-1;i+=2) box('sillLand',door.sillW,0.01,cuts[i+1]-cuts[i],steel,0,bottom-0.005,sillZ+(cuts[i]+cuts[i+1])/2,sill);
-  sill.userData={grooveZ:door.doorZ,width:door.sillW,topY:bottom,grooveWidth:0.010};
+  sill.userData={grooveZ:door.doorZ,guideGrooveZ:door.guideZ,width:door.sillW,topY:bottom,grooveWidth:0.010};
   // 후면 손잡이: 창 테두리와 중앙 이음 기둥의 고정판에 지지한다.
   const railY=bottom+0.90, railZ=rearZ+0.09, railW=rearWidth-0.16;
   const rail=createCylinder(0.018,0.018,railW,steel,0,railY,railZ,root);

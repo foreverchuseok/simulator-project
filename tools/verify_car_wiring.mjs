@@ -88,7 +88,7 @@ try {
  console.log(JSON.stringify(report));
  assert.deepEqual(errors,[]);assert.ok(report.routes.every(r=>r.orthogonal&&r.black));
  assert.deepEqual(report.intrusions,[]);assert.deepEqual(report.collisions,[]);assert.deepEqual(report.penetrations,[]);
- assert.equal(report.entries.length,7);assert.ok(report.entries.every(e=>e.connections===1&&e.holeClear));
+ assert.equal(report.entries.length,7);assert.ok(report.entries.every(e=>e.connections===(e.id==='door'?3:1)&&e.holeClear));
  assert.deepEqual(report.singleEntry,{holes:1,guards:1,allInside:true});
  assert.ok(report.mounts.every(m=>m.instanced&&m.count>0));assert.deepEqual(report.unexpectedHardware,[]);
  console.log('PASS car wiring');

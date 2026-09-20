@@ -34,9 +34,9 @@ try {
   const q=CarDoor.state,rows=[];q.coupledFloor=curFloor;
   for(let i=0;i<=100;i++){
    q.release=i/100;CarDoor.pose();carGrp.updateWorldMatrix(true,true);
-   const nose=q.carHook.localToWorld(new THREE.Vector3(-.13,-.019,0));
-   const keeper=new THREE.Box3().setFromObject(q.keeper);
-   rows.push({i,panelX:carDoorR.position.x,hook:hatchDoors[curFloor].hook.rotation.z,noseClearance:nose.y-keeper.max.y});
+   const nose=q.lockTooth.getWorldPosition(new THREE.Vector3());
+   const rim=q.keeper.localToWorld(new THREE.Vector3(0,q.lockSpec.strikeY,0));
+   rows.push({i,panelX:carDoorR.position.x,hook:hatchDoors[curFloor].hook.rotation.z,noseClearance:nose.y-rim.y});
   }
   q.release=0;CarDoor.pose();q.coupledFloor=-1;return rows;
  });
