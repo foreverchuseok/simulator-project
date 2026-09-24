@@ -32,6 +32,9 @@ Three.js로 승강로, 카, 도어, 기계실, 피트와 안전장치를 구성�
 - `js/car-underbody.js`: 카 에이프런·CC27 빨간 경광등과 BYPASS 점검운전 경보. 고장 메뉴에서 우회할 문을 선택하고 ▲▼를 누른다.
 - `js/car-wiring.js`: 카 고정 검은 배선의 모서리 경로·고정 새들과 카탑 박스 하부의 단일 묶음 인입구/보호 부시. `tools/verify_car_wiring.mjs`로 형상·간섭을 확인한다.
 - `docs/CAR-CONTROLS.md`: 카 탑 박스·OPB·하중 감지.
+- `docs/PIT-SCREEN.md`: 후면 균형추 앞 노란색 철제 피트 스크린·Blender 원본·장착과 검증.
+- `docs/MACHINE-ROOM-SAFETY.md`: 로프브레이크 볼트식 받침·각도 조절 측판·조속기와 브레이크의 바닥 덕트 배선.
+- `docs/GOVERNOR-DESIGN.md`: 조속기 스위치·쐐기·진자 형상과 기존 작동점 유지·검증.
 - `docs/LEVELING-SENSORS.md`: 레벨링 센서.
 - `docs/TRAVEL-CABLE-TERMINAL.md`: 이동케이블·종단 리미트 스위치(파이널·리미트·강제감속, 스위치 방식) (MR_설계.pdf 137~138p, 부품설계.pdf 184~204p).
 
@@ -147,7 +150,7 @@ Three.js → OrbitControls → GLTFLoader → GSAP
 - 가이드레일, 층 인식 장치.
 - 종단 안전장치 승강로측: 레일 클립 고정 리미트 스위치 6개 — 파이널·리미트·강제감속 (`buildLimitSwitches()`). 캠은 카 스타일(`elevator.js buildCarCabin()` §7).
 - 승강로 케이블 하네스: 제어반 인출, 층 분기 박스, 피트 리모컨 (`buildShaftCableHarness()`).
-- 기계실, 권상기, 주도르래와 조속기 GLB 마운트.
+- 기계실, 권상기(웜 기어드 GLB, 절개·브레이크 연출), 주도르래와 조속기 GLB 마운트.
 - 피트, 완충기, 인장시브와 조속기 로프 기반 형상.
 - 조속기 래퍼와 `mrGrp.userData.governor` 계약.
 
@@ -277,13 +280,16 @@ ESTOP
 | 승장문·헤더·페시아·토가드 | `js/elevator.js`, 원본 `js/archive/doors.js` | `buildHatchDoors()` |
 | 승장 행거 케이스 | `js/elevator.js` | `createHangerCaseAssembly()` — 계약은 `docs/DOOR-REBUILD.md` |
 | 도어 재공사 안내 | `docs/DOOR-REBUILD.md` | 부품별 복원 규칙 |
-| 균형추 | `js/elevator.js` | `buildCounterWeight()` |
+| 균형추 | `js/elevator.js`, 형상 `blender/scripts/counterweight.py` | `buildCounterWeight()` → `models/gltf/counterweight.glb` |
 | 주 로프 | `js/elevator.js` | `buildWireRopes()`, `refreshRopes()` |
+| 주 로프 바빗 히치(카·균형추) | `js/elevator.js` | `buildBabbittHitch()`, 홀 배치 `ROPE_HITCH_XZ` |
 | 배경·건물 | `js/environment.js` | `buildBackground()` 계열 |
 | 전면벽·로비·점자 | `js/environment.js` | `buildFrontWallAndLobby()` |
 | 가이드레일 | `js/environment.js` | `buildGuideRails()` |
 | 층 센서·리미트 | `js/environment.js` | `buildShaftLandingDevices()`, `buildLimitSwitches()` |
-| 기계실·권상기 | `js/environment.js` | `buildMachineRoom()` |
+| 기계실 마스코트 「승강곰」 | `js/mascot.js` | `Mascot.build/update/setVisible`, 카메라 메뉴 「캐릭터」 버튼 |
+| 기계실·권상기 | `js/environment.js` | `buildMachineRoom()`, `setTractionCutaway()`, `setTractionBrake()` |
+| 권상기 형상 | `blender/scripts/traction_machine.py` | 계약: `docs/TRACTION-MACHINE.md` |
 | 피트·완충기 | `js/environment.js` | `buildPitFoundation()`, `updateBuffers()` |
 | 조속기 형상 | `blender/scripts/overspeed_governor.py` | 상수 블록과 `build_*()` |
 | 조속기 마운트 | `js/environment.js` | `buildMachineRoom()` 조속기 GLTFLoader 구간 |

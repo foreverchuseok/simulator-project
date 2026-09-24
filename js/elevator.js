@@ -5,6 +5,131 @@
     const SG_TRIP_ROT = -0.38;
 
     /* ==========================================================================
+       주로프 5본 바빗(Babbitt) 소켓 히치 — 카 크로스헤드·균형추 상부 공용
+       원본: MR 로프체결도 「TOP BEAM 로프히치 홀」 5본 · 후락 칸 (균형추가 카 후면 -Z).
+       ▪ 히치판은 7홀 육각(중앙 + 6). 5본은 좌상·우상·중앙·좌하·우하만 쓰고 좌·우 중단은 빈 홀.
+       ▪ 시브 홈에서 X 일렬(ROPE_GROOVE_X)로 내려온 로프 i 가 무는 홀:
+           1 좌하, 2 좌상, 3 중앙, 4 우하, 5 우상  (도면 위 = 후면 -Z)
+         로프는 홈에서 홀까지 수 m 에 수 cm 기울어 내려온다.
+       ▪ 조립(위→아래): 로프 → 테이퍼 소켓(바빗 충전, 하단 클레비스 핀·분할핀) → 로드
+         → 히치판·빔 관통 → 빔 하면 시트판 → 스프링 → 와셔·더블너트·분할핀. 스프링은 빔 아래.
+       buildWireRopes()/refreshRopes()와 두 히치가 이 배열을 같이 읽는 단일 원본이다.
+       ========================================================================== */
+    const ROPE_GROOVE_X = [-0.06, -0.03, 0, 0.03, 0.06]; // 주도르래 홈 피치 30mm
+    // 홀 피치 — 앞·뒤 줄(±0.074)과 로드(r 8mm)가 크로스헤드 웹 안쪽면(±0.083)에 드는 최대치
+    const HITCH_PITCH = 0.085;
+    const HITCH_ROW_Z = HITCH_PITCH * Math.sqrt(3) / 2;
+    const ROPE_HITCH_XZ = [
+      [-HITCH_PITCH / 2,  HITCH_ROW_Z], // 1 좌하
+      [-HITCH_PITCH / 2, -HITCH_ROW_Z], // 2 좌상
+      [0, 0],                            // 3 중앙
+      [ HITCH_PITCH / 2,  HITCH_ROW_Z], // 4 우하
+      [ HITCH_PITCH / 2, -HITCH_ROW_Z]  // 5 우상
+    ];
+    const HITCH_SPARE_XZ = [[-HITCH_PITCH, 0], [HITCH_PITCH, 0]]; // 좌·우 중단 빈 홀
+    const CAR_ROPE_END_DY = 0.68; // 카 소켓 상단(로프 진입) = 카 로컬 H/2 + 0.68
+    const CWT_ROPE_END_DY = 0.31; // 균형추 소켓 상단 = 균형추 로컬 CWT_H/2 + 0.31
+
+    let _hitchSpringGeo = null;
+    function buildBabbittHitch(parent, o) {
+      // o: { name, plateTopY(빔 상면), beamBotY(빔 하면), ropeEndY(소켓 상단), plateW, plateD, plateMat,
+      //      springs(기본 true — 균형추는 false: 현장 사진처럼 빔 밑에 와셔·더블너트·분할핀만) }
+      const springs = o.springs !== false;
+      const grp = new THREE.Group();
+      grp.name = o.name;
+      parent.add(grp);
+      const socketMat = M.ss(0xc4a661); // 황색 아연도금 주강 소켓
+      socketMat.metalness = 0.55; socketMat.roughness = 0.4;
+      const rodMat = M.ss(0xb39c64);
+      const nutMat = M.ss(0x9aa3ad);
+      const springMat = M.ss(0x17191c); // 흑색 도장 스프링 (clearcoat 없이 무광)
+      const pinMat = M.ss(0xdfe4e8);
+      const slotMat = M.paint(0x0a0b0d);
+      const add = (geo, mat, x, y, z) => {
+        const m = new THREE.Mesh(geo, mat);
+        m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true;
+        grp.add(m); return m;
+      };
+
+      // 7홀 판 — 상부 히치판(빔 위) · 하부 스프링 시트판(빔 아래)
+      const HOLE_R = 0.011;
+      const plateGeo = t => {
+        const s = new THREE.Shape();
+        s.moveTo(-o.plateW / 2, -o.plateD / 2); s.lineTo(o.plateW / 2, -o.plateD / 2);
+        s.lineTo(o.plateW / 2, o.plateD / 2); s.lineTo(-o.plateW / 2, o.plateD / 2); s.closePath();
+        for (const [hx, hz] of [...ROPE_HITCH_XZ, ...HITCH_SPARE_XZ]) {
+          const h = new THREE.Path(); h.absarc(hx, -hz, HOLE_R, 0, Math.PI * 2, true); s.holes.push(h);
+        }
+        const g = new THREE.ExtrudeGeometry(s, { depth: t, bevelEnabled: false, curveSegments: 16 });
+        g.rotateX(-Math.PI / 2); // 형상 (x, y) → 월드 (x, ·, -y), 두께는 +Y
+        return g;
+      };
+      const PLATE_T = 0.016, SEAT_T = 0.012;
+      add(plateGeo(PLATE_T), o.plateMat, 0, o.plateTopY, 0);
+      add(plateGeo(SEAT_T), o.plateMat, 0, o.beamBotY - SEAT_T, 0);
+      // 히치판 고정 볼트 4개소
+      const boltGeo = new THREE.CylinderGeometry(0.011, 0.011, 0.012, 6);
+      for (const bx of [-1, 1]) for (const bz of [-1, 1])
+        add(boltGeo, nutMat, bx * (o.plateW / 2 - 0.022), o.plateTopY + PLATE_T + 0.006, bz * (o.plateD / 2 - 0.02));
+
+      // 공유 지오메트리 (빌드 시 1회)
+      const SPRING_L = 0.09, SPRING_RM = 0.022, SPRING_WIRE = 0.0045, SPRING_TURNS = 6;
+      if (!_hitchSpringGeo) {
+        const pts = [];
+        for (let k = 0; k <= SPRING_TURNS * 16; k++) {
+          const a = k / 16 * Math.PI * 2;
+          pts.push(new THREE.Vector3(SPRING_RM * Math.cos(a), -SPRING_L * k / (SPRING_TURNS * 16), SPRING_RM * Math.sin(a)));
+        }
+        _hitchSpringGeo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), SPRING_TURNS * 20, SPRING_WIRE, 6, false);
+      }
+      const ROD_R = 0.008, WASHER_T = 0.006, NUT_H = 0.012, TAIL = 0.022;
+      const SOCKET_L = 0.12, SOCKET_RT = 0.011, SOCKET_RB = 0.02, COLLAR_L = 0.036;
+      const seatBot = o.beamBotY - SEAT_T;
+      const springBot = springs ? seatBot - WASHER_T - SPRING_L : seatBot; // 스프링 없으면 와셔가 시트판 바로 밑
+      const nutBot = springBot - WASHER_T - NUT_H * 2;
+      const socketBot = o.ropeEndY - SOCKET_L;
+      const collarMid = socketBot - COLLAR_L / 2;
+      const rodBot = nutBot - TAIL, rodTop = collarMid;
+      const rodGeo = new THREE.CylinderGeometry(ROD_R, ROD_R, rodTop - rodBot, 12);
+      const washerGeo = new THREE.CylinderGeometry(0.03, 0.03, WASHER_T, 20);
+      const nutGeo = new THREE.CylinderGeometry(0.016, 0.016, NUT_H, 6);
+      const cotterGeo = new THREE.TorusGeometry(0.006, 0.0013, 5, 10);
+      const socketGeo = new THREE.CylinderGeometry(SOCKET_RT, SOCKET_RB, SOCKET_L, 20);
+      const collarGeo = new THREE.CylinderGeometry(SOCKET_RB, SOCKET_RB, COLLAR_L, 20);
+      const lipGeo = new THREE.CylinderGeometry(SOCKET_RT + 0.002, SOCKET_RT + 0.002, 0.006, 20);
+      const pinGeo = new THREE.CylinderGeometry(0.0045, 0.0045, SOCKET_RB * 2 + 0.014, 10);
+      const slotGeo = new THREE.BoxGeometry(0.012, COLLAR_L * 0.8, 0.004);
+
+      ROPE_HITCH_XZ.forEach(([hx, hz], i) => {
+        add(rodGeo, rodMat, hx, (rodTop + rodBot) / 2, hz);
+        // 빔 아래: 시트 와셔 → 스프링 → 와셔 → 더블너트 → 분할핀
+        if (springs) {
+          add(washerGeo, nutMat, hx, seatBot - WASHER_T / 2, hz);
+          add(_hitchSpringGeo, springMat, hx, seatBot - WASHER_T, hz);
+        }
+        add(washerGeo, nutMat, hx, springBot - WASHER_T / 2, hz);
+        add(nutGeo, nutMat, hx, springBot - WASHER_T - NUT_H / 2, hz);
+        add(nutGeo, nutMat, hx, springBot - WASHER_T - NUT_H * 1.5, hz).rotation.y = Math.PI / 6;
+        add(cotterGeo, pinMat, hx + ROD_R + 0.003, nutBot - 0.009, hz).rotation.y = Math.PI / 2;
+        // 빔 위: 테이퍼 소켓(로프 진입 상단 좁음) + 클레비스 칼라·핀
+        add(socketGeo, socketMat, hx, socketBot + SOCKET_L / 2, hz);
+        add(lipGeo, socketMat, hx, o.ropeEndY - 0.003, hz);
+        add(collarGeo, socketMat, hx, collarMid, hz);
+        for (const s of [-1, 1]) add(slotGeo, slotMat, hx, collarMid, hz + s * (SOCKET_RB - 0.0012));
+        add(pinGeo, pinMat, hx, collarMid, hz).rotation.z = Math.PI / 2;
+        add(cotterGeo, pinMat, hx + SOCKET_RB + 0.006, collarMid, hz);
+      });
+      // 재질별 정적 배치 — 부모(carFrameGrp·cwtGrp) 로컬로 묶여 카·균형추 이동을 그대로 따른다.
+      batchStaticChildren(grp, o.name);
+      // 검증용 치수 (그룹 로컬): 소켓 상단 = 로프 끝, 스프링 원통 = 반경 SPRING_RM + SPRING_WIRE
+      grp.userData.hitch = {
+        holes: ROPE_HITCH_XZ, ropeEndY: o.ropeEndY, socketBot, rodR: ROD_R, rodTop, rodBot,
+        springTop: seatBot - WASHER_T, springBot, springR: springs ? SPRING_RM + SPRING_WIRE : 0
+      };
+      return grp;
+    }
+
+    /* ==========================================================================
        카 재공사 (2026-08-17): 형상은 화면에서 제거.
        원본: js/archive/car.js   안내: docs/CAR-REBUILD.md
        carGrp 위치·주 로프·조속기 로프·균형추 움직임은 유지한다.
@@ -25,12 +150,7 @@
       // ── 공통 재질 ──
       const frmMat     = M.paint(0x2c3e50); // 고장력 구조용 강재 (다크 인더스트리얼 슬레이트 블루)
       const frmDkMat   = M.paint(0x1a252f); // 고하중 베이스 플레이트 / 브라켓 강재
-      const silvMat    = M.ss(0xc4cbd4);    // 가공 금속 (타이로드, 가이드 베이스)
       const boltMat    = M.ss(0x8a939e);    // M16/M8 볼트·너트
-      const goldMat    = M.gold();          // 아연도금/황동 와셔·핀
-      const springMat  = M.ss(0xe2e8f0);    // 고장력 스프링강
-      const babbittMat = M.paint(0x212d3b); // 단조강 바빗 소켓 바디
-      const zincMat    = M.ss(0xd6dade);    // 바빗합금 주입면
 
       // 안전 난간대 재질 (도면 103~104p & 124932.png 고시인성 황색)
       const yelGuardMat = M.paint(0xf5b800); // 베이스 가드 성형 강판
@@ -140,60 +260,14 @@
       bottomCover.visible = false; // 사용자 X 표시: 내부 작업을 위해 밑면 판 하나만 임시 숨김.
 
       /* =========================================================================
-         2. 1:1 주 로프 바빗 로프 소켓 어셈블리 (5개소 직결 히치 - 도면 104p 마킹 응용)
-         refreshRopes() 접점: local Y = H / 2 + 0.68, Z = 0, X = -0.06 + i * 0.03
+         2. 1:1 주 로프 5본 바빗 소켓 히치 — MR 로프체결도 5본·후락 (buildBabbittHitch)
+         refreshRopes() 접점: local Y = H / 2 + CAR_ROPE_END_DY, (X, Z) = ROPE_HITCH_XZ[i]
          ========================================================================= */
-      const hitchBedY = chY + chH / 2 + 0.012; // H / 2 + 0.442
-
-      // 히치 베드 마운트 플레이트 (ㄷ자 채널 상부 가로질러 결속)
-      createBox(0.42, 0.024, 0.22, frmDkMat, 0, hitchBedY, 0, carFrameGrp);
-      [-0.17, 0.17].forEach(bx => {
-        [-0.07, 0.07].forEach(bz => {
-          createCylinder(0.011, 0.011, 0.035, boltMat, bx, hitchBedY + 0.01, bz, carFrameGrp);
-          createCylinder(0.015, 0.015, 0.005, goldMat, bx, hitchBedY + 0.013, bz, carFrameGrp);
-        });
+      // 이중 C채널 위에 7홀 히치판, 아래 플랜지 밑에 스프링 시트판. 로드는 두 채널 사이를 관통.
+      buildBabbittHitch(carFrameGrp, {
+        name: 'carRopeHitch', plateTopY: chY + chH / 2, beamBotY: chY - chH / 2,
+        ropeEndY: H / 2 + CAR_ROPE_END_DY, plateW: 0.30, plateD: 0.21, plateMat: frmDkMat
       });
-
-      // 5개 1:1 바빗 소켓 및 스프링 타이로드 어셈블리
-      const socketMat = M.ss(0x232d38); // 단조강 건메탈 소켓
-      const springCoilMat = M.paint(0x1e293b); // 스프링 코일 블랙/스틸
-
-      for (let i = 0; i < 5; i++) {
-        const rx = -0.06 + i * 0.03;
-
-        // (a) M20 고장력 인장 타이로드 볼트 (히치 베드 관통 ~ 소켓 하단)
-        createCylinder(0.007, 0.007, 0.20, silvMat, rx, hitchBedY + 0.09, 0, carFrameGrp);
-
-        // (b) 하부 스프링 시트 와셔 & 너트
-        createCylinder(0.018, 0.018, 0.008, goldMat, rx, hitchBedY + 0.016, 0, carFrameGrp);
-        createCylinder(0.014, 0.014, 0.014, boltMat, rx, hitchBedY + 0.027, 0, carFrameGrp);
-
-        // (c) 진동 완충용 고장력 코일 스프링 (Damper Spring - 입체 코일 링 표현)
-        createCylinder(0.013, 0.013, 0.070, silvMat, rx, hitchBedY + 0.070, 0, carFrameGrp); // 내부 로드 가이드
-        for (let s = 0; s < 5; s++) {
-          const sy = hitchBedY + 0.040 + s * 0.014;
-          createCylinder(0.018, 0.018, 0.007, springMat, rx, sy, 0, carFrameGrp); // 코일 와인딩 링
-        }
-
-        // (d) 상부 스프링 시트 와셔 & 더블 록 너트 (Double Jam Nuts)
-        createCylinder(0.019, 0.019, 0.008, goldMat, rx, hitchBedY + 0.112, 0, carFrameGrp);
-        createCylinder(0.014, 0.014, 0.012, boltMat, rx, hitchBedY + 0.122, 0, carFrameGrp);
-        createCylinder(0.014, 0.014, 0.012, boltMat, rx, hitchBedY + 0.134, 0, carFrameGrp);
-
-        // (e) 단조 바빗 소켓 몸통 (Babbitt Socket Body - 원뿔형 테이퍼 주물 바디)
-        // 하단 폭 36mm → 상단 폭 22mm 테이퍼 주물 바디. 상단 칼라 끝이 정확히 H / 2 + 0.68에 접촉
-        const socketH = 0.100;
-        const socketY = (H / 2 + 0.68) - socketH / 2; // H / 2 + 0.63
-        createCylinder(0.011, 0.018, socketH, socketMat, rx, socketY, 0, carFrameGrp);
-
-        // 소켓 상단 리세스 림 & 바빗합금(Zinc alloy) 충진 마감
-        createCylinder(0.012, 0.012, 0.012, socketMat, rx, H / 2 + 0.674, 0, carFrameGrp);
-        createCylinder(0.009, 0.009, 0.004, zincMat, rx, H / 2 + 0.680, 0, carFrameGrp);
-
-        // 소켓 상부 안전 와이어 클립 (Rope Clip / U-Bolt Clamp)
-        createBox(0.018, 0.014, 0.016, silvMat, rx, H / 2 + 0.702, 0, carFrameGrp);
-        createCylinder(0.003, 0.003, 0.024, silvMat, rx, H / 2 + 0.702, 0, carFrameGrp);
-      }
 
       /* =========================================================================
          3. 상·하부 가이드 슈 4개소 (도면 95p, 99p)
@@ -432,23 +506,38 @@
       const tcGrp = new THREE.Group();
       tcGrp.name = 'carTravelCable'; carGrp.add(tcGrp);
       const tcZL = zL(TC_CAR_Z), endY = TC_CAR_HANGER_LY;
-      const sideZ = tcZL + 0.10, topY = TC_CAR_TOP_LY;
-      // 플랫폼 외곽 채널 아래의 짧은 접힌 취부판. 주행 구간 중간에는 암을 두지 않는다.
-      const floorEdgeX = -S.CAR_W / 2;
-      createBox(Math.abs(TC_X-floorEdgeX)+0.02,0.008,0.10,brkMat,
-        (TC_X+floorEdgeX)/2,endY+0.115,tcZL,tcGrp);
-      createBox(0.008,0.12,0.10,brkMat,floorEdgeX,endY+0.17,tcZL,tcGrp);
-      addTravelCableGrip(tcGrp,TC_X,endY+0.040,tcZL,'carCableGrip');
+      const sideZ = tcZL + 0.20, topY = TC_CAR_TOP_LY;
+      const saddleX=TC_CAR_X+TC_SADDLE_R;
+      addTravelCableSaddle(tcGrp,saddleX,endY,tcZL,'carCableSaddle');
+      // 플랫폼 아래에 매단 원형 보호 지지부. 케이블은 위를 감싸 카 안쪽으로 돌아간다.
+      const supportY=platformGrp.userData.bottomY-0.004;
+      const supportX=stringerX.reduce((a,b)=>Math.abs(a-saddleX)<Math.abs(b-saddleX)?a:b);
+      for(const dz of [-1,1]) {
+        createBox(0.11,supportY-endY,0.006,brkMat,saddleX,(endY+supportY)/2,tcZL+dz*(TC_W/2+0.018),tcGrp);
+        createBox(Math.abs(supportX-saddleX)+0.11,0.008,0.055,brkMat,
+          (supportX+saddleX)/2,supportY,tcZL+dz*(TC_W/2+0.018),tcGrp);
+      }
+      const over=[];
+      for(let i=0;i<=32;i++){
+        const a=Math.PI-i*Math.PI/32;
+        over.push([saddleX+TC_SADDLE_R*Math.cos(a),endY+TC_SADDLE_R*Math.sin(a),tcZL]);
+      }
+      createTravelCableRun(over,tcGrp,'carCableSaddleWrap');
+      const grip=addTravelCableGrip(tcGrp,TC_CAR_X,endY-0.09,tcZL,'carCableGrip');
+      grip.rotation.y=Math.PI/2;
       const route = createTravelCableRun([
-        [TC_X,endY,tcZL],[TC_X,endY+0.085,tcZL],
-        [TC_X+0.06,endY+0.13,tcZL+0.045],
-        [TC_SIDE_X,endY+0.16,sideZ],
+        [saddleX+TC_SADDLE_R,endY,tcZL],
+        [saddleX+TC_SADDLE_R,endY-0.16,tcZL],
+        [saddleX+TC_SADDLE_R,endY-0.24,sideZ],
+        [TC_SIDE_X,endY-0.24,sideZ],
         [TC_SIDE_X,endY+0.36,sideZ],
         [TC_SIDE_X,topY-0.26,sideZ],[TC_SIDE_X,topY-0.16,sideZ]
       ],tcGrp,'carCableRun');
       // 카에 밀착한 좁은 검정 밴드: 긴 금속 새들·돌출 볼트 제거.
       for(let y=endY+0.45;y<topY-0.20;y+=0.45)
-        addTravelCableBand(tcGrp,TC_SIDE_X,y,sideZ);
+        addTravelCableBand(tcGrp,TC_SIDE_X,y,sideZ).rotation.y=Math.PI/2;
+      for(const y of [endY-0.10,endY-0.17])
+        addTravelCableBand(tcGrp,saddleX+TC_SADDLE_R,y,tcZL).rotation.y=Math.PI/2;
       const jb = new THREE.Group(); jb.name='carCableJunction';
       jb.position.set(TC_SIDE_X+0.035,topY-0.04,sideZ); tcGrp.add(jb);
       createBox(0.10,0.22,0.16,M.paint(0x42484b),0,0,0,jb);
@@ -569,6 +658,26 @@
         R: makeMat('assets/bg/lean.png')
       };
       return _hatchStickerMats;
+    }
+
+    /* ── 승강로 내 층 표시 스티커 텍스처 (검사기준: 승강로 내 승강장문 배면 상단 층 표시) ──
+       floor_1.png ~ floor_4.png (현장 실사 20260921_135916.jpg) */
+    let _hoistwayFloorStickerMats = null;
+    function getHoistwayFloorStickerMats() {
+      if (_hoistwayFloorStickerMats) return _hoistwayFloorStickerMats;
+      const loader = new THREE.TextureLoader();
+      function makeMat(path) {
+        const tex = loader.load(path);
+        tex.encoding = THREE.sRGBEncoding;
+        return new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false });
+      }
+      _hoistwayFloorStickerMats = [
+        makeMat('assets/bg/floor_1.png'),
+        makeMat('assets/bg/floor_2.png'),
+        makeMat('assets/bg/floor_3.png'),
+        makeMat('assets/bg/floor_4.png')
+      ];
+      return _hoistwayFloorStickerMats;
     }
 
     let sillSupportGrp = null;
@@ -1203,7 +1312,7 @@
          - 후면(승강로 측): 세로 보강 C채널 2줄 (폭 50mm, 높이 dh * 0.94)
          - 하단: 1번 실 가이드 슈 2개소 + 2번 실 보강슈(문짝당 1개, 승강로 쪽으로 돌출)
          - 의장면(홀 쪽): 손대지 마시오 / 기대면 추락 위험 안전 스티커 */
-      function buildHatchDoorPanel(grp, side, cx, g) {
+      function buildHatchDoorPanel(grp, side, cx, g, floorIdx) {
         const dw = S.DOOR_W / 2 + 0.025; // 패널 폭 775mm (유효 개구폭 1500mm + 중앙 오버랩)
         const dt = HATCH_DT;
         const halfGap = DOOR_MEET_GAP / 2;
@@ -1390,6 +1499,22 @@
             pinRest: 0.010, camLen, triX, triY, pinY, barX
           };
         }
+
+        // 9. 승강로 내 층 표시 스티커 (검사기준: 승강로 내 승강장문 배면 상단, 점검자용 시각적 층 표기)
+        // 현장 실사 20260921_135916.jpg 기준: 화면 왼쪽(+X, right 그룹) 도어 상단 안쪽 배면(-Z)
+        if (isHookSide && floorIdx !== undefined && floorIdx >= 0 && floorIdx < 4) {
+          const floorMats = getHoistwayFloorStickerMats();
+          const floorMat = floorMats[floorIdx];
+          const stickerSize = 0.090; // 실물 약 90mm 정사각형
+          const floorSticker = new THREE.Mesh(new THREE.PlaneGeometry(stickerSize, stickerSize), floorMat);
+          floorSticker.name = `hoistwayFloorSticker_${floorIdx + 1}F`;
+          floorSticker.rotation.y = Math.PI; // 승강로(-Z)를 향하도록 180도 회전
+          const mountEdgeX = 0.281 - cx; // 인터록 베이스 판 우측 끝
+          const fStickerX = mountEdgeX + 0.025 + stickerSize / 2;
+          const fStickerY = topY - 0.20 - 0.015 - stickerSize / 2; // 기존 위치에서 20cm 하향
+          floorSticker.position.set(fStickerX, fStickerY, zHoist - 0.001);
+          grp.add(floorSticker);
+        }
       }
 
       for (let i = 0; i < FLOORS; i++) {
@@ -1408,8 +1533,8 @@
         buildHangerAssembly(right, +1, cx, g);
 
         // 승장 도어 패널 장착 (도면 175p, 176p)
-        buildHatchDoorPanel(left,  -1, cx, g);
-        buildHatchDoorPanel(right, +1, cx, g);
+        buildHatchDoorPanel(left,  -1, cx, g, i);
+        buildHatchDoorPanel(right, +1, cx, g, i);
 
         scene.add(left);
         scene.add(right);
@@ -1463,59 +1588,37 @@
     window.setEmergencyKey = setEmergencyKey;
 
 
+    /* 균형추 형상 원본: blender/scripts/counterweight.py → models/gltf/counterweight.glb
+       (채널 프레임·검은 주물 웨이트·번호·상하 가이드슈·오일통). 여기서는 로프 히치와 위치만.
+       CWT_TOP_BEAM_H 는 GLB 루트 extras topBeamH 와 같아야 한다(로드 시 대조). */
+    const CWT_TOP_BEAM_H = 0.12;
     function buildCounterWeight() {
       cwtGrp = new THREE.Group();
-      const fMat = M.ss(0x1f2937); // 프레임
-      const blkMat = M.paint(0x374151); // 웨이트 블록
+      cwtGrp.name = 'cwtGrp';
       const yH = S.CWT_H / 2;
-      
-      // 수직 프레임 채널 (업라이트)
-      createBox(0.05, S.CWT_H, 0.10, fMat, -S.CWT_W/2 + 0.025, 0, 0, cwtGrp);
-      createBox(0.05, S.CWT_H, 0.10, fMat,  S.CWT_W/2 - 0.025, 0, 0, cwtGrp);
-      // 상하 크로스헤드 (플랭크)
-      createBox(S.CWT_W, 0.08, 0.10, fMat, 0, -yH + 0.04, 0, cwtGrp);
-      createBox(S.CWT_W, 0.08, 0.10, fMat, 0,  yH - 0.04, 0, cwtGrp);
+      new THREE.GLTFLoader().load('models/gltf/counterweight.glb', gltf => {
+        const root = gltf.scene.getObjectByName('CounterweightRoot');
+        const spec = root && root.userData;
+        if (!spec || Math.abs(spec.railSpan - S.CWT_W) > 1e-6 || Math.abs(spec.depth - S.CWT_D) > 1e-6 ||
+            Math.abs(spec.height - S.CWT_H) > 1e-6 || Math.abs(spec.topBeamH - CWT_TOP_BEAM_H) > 1e-6) {
+          console.error('[Counterweight] 치수 계약 불일치: counterweight.py 를 다시 내보내세요.', spec);
+          return;
+        }
+        gltf.scene.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = !o.material.transparent; } });
+        gltf.scene.name = 'counterweightModel';
+        cwtGrp.add(gltf.scene);
+        cwtGrp.userData.model = spec;
+      }, undefined, err => console.error('[counterweight.glb] 로드 실패:', err));
 
-      // 앞뒤 커버 프레임 대신 웨이트 블록들이 사이에 쌓인 형태
-      for (let i = 0; i < 20; i++) {
-        const blkW = S.CWT_W - 0.12; 
-        const blkH = (S.CWT_H - 0.2) / 20;
-        createBox(blkW, blkH - 0.01, S.CWT_D - 0.02, blkMat, 0, -yH + 0.08 + (i + 0.5) * blkH, 0, cwtGrp);
-      }
-
-      // 가이드 슈 (상/하 2쌍)
-      const shoeMat = M.paint(0x2a2a2a);
-      [-S.CWT_W/2, S.CWT_W/2].forEach(sx => {
-        createBox(0.06, 0.10, 0.06, shoeMat, sx,  yH, 0, cwtGrp); // 상부 슈
-        createBox(0.06, 0.10, 0.06, shoeMat, sx, -yH, 0, cwtGrp); // 하부 슈
+      // 1:1 바빗 로프 히치 (균형추 상부) — 카와 같은 5본·후락 7홀 배치, 스프링 없음
+      buildBabbittHitch(cwtGrp, {
+        name: 'cwtRopeHitch', plateTopY: yH, beamBotY: yH - CWT_TOP_BEAM_H,
+        ropeEndY: yH + CWT_ROPE_END_DY, plateW: 0.30, plateD: S.CWT_D, plateMat: M.paint(0x6f8187),
+        springs: false
       });
 
-      // 1:1 바빗식 로프 히치 (균형추 상부)
-      const hitchPlateY = yH + 0.05;
-      createBox(0.36, 0.02, 0.16, M.paint(0xb8680a), 0, hitchPlateY, 0, cwtGrp);
-      
-      const babbittMat = M.paint(0x334455);
-      const springMat = M.ss(0xd0d5da);
-      const silvMat = M.ss(0xb0b5bb);
-      for (let i = 0; i < 5; i++) {
-        const rx = -0.06 + i * 0.03;
-        // 히치 로드
-        createCylinder(0.007, 0.007, 0.25, silvMat, rx, hitchPlateY + 0.12, 0, cwtGrp);
-        // 완충 스프링
-        createCylinder(0.015, 0.015, 0.10, springMat, rx, hitchPlateY + 0.06, 0, cwtGrp);
-        // 너트
-        createCylinder(0.018, 0.018, 0.01, silvMat, rx, hitchPlateY + 0.01, 0, cwtGrp);
-        createCylinder(0.018, 0.018, 0.01, silvMat, rx, hitchPlateY + 0.11, 0, cwtGrp);
-        
-        // 바빗 소켓 몸통 (원뿔형)
-        const socketGeo = new THREE.CylinderGeometry(0.012, 0.025, 0.12, 16);
-        const socketMesh = new THREE.Mesh(socketGeo, babbittMat);
-        socketMesh.position.set(rx, hitchPlateY + 0.20, 0);
-        cwtGrp.add(socketMesh);
-      }
-
-      // 카가 1층일 때 균형추는 상부에 있어야 하며, 카가 4층까지 올라가도 피트 아래로 내려가지 않게 기준을 맞춤
-      const cwtBottomClearance = 0.35;
+      // 최상층에서 가장 높은 완충기 상단과 160mm 확보. 로프 끝점은 그룹 위치를 추종한다.
+      const cwtBottomClearance = counterweightBottomHeight();
       const carTravel = FLOOR_Y[FLOORS - 1] - FLOOR_Y[0];
       const cwtTopStartY = Y0 + cwtBottomClearance + S.CWT_H / 2 + carTravel;
       cwtGrp.position.set(0, cwtTopStartY, CWT_CENTER_Z);
@@ -1542,7 +1645,14 @@
     function travelCableJacket() {
       if (!travelCableJacket.cached) {
         const material=M.paint(TC_COLOR);
+        material.color.convertSRGBToLinear();
         material.clearcoat=0; material.metalness=0; material.roughness=0.88;
+        // 외피의 은은한 세로 홈. 자유 U 구간도 같은 폭 방향 UV를 사용한다.
+        const canvas=document.createElement('canvas');canvas.width=128;canvas.height=8;
+        const ctx=canvas.getContext('2d');ctx.fillStyle='#e4e4e4';ctx.fillRect(0,0,128,8);
+        for(let x=8;x<128;x+=12){ctx.fillStyle='#b6b6b6';ctx.fillRect(x,0,1,8);ctx.fillStyle='#f1f1f1';ctx.fillRect(x+1,0,1,8);}
+        const texture=new THREE.CanvasTexture(canvas);texture.anisotropy=4;
+        material.map=texture;material.bumpMap=texture;material.bumpScale=0.00025;
         travelCableJacket.cached=material;
       }
       return travelCableJacket.cached;
@@ -1566,6 +1676,11 @@
       for(let k=1;k<n-1;k++) { idx.push(0,k+1,k); const a=(count-1)*n; idx.push(a,a+k,a+k+1); }
       const g=new THREE.BufferGeometry();
       g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(count*n*3),3));
+      const uv=new Float32Array(count*n*2),profile=travelCableProfile();
+      for(let i=0;i<count;i++)for(let k=0;k<n;k++){
+        uv[(i*n+k)*2]=(profile[k][0]+TC_W/2)/TC_W;uv[(i*n+k)*2+1]=i/(count-1);
+      }
+      g.setAttribute('uv',new THREE.BufferAttribute(uv,2));
       g.setIndex(idx); return g;
     }
     function createTravelCableRun(points,parent,name) {
@@ -1582,7 +1697,7 @@
       curve.add(new THREE.LineCurve3(last,pts[pts.length-1]));
       const count=Math.max(160,Math.ceil(curve.getLength()/0.012)), profile=travelCableProfile(), geo=createTravelCableGeometry(count);
       const positions=geo.attributes.position.array;
-      let tangent=curve.getTangent(0), width=new THREE.Vector3(1,0,0);
+      let tangent=curve.getTangent(0), width=new THREE.Vector3(0,0,1);
       width.addScaledVector(tangent,-width.dot(tangent)).normalize();
       for(let i=0;i<count;i++) {
         const t=i/(count-1), next=curve.getTangent(t), p=curve.getPoint(t);
@@ -1597,7 +1712,8 @@
       const m=new THREE.Mesh(geo,travelCableJacket()); m.name=name; m.castShadow=true; parent.add(m); return m;
     }
     function addTravelCableBand(parent,x,y,z) {
-      const m=M.paint(0x121416), g=new THREE.Group(); g.name='cableBand';
+      const m=M.paint(0xa9ada9), g=new THREE.Group(); g.name='cableBand';
+      m.color.convertSRGBToLinear();
       m.clearcoat=0; m.roughness=0.9; m.metalness=0;
       g.position.set(x,y,z); parent.add(g);
       const h=0.004, t=0.0012;
@@ -1618,6 +1734,19 @@
         createCylinder(0.003,0.003,0.004,shell,sx*(TC_W/2+0.004),0,-TC_T/2-0.01,g).rotation.x=Math.PI/2;
       }
       return g;
+    }
+
+    function addTravelCableSaddle(parent,x,y,z,name) {
+      const g=new THREE.Group();g.name=name;g.position.set(x,y,z);parent.add(g);
+      const paint=M.paint(0xb8bdba);paint.color.convertSRGBToLinear();paint.clearcoat=0;
+      const steel=M.ss(0x858d92),r=TC_SADDLE_R-TC_T/2;
+      createCylinder(r,r,TC_W+0.006,paint,0,0,0,g).rotation.x=Math.PI/2;
+      for(const sign of [-1,1]){
+        createCylinder(TC_SADDLE_R+0.013,TC_SADDLE_R+0.013,0.005,paint,
+          0,0,sign*(TC_W/2+0.007),g).rotation.x=Math.PI/2;
+        createCylinder(0.012,0.012,0.008,steel,0,0,sign*(TC_W/2+0.013),g).rotation.x=Math.PI/2;
+      }
+      g.userData={type:'travel-cable-saddle',radius:TC_SADDLE_R};return g;
     }
 
     const TC_SEGS = 240; // 곡선 샘플 수 (고정)
@@ -1643,16 +1772,28 @@
       const carEndY0 = FLOOR_Y[0] + S.CAR_H / 2 + TC_CAR_HANGER_LY;
       const totalLen = (hangerY - ycBottom) + Math.PI * TC_LOOP_R + (carEndY0 - ycBottom);
 
-      // 작은 고정 행거만 벽에 취부. 레일에서 길게 나온 드럼/암은 사용하지 않는다.
+      // 승강로 중간 벽 취부판 → 지지 암 → 둥근 케이블 보호 지지부.
       const hangerGrp=new THREE.Group(); hangerGrp.name='travelCableHanger';
       travelCableGrp.add(hangerGrp);
       const wallX=-S.SHAFT_W/2;
-      createBox(0.006,0.15,0.11,brkMat,wallX+0.003,hangerY+0.055,TC_FIX_Z,hangerGrp);
-      createBox(Math.abs(TC_X-wallX),0.008,0.09,brkMat,(wallX+TC_X)/2,hangerY+0.11,TC_FIX_Z,hangerGrp);
-      addTravelCableGrip(hangerGrp,TC_X,hangerY+0.045,TC_FIX_Z,'shaftCableGrip');
+      createBox(0.008,0.24,TC_W+0.09,brkMat,wallX+0.004,hangerY,TC_FIX_Z,hangerGrp);
+      for(const dy of [-0.085,0.085])for(const dz of [-0.075,0.075])
+        createCylinder(0.007,0.007,0.016,boltMat,wallX+0.013,hangerY+dy,TC_FIX_Z+dz,hangerGrp).rotation.z=Math.PI/2;
+      const fixedSaddleX=TC_X-TC_SADDLE_R;
+      for(const sign of [-1,1])createBox(fixedSaddleX-wallX,0.035,0.006,brkMat,
+        (wallX+fixedSaddleX)/2,hangerY,TC_FIX_Z+sign*(TC_W/2+0.018),hangerGrp);
+      addTravelCableSaddle(hangerGrp,fixedSaddleX,hangerY,TC_FIX_Z,'shaftCableSaddle');
+      addTravelCableGrip(hangerGrp,TC_X,hangerY-0.09,TC_FIX_Z,'shaftCableGrip').rotation.y=Math.PI/2;
       const upTop=CEIL_RUN_Y, mrCableY=Y0+TOTAL_H+0.07;
+      const fixedWrap=[];
+      for(let i=0;i<=16;i++){
+        const a=i*Math.PI/32;
+        fixedWrap.push([fixedSaddleX+TC_SADDLE_R*Math.cos(a),hangerY+TC_SADDLE_R*Math.sin(a),TC_FIX_Z]);
+      }
+      createTravelCableRun(fixedWrap,hangerGrp,'shaftCableSaddleWrap');
       createTravelCableRun([
-        [TC_X,hangerY,TC_FIX_Z],[TC_X,hangerY+0.14,TC_FIX_Z],
+        [fixedSaddleX,hangerY+TC_SADDLE_R,TC_FIX_Z],
+        [TC_WALL_X,hangerY+0.14,TC_FIX_Z],
         [TC_WALL_X,hangerY+0.45,TC_FIX_Z],
         [TC_WALL_X,upTop-0.20,TC_FIX_Z],
         [TC_WALL_X,upTop,HARNESS_Z-0.12],
@@ -1661,7 +1802,7 @@
         [MR_CABLE_HOLE_X-0.16,mrCableY,HARNESS_Z]
       ],travelCableGrp,'fixedCableRun');
       for(let y=hangerY+0.65;y<upTop-0.30;y+=0.65){
-        addTravelCableBand(travelCableGrp,TC_WALL_X,y,TC_FIX_Z);
+        addTravelCableBand(travelCableGrp,TC_WALL_X,y,TC_FIX_Z).rotation.y=Math.PI/2;
         createBox(0.018,0.018,0.014,brkMat,wallX+0.012,y,TC_FIX_Z,travelCableGrp);
       }
 
@@ -1695,7 +1836,7 @@
       // 안전 클램프 — 피트 바닥을 뚫거나 고정단 위로 올라가지 않게 한다
       yc = Math.max(travelCable.pitTopY + R + 0.02, Math.min(yc, yTop - 0.02));
 
-      const zc = (TC_FIX_Z + TC_CAR_Z) / 2;
+      const xc = (TC_X + TC_CAR_X) / 2;
       const straightTop = yTop - yc;
       const arcLen = Math.PI * R;
       const straightCar = yCar - yc;
@@ -1706,21 +1847,21 @@
       const profile = travelCableProfile();
       for (let i = 0; i < TC_SEGS; i++) {
         const t = total * i / (TC_SEGS - 1);
-        let y, z, dz, dy;
+        let x, y, dx, dy;
         if (t <= straightTop) {                      // 고정단 하강
-          z = TC_FIX_Z; y = yTop - t; dz = 0; dy = -1;
+          x = TC_X; y = yTop - t; dx = 0; dy = -1;
         } else if (t <= straightTop + arcLen) {      // U 곡면
           const phi = (t - straightTop) / R;
-          z = zc + R * Math.cos(phi); y = yc - R * Math.sin(phi);
-          dz = -Math.sin(phi); dy = -Math.cos(phi);
+          x = xc - R * Math.cos(phi); y = yc - R * Math.sin(phi);
+          dx = Math.sin(phi); dy = -Math.cos(phi);
         } else {                                     // 카측 상승
-          z = TC_CAR_Z; y = yc + (t - straightTop - arcLen); dz = 0; dy = 1;
+          x = TC_CAR_X; y = yc + (t - straightTop - arcLen); dx = 0; dy = 1;
         }
-        // 진행방향에 수직인 단면 법선 (ZY 평면) — 폭은 항상 월드 X 축이다
-        const nz = -dy, ny = dz;
+        // XY 평면에서 카 쪽(+X)으로 복귀. 넓은 면의 폭은 Z축이다.
+        const nx = dy, ny = -dx;
         for(let k=0;k<profile.length;k++) {
           const [w,h]=profile[k], o=(i*profile.length+k)*3;
-          arr[o]=TC_X+w; arr[o+1]=y+ny*h; arr[o+2]=z+nz*h;
+          arr[o]=x+nx*h; arr[o+1]=y+ny*h; arr[o+2]=TC_CAR_Z+w;
         }
       }
       pos.needsUpdate = true;
@@ -1775,7 +1916,7 @@
       }
       const tex = new THREE.CanvasTexture(c);
       tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-      tex.repeat.set(24, 1);
+      tex.repeat.set(1, 1); // 반복은 UV 에 굽는다 (u = 로프 길이 / WIRE_ROPE_UV_LEN)
       tex.anisotropy = 4;
       _wireRopeMat = new THREE.MeshStandardMaterial({
         map: tex, color: 0xffffff, roughness: 0.72, metalness: 0.55
@@ -1783,16 +1924,22 @@
       return _wireRopeMat;
     }
 
-    // Five parallel ropes share one cross-section and path; only mesh X differs.
+    /* 주로프 = 시브 감김 호(정적, 5본 공유 튜브) + 카측·균형추측 직선 하강부(로프마다 1개).
+       감김 호는 주도르래 전면 접점 → 현수도르래 후면 접점까지라 카가 움직여도 변하지 않는다.
+       하강부는 홈 X 일렬에서 히치 홀(ROPE_HITCH_XZ)로 기울어 내려가며, 운행 중에는 위치·
+       길이·UV 만 갱신한다(렌더 루프에서 지오메트리 생성 없음).
+       꼬임 무늬 u = 로프 호길이 / WIRE_ROPE_UV_LEN, 원점 = 주도르래 전면 접점.
+       텍스처 offset 을 카 이동량만큼 밀어 무늬가 로프와 함께 시브를 넘어간다. */
+    const WIRE_ROPE_UV_LEN = 0.15; // 캔버스 128px ↔ 0.15m, 둘레 32px ↔ Ø12 둘레 — 등방 무늬
     let wireRopeShape = null;
 
-    function buildWireRopePath(r, cy, wy) {
+    function buildWireRopePath(r) {
       const Rm = r.mainR, Rd = r.defR;
       const dz = r.defCenterZ - r.mainZ, dy = r.defY - r.mainY;
       const D = Math.hypot(dz, dy);
       let tanA = Math.atan2(dy, dz) - Math.acos((Rm - Rd) / D);
       if (tanA < 0) tanA += Math.PI * 2;
-      const pts = [new THREE.Vector3(0, cy, CAR_CTR_Z)];
+      const pts = [];
       const arc = (cz, cyc, R, a0, a1, n) => {
         for (let i = 0; i <= n; i++) {
           const a = a0 + (a1 - a0) * i / n;
@@ -1801,12 +1948,39 @@
       };
       arc(r.mainZ, r.mainY, Rm, 0, tanA, 22);
       arc(r.defCenterZ, r.defY, Rd, tanA, Math.PI, 12);
-      pts.push(new THREE.Vector3(0, wy, cwtGrp.position.z));
       const path = new THREE.CurvePath();
       for (let i = 0; i < pts.length - 1; i++) {
-        path.add(new THREE.LineCurve3(pts[i], pts[i + 1]));
+        if (pts[i].distanceToSquared(pts[i + 1]) > 1e-12) path.add(new THREE.LineCurve3(pts[i], pts[i + 1]));
       }
       return path;
+    }
+
+    // 직선 하강부 — 단위 높이 원통, 상단 링 = 시브 접점. uv.y = 둘레, uv.x = 호길이(갱신).
+    function makeRopeDrop(ropeR, mat) {
+      const g = new THREE.CylinderGeometry(ropeR, ropeR, 1, 7, 1, true);
+      const uv = g.attributes.uv, pos = g.attributes.position;
+      const top = [];
+      for (let i = 0; i < uv.count; i++) {
+        uv.setXY(i, 0, uv.getX(i));
+        top.push(pos.getY(i) > 0);
+      }
+      uv.setUsage(THREE.DynamicDrawUsage);
+      const m = new THREE.Mesh(g, mat);
+      m.castShadow = true;
+      m.userData.ropeTop = top;
+      return m;
+    }
+    const _dropDir = new THREE.Vector3(), _dropUp = new THREE.Vector3(0, 1, 0);
+    function setRopeDrop(m, tx, ty, tz, bx, by, bz, uTop, uBot) {
+      _dropDir.set(tx - bx, ty - by, tz - bz);
+      const len = _dropDir.length();
+      m.position.set((tx + bx) / 2, (ty + by) / 2, (tz + bz) / 2);
+      m.quaternion.setFromUnitVectors(_dropUp, _dropDir.multiplyScalar(1 / len));
+      m.scale.y = len;
+      const uv = m.geometry.attributes.uv, top = m.userData.ropeTop;
+      for (let i = 0; i < uv.count; i++) uv.setX(i, top[i] ? uTop : uBot);
+      uv.needsUpdate = true;
+      return len;
     }
 
     function buildWireRopes() {
@@ -1817,68 +1991,56 @@
         defY: ud.defY, defZ: ud.defZ, defCenterZ: ud.defCenterZ, defR: ud.defRadius,
         mainY: ud.mainY, mainZ: ud.mainZ, mainR: ud.mainR
       };
-      const cy = carGrp.position.y + S.CAR_H / 2 + 0.68;
-      const wy = cwtGrp.position.y + S.CWT_H / 2 + 0.31;
-      const path = buildWireRopePath(dimensions, cy, wy);
+      const path = buildWireRopePath(dimensions);
       const geometry = new THREE.TubeGeometry(path, 96, ropeR, 7, false);
-      geometry.attributes.position.setUsage(THREE.DynamicDrawUsage);
-      geometry.attributes.normal.setUsage(THREE.DynamicDrawUsage);
-      geometry.computeBoundingBox();
-      geometry.computeBoundingSphere();
-      wireRopeShape = { path, geometry, normal: new THREE.Vector3(), cy, wy, wz: cwtGrp.position.z };
-      // 5가닥: 카 수직 → 메인시브 감김 호 → 공통 외접선 → 현수도르래 감김 호 → 균형추 수직
+      const arcLen = path.getLength();
+      const uv = geometry.attributes.uv;
+      for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * arcLen / WIRE_ROPE_UV_LEN);
+      const start = path.getPoint(0), end = path.getPoint(1);
+      wireRopeShape = {
+        path, geometry, arcLen, carTopY: start.y, carTopZ: start.z, cwtTopY: end.y, cwtTopZ: end.z,
+        carY0: carGrp.position.y, cy: NaN, wy: NaN, wz: NaN
+      };
+      // 5가닥: 카 히치 → (하강부) → 메인시브 감김 호 → 공통 외접선 → 현수도르래 감김 호 → (하강부) → 균형추 히치
       for (let i = 0; i < 5; i++) {
-        const rx = -0.06 + i * 0.03;
+        const rx = ROPE_GROOVE_X[i];
         const mesh = new THREE.Mesh(geometry, rMat);
         mesh.position.x = rx;
         mesh.castShadow = true;
-        ropeObjs.push({ line: mesh, ...dimensions, rx, ropeR });
+        const carDrop = makeRopeDrop(ropeR, rMat), cwtDrop = makeRopeDrop(ropeR, rMat);
+        carDrop.name = `mainRopeCarDrop_${i + 1}`; cwtDrop.name = `mainRopeCwtDrop_${i + 1}`;
+        mesh.add(carDrop, cwtDrop);
+        const [hx, hz] = ROPE_HITCH_XZ[i];
+        ropeObjs.push({ line: mesh, carDrop, cwtDrop, ...dimensions, rx, hx, hz, ropeR });
         scene.add(mesh);
       }
       refreshRopes();
       refreshGovernorRope();
     }
 
+    // 하강부 좌표는 로프 메시(X = 홈 rx) 로컬이다.
     function refreshWireRopeShape(cy, wy) {
       const shape = wireRopeShape;
-      if (!shape || (shape.cy === cy && shape.wy === wy && shape.wz === cwtGrp.position.z)) return;
-      const { path, geometry, normal } = shape;
-      const first = path.curves[0], last = path.curves[path.curves.length - 1];
-      first.v1.y = cy;
-      last.v2.set(0, wy, cwtGrp.position.z);
-      first.updateArcLengths();
-      last.updateArcLengths();
-      path.updateArcLengths();
-      const { tubularSegments, radialSegments, radius } = geometry.parameters;
-      // Keep r128 TubeGeometry sampling and frames, while reusing GPU buffers,
-      // indices and UVs. Recompute the common path once for all five ropes.
-      const frames = path.computeFrenetFrames(tubularSegments, false);
-      geometry.tangents = frames.tangents;
-      geometry.normals = frames.normals;
-      geometry.binormals = frames.binormals;
-      const positions = geometry.attributes.position, normals = geometry.attributes.normal;
-      let vertex = 0;
-      for (let i = 0; i <= tubularSegments; i++) {
-        const point = path.getPointAt(i / tubularSegments);
-        const n = frames.normals[i], b = frames.binormals[i];
-        for (let j = 0; j <= radialSegments; j++) {
-          const angle = j / radialSegments * Math.PI * 2;
-          normal.copy(n).multiplyScalar(-Math.cos(angle)).addScaledVector(b, Math.sin(angle)).normalize();
-          positions.setXYZ(vertex, point.x + radius * normal.x, point.y + radius * normal.y, point.z + radius * normal.z);
-          normals.setXYZ(vertex, normal.x, normal.y, normal.z);
-          vertex++;
-        }
+      const wz = cwtGrp.position.z;
+      if (!shape || (shape.cy === cy && shape.wy === wy && shape.wz === wz)) return;
+      for (const r of ropeObjs) {
+        const dx = r.hx - r.rx;
+        const carLen = Math.hypot(dx, shape.carTopY - cy, CAR_CTR_Z + r.hz - shape.carTopZ);
+        setRopeDrop(r.carDrop, 0, shape.carTopY, shape.carTopZ, dx, cy, CAR_CTR_Z + r.hz,
+          0, -carLen / WIRE_ROPE_UV_LEN);
+        const u0 = shape.arcLen / WIRE_ROPE_UV_LEN;
+        const cwtLen = Math.hypot(dx, shape.cwtTopY - wy, wz + r.hz - shape.cwtTopZ);
+        setRopeDrop(r.cwtDrop, 0, shape.cwtTopY, shape.cwtTopZ, dx, wy, wz + r.hz,
+          u0, u0 + cwtLen / WIRE_ROPE_UV_LEN);
       }
-      positions.needsUpdate = true;
-      normals.needsUpdate = true;
-      geometry.computeBoundingBox();
-      geometry.computeBoundingSphere();
-      shape.cy = cy; shape.wy = wy; shape.wz = cwtGrp.position.z;
+      // 카가 Δ 오르면 카측 로프가 Δ 줄고 그만큼 시브를 넘어 균형추측으로 간다.
+      getWireRopeMat().map.offset.x = -(cy - shape.carY0 - S.CAR_H / 2 - CAR_ROPE_END_DY) / WIRE_ROPE_UV_LEN;
+      shape.cy = cy; shape.wy = wy; shape.wz = wz;
     }
 
     function refreshRopes() {
-      const cy = carGrp.position.y + S.CAR_H / 2 + 0.68;
-      const wy = cwtGrp.position.y + S.CWT_H / 2 + 0.31;
+      const cy = carGrp.position.y + S.CAR_H / 2 + CAR_ROPE_END_DY;
+      const wy = cwtGrp.position.y + S.CWT_H / 2 + CWT_ROPE_END_DY;
       refreshWireRopeShape(cy, wy);
       // 카 위치가 바뀌면 이동케이블 곡면과 종단 리미트 레버도 같이 따라간다.
       // (운행·점검·과속 낙하 모든 경로가 refreshRopes 를 거치므로 호출점은 여기 하나다)

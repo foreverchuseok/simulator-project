@@ -156,6 +156,72 @@ def join(name, objects, parent):
     return obj
 
 
+# ── 상자형 급유기(오일통) — 카·균형추 가이드슈 공용 ─────────────────────────
+# 현장 사진(2026-09-24 스크린샷 010249·010024·001412): 유백색 반투명 사각 통 +
+# 회베이지 뚜껑. 뚜껑은 레일 날 쪽으로 튀어나와 날을 U 홈으로 감싸고, 통 안 펠트가
+# 날 끝과 양옆에 닿아 기름을 바른다. 앱 계약: 노드 이름 `Oiler`(하부 슈는 JS가 숨김).
+OILER_BODY = (0.006, 0.080)   # 레일 날끝에서 통 몸체까지 거리 범위 (레일 반대쪽)
+OILER_HALF_Z = 0.043
+OILER_H = 0.080
+OILER_LID_T = 0.008
+OILER_LID_OVER = 0.024        # 뚜껑이 날끝 너머 레일 쪽으로 덮는 길이
+_OILER_MATS = {}
+
+
+def _oiler_mats():
+    if not _OILER_MATS:
+        _OILER_MATS.update(
+            shell=material("Oiler_Shell", (0.86, 0.87, 0.84), 0.0, 0.35, 0.72),
+            lid=material("Oiler_Lid", (0.50, 0.48, 0.43), 0.0, 0.85),
+            oil=material("Oiler_Oil", (0.42, 0.22, 0.04), 0.0, 0.25),
+            felt=material("Oiler_Felt", (0.16, 0.15, 0.13), 0.0, 0.95),
+            zinc=material("Oiler_Bracket", (0.55, 0.57, 0.58), 0.8, 0.35))
+    return _OILER_MATS
+
+
+def build_box_oiler(parent, tip, half_z, base_y, sign=1, name="Oiler"):
+    """tip: 레일 날끝 X, sign: 날끝에서 통 쪽 방향(+1 = +X). 레일 날은 sign*(x-tip) <= 0, |z| <= half_z."""
+    m = _oiler_mats()
+    X = lambda d: tip + sign * d
+    oiler = bpy.data.objects.new(name, None)
+    bpy.context.collection.objects.link(oiler)
+    oiler.parent = parent
+    b0, b1 = OILER_BODY
+    bx, bw = X((b0 + b1) / 2), b1 - b0
+    y0 = base_y + 0.003
+    bracket = box("Oiler bracket", (bw + 0.010, 0.003, 2 * OILER_HALF_Z + 0.006),
+                  (bx, base_y + 0.0015, 0), m["zinc"], 0.0005)
+    join("OilerBracket", [bracket], oiler)
+    body = box("Oiler body", (bw, OILER_H, 2 * OILER_HALF_Z), (bx, y0 + OILER_H / 2, 0), bevel=0)
+    subtract(body, box("Oiler cavity", (bw - 0.005, OILER_H, 2 * OILER_HALF_Z - 0.005),
+                       (bx, y0 + OILER_H / 2 + 0.0025, 0), bevel=0))
+    finish(body, m["shell"], 0.001)
+    join("OilerBody", [body], oiler)
+    oil = box("Oil", (bw - 0.006, OILER_H * 0.5, 2 * OILER_HALF_Z - 0.006),
+              (bx, y0 + 0.003 + OILER_H * 0.25, 0), m["oil"], 0)
+    join("OilerOil", [oil], oiler)
+    l0, l1 = -OILER_LID_OVER, b1 + 0.004
+    lid_y = y0 + OILER_H + OILER_LID_T / 2
+    lid = box("Oiler lid", (l1 - l0, OILER_LID_T, 2 * OILER_HALF_Z + 0.008),
+              (X((l0 + l1) / 2), lid_y, 0), bevel=0)
+    n0, n1 = l0 - 0.01, 0.0015
+    subtract(lid, box("Lid rail notch", (n1 - n0, 0.1, 2 * (half_z + 0.0015)),
+                      (X((n0 + n1) / 2), lid_y, 0), bevel=0))
+    finish(lid, m["lid"], 0.0015)
+    cap = cylinder("Oiler filler cap", 0.011, 0.008,
+                   (X(b1 - 0.022), lid_y + OILER_LID_T / 2 + 0.004, 0.018), m["lid"], sides=16)
+    join("OilerLid", [lid, cap], oiler)
+    fy0, fy1 = y0 + OILER_H - 0.036, y0 + OILER_H - 0.004
+    fy, fh = (fy0 + fy1) / 2, fy1 - fy0
+    felts = [box("Felt tip pad", (b0 - 0.0005, fh, 0.024), (X((b0 + 0.0005) / 2), fy, 0), m["felt"], 0)]
+    for zs in (-1, 1):
+        felts.append(box("Felt side pad", (0.018, fh, 0.004),
+                         (X(-0.009), fy, zs * (half_z + 0.002)), m["felt"], 0))
+    join("OilerFelt", felts, oiler)
+    return oiler
+
+
+
 def build():
     bpy.ops.object.select_all(action='SELECT')
     bpy.ops.object.delete(use_global=False)
@@ -235,26 +301,8 @@ def build():
         adjuster.append(cylinder("Thread crest", 0.00445, 0.00045, (x, 0.078, 0), steel, axis='x', bevel=0))
     join("Adjuster", adjuster, root)
 
-    oiler = bpy.data.objects.new("Oiler", None)
-    bpy.context.collection.objects.link(oiler)
-    oiler.parent = root
-    cup_x = HOUSING_END + 0.007
-    cup_y = GUIDE_BOTTOM + GUIDE_HEIGHT + 0.031
-    glass = material("Shoe_OilerCup", (0.55, 0.68, 0.66), 0.0, 0.20, 0.30)
-    oil = material("Shoe_Oil", (0.38, 0.19, 0.035), 0.0, 0.32)
-    cup = cylinder("Reservoir", 0.018, 0.047, (cup_x, cup_y, 0), glass, bevel=0.001)
-    subtract(cup, cylinder("Reservoir cavity", 0.0165, 0.060, (cup_x, cup_y + 0.008, 0), bevel=0))
-    cup.parent = oiler
-    fluid = cylinder("Oil level", 0.016, 0.022, (cup_x, cup_y - 0.009, 0), oil)
-    fluid.parent = oiler
-    cap_parts = [cylinder("Oil cap", 0.020, 0.007, (cup_x, cup_y + 0.026, 0), zinc, sides=12),
-                 cylinder("Oil outlet", 0.004, 0.018, (cup_x, cup_y - 0.030, 0), bolts),
-                 box("Wick support", (0.013, 0.004, 0.018),
-                     (CHANNEL_END + 0.0075, GUIDE_BOTTOM + GUIDE_HEIGHT + 0.010, 0), zinc)]
-    join("OilerHardware", cap_parts, oiler)
-    wick = box("Lubricating felt", (0.005, 0.009, 2 * CHANNEL_HALF_Z),
-               (RAIL_TIP + 0.0025, GUIDE_BOTTOM + GUIDE_HEIGHT + 0.010, 0), rubber, 0.0003)
-    wick.parent = oiler
+    # 상자형 오일통 — 슈 상부 리테이너(볼트 머리 포함) 위 브라켓에 얹는다.
+    build_box_oiler(root, RAIL_TIP, CHANNEL_HALF_Z, GUIDE_BOTTOM + GUIDE_HEIGHT + 0.0065)
 
     bpy.ops.export_scene.gltf(filepath=str(OUTPUT_PATH), export_format='GLB',
                               export_extras=True, export_apply=True, export_animations=False)

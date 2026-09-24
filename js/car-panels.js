@@ -210,6 +210,21 @@ function buildCarControls(parent,{floorY,frontZ,sideX}) {
     cyl(0.006,0.07,metal,-0.105,y,z,topBox,'x');
   }
   const badge=label('CAR TOP',0.17,0.04,0.078,0.22,0,topBox,'#1e2428');badge.rotation.y=Math.PI/2;
+  // 카탑 박스 전면 안전 스티커 2종 (좌측: 안전공간 1m 표지, 우측: 추락주의)
+  const stickerLoader=new THREE.TextureLoader();
+  const createTopBoxSticker=(name,url,z)=>{
+    const tex=stickerLoader.load(url);
+    tex.encoding=THREE.sRGBEncoding;
+    tex.generateMipmaps=true;
+    tex.minFilter=THREE.LinearMipmapLinearFilter;
+    const mat=new THREE.MeshBasicMaterial({
+      map:tex,transparent:true,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1,depthWrite:false
+    });
+    const mesh=new THREE.Mesh(new THREE.PlaneGeometry(0.105,0.126),mat);
+    mesh.name=name;mesh.position.set(0.078,0.055,z);mesh.rotation.y=Math.PI/2;topBox.add(mesh);return mesh;
+  };
+  createTopBoxSticker('topBoxStickerPosture','assets/bg/cartop_posture.png',0.068);
+  createTopBoxSticker('topBoxStickerDanger','assets/bg/cartop_danger.png',-0.068);
   CarWiring.init(topBox,{sideX,frontZ});CarWiring.entryPlate(metal,dark);
   const q=CarWiring.layout;
   const sideWall=parent.getObjectByName('carWallLeft');

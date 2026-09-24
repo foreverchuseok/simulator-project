@@ -93,6 +93,16 @@ def add_box(dims, loc, mat, rot=(0, 0, 0)):
     bpy.context.active_object.scale = dims
     return _finish(mat, smooth=False)
 
+def soften_edges(obj, width=0.0007, segments=3):
+    """Small manufactured edge radii, with flat faces and smooth chamfers."""
+    bpy.context.view_layer.objects.active=obj
+    bevel=obj.modifiers.new('machined_edge','BEVEL');bevel.width=width;bevel.segments=segments
+    bpy.ops.object.modifier_apply(modifier=bevel.name)
+    for face in obj.data.polygons:face.use_smooth=True
+    weighted=obj.modifiers.new('weighted_faces','WEIGHTED_NORMAL');weighted.keep_sharp=True
+    bpy.ops.object.modifier_apply(modifier=weighted.name)
+    return obj
+
 def add_cyl(radius, depth, loc, mat, rot=(0, 0, 0), verts=32, smooth=False):
     bpy.ops.mesh.primitive_cylinder_add(vertices=verts, radius=radius, depth=depth,
                                         location=loc, rotation=rot)
@@ -142,7 +152,7 @@ def add_plate(pts, depth, mat, loc=(0, 0, 0), rot=(0, 0, 0), bevel_w=0.0012, nam
     obj.modifiers.new("tri", 'TRIANGULATE')
     sol = obj.modifiers.new("sol", 'SOLIDIFY'); sol.thickness = depth; sol.offset = 0
     if bevel_w > 0:
-        bev = obj.modifiers.new("bev", 'BEVEL'); bev.width = bevel_w; bev.segments = 2
+        bev = obj.modifiers.new("bev", 'BEVEL'); bev.width = bevel_w; bev.segments = 3
     for md in list(obj.modifiers):
         bpy.ops.object.modifier_apply(modifier=md.name)
     obj.location = loc
@@ -150,6 +160,10 @@ def add_plate(pts, depth, mat, loc=(0, 0, 0), rot=(0, 0, 0), bevel_w=0.0012, nam
     obj.data.materials.clear()
     obj.data.materials.append(mat)
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    if mat in (MAT_STEEL,MAT_PAWL,MAT_CAM):
+        for face in obj.data.polygons:face.use_smooth=True
+        normal=obj.modifiers.new('plate_face_normals','WEIGHTED_NORMAL');normal.keep_sharp=True
+        bpy.ops.object.modifier_apply(modifier=normal.name)
     return obj
 
 def add_helix(loc, mat, coil_r=0.020, wire=0.0050, turns=9, length=0.098, name="helix",
@@ -289,6 +303,8 @@ BASE_L    = -0.175
 SW_X, SW_Y, SW_Z = -0.139, 0.220, 0.050
 SW_W, SW_H, SW_D = 0.032, 0.106, 0.028
 SW_TILT   = math.radians(15)
+SW_CASE_W, SW_CASE_H, SW_CASE_D = 0.024, 0.102, 0.018
+SW_COVER_T = 0.0018
 Z_HIT     = 0.062
 
 # ── 진자 ────────────────────────────────────────────────────────────────────
@@ -431,9 +447,9 @@ ACT_DIR   = (math.cos(SW_TILT), -math.sin(SW_TILT))
 ACT_NRM   = (-ACT_DIR[1], ACT_DIR[0])
 ACT_TIP   = (-0.0930, 0.2180)
 ACT_HT    = 0.005
-ACT_HR    = 0.006
-ACT_THK   = 0.010
-SECT_R    = 0.013
+ACT_HR    = 0.0035
+ACT_THK   = 0.0035
+SECT_R    = 0.0065
 _ACT_AXT  = (ACT_TIP[0] - ACT_NRM[0] * ACT_HT, ACT_TIP[1] - ACT_NRM[1] * ACT_HT)
 _ACT_FACE = SWP(SW_X + SW_W / 2 - 0.001, SW_Y)
 ACT_LEN   = ((_ACT_AXT[0] - _ACT_FACE[0]) * ACT_DIR[0] + (_ACT_AXT[1] - _ACT_FACE[1]) * ACT_DIR[1])
@@ -486,19 +502,21 @@ def build_base():
     p.append(add_cyl(0.0068, 0.010, T(0, GWY, z0 + 0.0139), MAT_DARK, rot=AX, verts=24))
 
     # ── 과속스위치 본체 ──
-    p.append(add_box((SW_W, SW_D, SW_H), T(SW_X, SW_Y, SW_Z), MAT_GOLD, rot=SW_ROT))
-    swF = SW_Z + SW_D / 2
-    p.append(add_box((0.018, 0.002, 0.036), T(*SWP(SW_X, SW_Y + 0.004), swF + 0.002), MAT_LABEL, rot=SW_ROT))
-    
-    sw_bot = SW_Y - SW_H / 2
-    sw_top = SW_Y + SW_H / 2
-    sw_shell = [SWP(SW_X - 0.018, sw_bot + 0.004), SWP(SW_X + 0.018, sw_bot + 0.004),
-                SWP(SW_X + 0.020, SW_Y + 0.010), SWP(SW_X + 0.006, sw_top + 0.006),
-                SWP(SW_X - 0.018, sw_top)]
-    p.append(add_plate(sw_shell, 0.010, MAT_GLASS, loc=(0, -(SW_Z - SW_D / 2 - 0.005), 0), bevel_w=0.0008, name="swShell"))
-    p.append(add_box((0.005, SW_D + 0.004, SW_H - 0.008), T(*SWP(SW_X - SW_W / 2 - 0.004, SW_Y), SW_Z), MAT_GREY, rot=SW_ROT))
-    for by in (SW_Y - SW_H * 0.28, SW_Y + SW_H * 0.28):
-        p.append(add_cyl(0.0030, 0.012, T(*SWP(SW_X - SW_W / 2 - 0.008, by), SW_Z), MAT_CHROME, rot=(0, math.pi / 2 + SW_TILT, 0), verts=12))
+    p.append(soften_edges(add_box((SW_CASE_W, SW_CASE_D, SW_CASE_H),T(SW_X,SW_Y,SW_Z),MAT_DARK,rot=SW_ROT),.0015))
+    # Thin folded cover: the wheel-facing edge stops before the actuator root.
+    # Keep the old ACT_ROOT/ACT_TIP and cable outlet as mounting datums.
+    sw_bot=SW_Y-SW_H/2;sw_top=SW_Y+SW_H/2
+    shell=[SWP(SW_X-.021,sw_bot),SWP(SW_X+.006,sw_bot),
+           SWP(SW_X+.010,sw_top-.007),SWP(SW_X-.004,sw_top+.006),SWP(SW_X-.021,sw_top+.006)]
+    swF=SW_Z+SW_CASE_D/2+.003
+    p.append(add_plate(shell,SW_COVER_T,MAT_BLUE,loc=(0,-swF,0),bevel_w=.0005,name='switchFoldedCover'))
+    p.append(soften_edges(add_box((SW_COVER_T,SW_CASE_D+.005,SW_H),T(*SWP(SW_X-.021,SW_Y),SW_Z),MAT_BLUE,rot=SW_ROT),.0005))
+    for by in (sw_bot+.008,sw_top-.008):
+        x,y=SWP(SW_X-.013,by)
+        p.append(soften_edges(add_cyl(.0024,.0018,T(x,y,swF+.0018),MAT_CHROME,rot=AX,verts=16),.0003,2))
+        p.append(add_box((.0028,.0003,.0004),T(x,y,swF+.0028),MAT_DARK,rot=SW_ROT))
+    p.append(add_cyl(.0050,.003,T(ACT_ROOT[0],ACT_ROOT[1],SW_Z-.004),MAT_STEEL,rot=AX,verts=24))
+    p.append(add_cyl(.0045,.006,T(*SWP(SW_X,sw_bot+.001),SW_Z),MAT_GREY,rot=(SW_TILT,0,0),verts=16))
 
     # ── ★쇄기 수평 고정 브래킷(pawlBracket)은 두지 않는다 ──
     #   쐐기는 애초에 베이스에 고정된 브래킷에 걸리는 부품이 아니다.
@@ -578,7 +596,7 @@ def spoke_pts(empty_side=1, r0=0.026, r1=0.078, curve=0.008, n=12):
 
 
 def cam_pts_hook(n=CAM_TEETH, r_out=CAM_OUT, r_root=CAM_ROOT, phase=CAM_PHASE):
-    """★실사 100% 일치 원형 톱날형 래칫 휠 — 직각 스톱면이 쐐기 부리를 낚아채 정지시킴.
+    """원본 영상 참고 원형 톱날형 래칫 휠 — 직각 스톱면에 쐐기 부리가 걸리는 형상.
        한 톱날: 골(a0) → 수직 스톱면(직각 걸림턱) → 톱날 팁(r_out) → 완만한 등면 하강 → 다음 골."""
     pts = []
     step = 2.0 * math.pi / n
@@ -686,15 +704,15 @@ def build_pendulum(name, pivot_ang, release_tab=False, tie_cx=0.0, spr_cx=0.0):
     dx, dy = W(mc[0], mc[1])
     p = []
     # 원통 추 — 후면(PEND_REAR)부터 전면(Z_PEND_F)까지 한 덩어리
-    p.append(add_cyl(PEND_W_R, PEND_W_T, T(dx, dy, PEND_W_ZC), MAT_COPPER, rot=AX, verts=48))
+    p.append(soften_edges(add_cyl(PEND_W_R,PEND_W_T,T(dx,dy,PEND_W_ZC),MAT_STEEL,rot=AX,verts=48),.0010))
     # 피벗→추 연결부도 같은 두께의 한 덩어리
-    hull = [W(q[0], q[1]) for q in tangent_hull((0.0, 0.0), PEND_B_R, mc, PEND_W_R)]
-    p.append(add_plate(hull, PEND_W_T, MAT_COPPER, loc=(0, -PEND_W_ZC, 0),
+    hull = [W(q[0], q[1]) for q in tangent_hull((0.0, 0.0), PEND_B_R*.75, mc, PEND_W_R*.52)]
+    p.append(add_plate(hull, PEND_W_T*.75, MAT_STEEL, loc=(0, -PEND_W_ZC, 0),
                        bevel_w=0.0020, name="pendMass"))
     for zf, zk in ((Z_PEND_F - 0.0005, Z_PEND_F - 0.0025),
                    (PEND_REAR + 0.0005, PEND_REAR + 0.0025)):
-        p.append(add_cyl(PEND_W_R - 0.0055, 0.0025, T(dx, dy, zf), MAT_COPPER, rot=AX, verts=40))
-        p.append(add_cyl(0.0046, 0.006, T(dx, dy, zk), MAT_CHROME, rot=AX, verts=20))
+        p.append(soften_edges(add_cyl(PEND_W_R-.0025,.0015,T(dx,dy,zf),MAT_STEEL,rot=AX,verts=48),.0005))
+        p.append(soften_edges(add_cyl(.0046,.006,T(dx,dy,zk),MAT_CHROME,rot=AX,verts=6),.00035,2))
     # ── 과속스위치 릴리즈 탭 (PendA 전용 실사 체결 볼트 뭉치 — 실사 120651, 120647) ───────
     #   실사 구조: 진자 원통 추 외경에 탭 구멍 → 하단 육각 너트(빨간 페인트 씰) → 나사산 스터드 → 상단 정사각형 네모 머리 볼트
     if release_tab:
@@ -808,11 +826,13 @@ def build_catch():
     p = []
     # 레버판 — 좌단 스위치 타격 뭉치는 원본 tip 폴리곤(통짜 블록+작은 팁).
     #   ★1·2번 빨간 원: 레버 위 장식 원형 캡/리벳은 실사에 없음 → 만들지 않음.
-    tip = [(LEV_L + 0.020,  0.011), (LEV_L - 0.002,  0.011), (LEV_L - 0.004,  0.002),
-           (LEV_L - 0.004, -0.014), (LEV_L + 0.004, -0.016), (LEV_L + 0.020, -0.007)]
-    plate = tip + [(LEV_R, -0.013), (LEV_R, 0.014)]
-    p.append(add_plate([A(q[0], q[1]) for q in plate], 0.011, MAT_STEEL,
-                       loc=(0, -Z_LEVER, 0), bevel_w=0.0016, name="catchPlate"))
+    tip=[(LEV_L+.022,.010),(LEV_L+.001,.010),(LEV_L-.003,.007),
+         (LEV_L-.004,.001),(LEV_L-.004,-.012),(LEV_L-.002,-.015),
+         (LEV_L+.003,-.015),(LEV_L+.006,-.008),(LEV_L+.010,-.005),
+         (LEV_L+.018,-.005)]
+    plate=tip+[(-.060,-.006),(-.025,-.010),(.018,-.011),(.065,-.013),(LEV_R,-.014),(LEV_R,.015)]
+    p.append(add_plate([A(q[0],q[1]) for q in plate],.008,MAT_STEEL,
+                       loc=(0,-Z_LEVER,0),bevel_w=.0010,name='catchPlate'))
 
     # ★쇄기 푸시 탭 삭제 (1637531.png 빨강) — 쇄기가 11시로 옮겨가 진자 뭉치가
     #   직접 치므로 레버에서 내려오던 이 발은 더 이상 아무 것도 누르지 않는다.
@@ -840,7 +860,7 @@ def _aim_xy(ang):
 
 
 def build_pawl():
-    """★실사 100% 일치 쐐기(Catch Pawl) — 래칫 톱날의 한 톱니 홈에 정확히 물리는 갈고리형 멈춤쇠.
+    """쐐기(Catch Pawl) — 기존 물림 끝점을 유지한 가공 갈고리형 멈춤쇠.
        대기: 톱날 위에 2mm 안전 간극으로 떠서 함께 회전.
        트립: 래퍼 rotation.z +0.60rad (Three.js). 음수는 부리를 골에서 들어 올린다."""
     p = []
@@ -857,12 +877,15 @@ def build_pawl():
     #    피벗 보스 → 두툼하고 평평한 하부 바디 → 래칫 스톱면에 걸리는 뾰족한 직각 팁
     pts = [
         # 피벗 보스 후방
-        P(-0.007,  0.006),
-        P(-0.007, -0.008),
+        P(-0.003,  0.007),
+        P(-0.006,  0.0055),
+        P(-0.0075, 0.002),
+        P(-0.0075,-0.004),
+        P(-0.0055,-0.0075),
         # 피벗 하단 (살을 두툼하게 채움)
-        P( 0.000, -0.012),
+        P( 0.000, -0.010),
         # 하단 배면 (오목하지 않고 평평하고 든든하게 채운 라인)
-        P( 0.010, -0.014),
+        P( 0.010, -0.012),
         P( 0.019, -0.016),
         # 갈고리 부리 팁 (스톱면 골에 정확히 박히는 뾰족한 끝단)
         P( 0.026, -0.019),
@@ -883,8 +906,11 @@ def build_pawl():
     p.append(body)
 
     # 피벗 보스 베어링 칼라 & 와셔
-    p.append(add_cyl(0.0055, PAWL_T + 0.0016, T(piv[0], piv[1], PAWL_Z), MAT_CHROME, rot=AX, verts=24))
+    p.append(soften_edges(add_cyl(0.0055, PAWL_T + 0.0016, T(piv[0], piv[1], PAWL_Z), MAT_CHROME, rot=AX, verts=32),.0004))
     p.append(add_cyl(0.0034, PAWL_T + 0.0040, T(piv[0], piv[1], PAWL_Z), MAT_STEEL, rot=AX, verts=16))
+    screw_z=PAWL_Z_FRONT+.003
+    p.append(soften_edges(add_cyl(.0043,.002,T(piv[0],piv[1],screw_z),MAT_CHROME,rot=AX,verts=6),.00025,2))
+    p.append(add_box((.0045,.0003,.0007),T(piv[0],piv[1],screw_z+.0011),MAT_DARK))
 
     # 2. 복귀 인장 스프링 (스틸 실사 코일) — 쐐기 앞쪽 핀 ↔ 좌측 브라켓 가로 연결
     #    ★정면(밖)에서는 래칫/캐치 레버에 가려 안 보이고, 위에서 내려다볼 때 가로로 조그맣게 걸림
@@ -958,6 +984,7 @@ bpy.data.objects['BaseFrame']['mechanism']={
     'gripArm':CATCH_GRIP,'switchRot':-0.70,'toothStep':_STEP,'drag':0.12,
     'padPoint':[SHOE_X,SHOE_Y0+0.002,0.0],
     'ropeFaceX':0.100+ROPE_RADIUS_LOCAL,'switchHitPhase':SWITCH_HIT_PHASE,
+    'switchCableExit':[*SWP(SW_X, SW_Y-SW_H/2), SW_Z],
     'strikePoint':list(RELEASE_TAB_POINT),'switchTip':[ACT_TIP[0],ACT_TIP[1],SW_Z],
     'strikeRadialGap':math.hypot(_tx,_ty)-math.hypot(ACT_TIP[0],ACT_TIP[1]-GWY)}
 

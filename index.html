@@ -619,8 +619,11 @@
         <button class="c-btn" id="c-car" aria-pressed="false">카 내부</button>
         <button class="c-btn" id="c-car-top" aria-pressed="false">카 상부</button>
         <button class="c-btn" id="c-governor" aria-pressed="false">조속기</button>
+        <button class="c-btn" id="c-traction" aria-pressed="false">권상기</button>
+        <button class="c-btn" id="tm-cutaway" aria-pressed="false" title="기어 케이스 절개 — 웜·휠 이물림과 오일 레벨">권상기 내부</button>
         <div class="dd-title">배경</div>
         <button class="c-btn" id="c-background" aria-pressed="false" title="기존 건물과 자연 풍경 표시">주변 풍경</button>
+        <button class="c-btn active" id="c-mascot" aria-pressed="true" title="기계실 마스코트 표시/숨김">캐릭터</button>
       </div>
     </div>
 
@@ -677,6 +680,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
   <script src="js/config.js"></script>
   <script src="js/environment.js"></script>
+  <script src="js/machine-room-safety.js"></script>
+  <script src="js/mascot.js"></script>
   <script src="js/hall-interlock.js"></script>
   <script src="js/car-door-transmission.js"></script>
   <script src="js/car-door.js"></script>
@@ -834,15 +839,17 @@
        해치 케이블 행거(고정) ↔ 카 케이블 행거(세이프티 디바이스) 사이에서
        U 자 곡면을 그리며 늘어진다. 총 길이는 "최하층에서 곡면 최하단 = 피트 바닥
        +300mm" 조건으로 buildTravelCable() 이 역산한다. */
-    const TC_X          = -(CAR_RAIL_X + 0.1475);      // 케이블 주행 X (좌측)
-    const TC_LOOP_R     = 0.120;                    // U 곡면 반지름
+    const TC_X          = -(CAR_RAIL_X + 0.1875);   // 승강로 고정측 가닥 X
+    const TC_LOOP_R     = 0.220;                    // 카 안쪽으로 돌아오는 XY 평면 U 곡면
+    const TC_CAR_X      = TC_X + 2 * TC_LOOP_R;     // 카 하부 가닥 X
     const TC_CAR_Z      = CAR_RAIL_Z + 0.65;       // 센서 및 레일 취부 암보다 전면으로 분리
-    const TC_FIX_Z      = TC_CAR_Z + 2 * TC_LOOP_R; // 승강로 고정측 가닥 Z
+    const TC_FIX_Z      = TC_CAR_Z;                 // 두 가닥은 같은 Z, 폭 방향은 Z
     const TC_PIT_CLEAR  = 0.30;                     // 최하층 곡면 최하단 ↔ 피트 바닥 300±50mm (188p)
     const TC_HANGER_UP  = 1.00;                     // 해치 행거 = B 지점 카 바닥 +1,000mm (187p)
-    const TC_W          = 0.075;                    // 편평형 이동케이블 폭
-    const TC_T          = 0.008;                    // 편평형 이동케이블 두께
-    const TC_CAR_HANGER_LY = -(S.CAR_H / 2) - 0.2725; // 카 케이블 행거 로컬 Y (세이프티 플랭크 하부)
+    const TC_W          = 0.100;                    // 현장 사진의 넓은 편평 외피
+    const TC_T          = 0.007;                    // 얇은 PVC 외피
+    const TC_SADDLE_R   = 0.065;                    // 둥근 케이블 지지부 반지름 (케이블 중심선)
+    const TC_CAR_HANGER_LY = -(S.CAR_H / 2) - 0.40; // 플랫폼 아래 원형 지지부 접선 Y
     const TC_WALL_X = -(S.SHAFT_W / 2) + 0.060; // 외피 끝과 벽 사이 22.5mm
     const TC_SIDE_X = -(S.CAR_W / 2) - 0.050; // 외피 끝과 카 외판 사이 12.5mm
     const TC_CAR_TOP_LY = S.CAR_H / 2 + 0.36 + 0.07 + 0.10; // 카 천장 고정 브라켓 로컬 Y
@@ -855,7 +862,7 @@
     const TOP_LIGHT_SWITCH_Y = FLOOR_Y[FLOORS - 1] + 1.00;
     const SHAFT_SWITCH_Z = FRONT_WALL_INNER_Z - 0.40 - 0.36; // 사다리 옆, 상하 동일 위치
     const SHAFT_LIGHT_Z = CAR_RAIL_Z - 0.95; // 레일 브라켓 뒤 벽면
-    const TC_COLOR = 0x45494d; // 회색 PVC 외피, 현재 장면 광량에서 회색으로 보이도록 조정
+    const TC_COLOR = 0x73777c; // 현장 회색 PVC, 재질에서 sRGB→linear 변환
     /* 기계실 케이블 관통구 X — 제어반 캐비닛(폭 0.3 × scale 1.5) 바깥이라야 인출이 보인다.
        T 케이블 고정단도 천장을 타고 여기로 모여 제어반으로 들어간다(187p 1항). */
     const MR_CABLE_HOLE_X = (-(S.SHAFT_W / 2) + 0.15) + 0.15 * 1.5 + 0.14;
@@ -1114,6 +1121,7 @@
       buildLimitSwitches();       // 좌측 레일 CAM ASSY(파이널 리미트) + SLD 자석판 (16.7~16.8)
       buildLevelingVanes();       // 각 층 착상장치 차폐판 (LCD Vane, 좌측 레일)
       buildMachineRoom();       // 기계실 및 도르래
+      Mascot.build(scene, 0.24, Y0 + TOTAL_H + 0.02, 0.60, 0.95); // 기계실 마스코트 「승강곰」(카메라 메뉴에서 표시/숨김)
       buildCarCabin();          // 재공사 스텁 — 원본 js/archive/car.js
       buildPassenger();         // 재공사 스텁 — 탑승자 원본 동일 파일
       buildHatchDoors();        // 재공사 스텁 — 헤더·페시아·토가드 포함 원본 동일 파일
@@ -1152,6 +1160,7 @@
       // 시브 자전은 여기서 시간 기반으로 흉내내지 않는다.
       // 카가 실제로 움직인 만큼만 ui.js spinSheaves(deltaY)가 4개 시브를 돌린다
       // (방향·속도가 로프와 물리적으로 일치하고, 카가 멈추면 시브도 즉시 멈춘다).
+      Mascot.update(performance.now() / 1000);
       controls.update();
       if (camera.position.y < Y0 + 0.35) camera.position.y = Y0 + 0.35;
       renderer.render(scene, camera);

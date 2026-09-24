@@ -13,11 +13,13 @@ const server=http.createServer((req,res)=>{
 await new Promise(r=>server.listen(8896,'127.0.0.1',r));
 let browser;
 try {
-  browser=await chromium.launch();
+  browser=await chromium.launch({args:['--enable-gpu']});
   const page=await browser.newPage({viewport:{width:1280,height:900}});
   const errors=[]; page.on('pageerror',e=>{errors.push(e.message);console.error(e.stack);});
-  await page.goto('http://127.0.0.1:8896/index.html?tcam',{waitUntil:'networkidle'});
+  await page.goto(process.env.SIMULATOR_URL||'http://127.0.0.1:8896/index.html?tcam',{waitUntil:'networkidle'});
   await page.waitForFunction(()=>travelCable.ready && carGrp.userData.safetyGear);
+  await page.waitForFunction(()=>document.getElementById('loading').classList.contains('hide'));
+  await page.evaluate(()=>document.getElementById('loading').style.display='none');
   const result=await page.evaluate(()=>{
     const checks=[]; const check=(name,pass,detail)=>checks.push({name,pass,detail});
     const original=carGrp.position.y, originalCwt=cwtGrp.position.y;
@@ -30,7 +32,9 @@ try {
       const p=travelCable.ribbon.geometry.attributes.position;
       check('finite ribbon',Array.from(p.array).every(Number.isFinite),y);
       const bb=new THREE.Box3().setFromObject(travelCable.ribbon);
-      check('car and wall clearance',bb.min.x>-S.SHAFT_W/2&&bb.max.x<-S.CAR_W/2,{min:bb.min.toArray(),max:bb.max.toArray()});
+      let underCar=true;
+      for(let i=0;i<p.count;i++)if(p.getX(i)>-S.CAR_W/2&&p.getY(i)>y-S.CAR_H/2-.30)underCar=false;
+      check('wall clearance / car-side leg stays below platform',bb.min.x>-S.SHAFT_W/2&&underCar,{min:bb.min.toArray(),max:bb.max.toArray()});
     }
     move(original);cwtGrp.position.y=originalCwt;refreshRopes();
     for(const name of ['fixedCableRun','carCableRun']){
@@ -57,13 +61,14 @@ try {
       const y=FLOOR_Y[1]+S.CAR_H/2;
       const dy=y-carGrp.position.y;carGrp.position.y=y;cwtGrp.position.y-=dy;refreshRopes();
       let target,cam;
-      if(view==='loop') {target=[TC_X,travelCable.loopBottomY+0.18,(TC_FIX_Z+TC_CAR_Z)/2];cam=[TC_X+0.65,target[1]+0.20,target[2]+1.0];}
+      if(view==='loop') {wallGrp.visible=false;target=[(TC_X+TC_CAR_X)/2,travelCable.loopBottomY+0.18,TC_CAR_Z];cam=[TC_X+0.65,target[1]+0.20,target[2]+1.2];}
       if(view==='under'){target=[TC_SIDE_X,y+TC_CAR_HANGER_LY+0.15,TC_CAR_Z];cam=[TC_SIDE_X-0.75,target[1]-0.40,target[2]+0.50];}
       if(view==='side'){target=[TC_SIDE_X,y+0.55,TC_CAR_Z];cam=[-3.2,y+0.5,TC_CAR_Z+0.7];}
-      if(view==='hanger'){target=[TC_X,travelCable.hangerY+0.15,TC_FIX_Z];cam=[TC_X-0.65,target[1]+0.05,target[2]+0.6];}
+      if(view==='hanger'){carGrp.visible=false;target=[TC_X-.045,travelCable.hangerY+0.05,TC_FIX_Z];cam=[TC_X+.40,target[1]+0.05,target[2]+0.65];}
       if(view==='overall'){target=[-1.3,6,0];cam=[5,7,5];}
       camera.position.set(...cam);controls.target.set(...target);controls.update();
     },view);
+    await page.evaluate(()=>renderer.render(scene,camera));
     await page.screenshot({path:path.join(root,`.shot-tc-real-${view}.png`)});
   }
   result.push({name:'page errors',pass:errors.length===0,detail:errors});

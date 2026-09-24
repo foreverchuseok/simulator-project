@@ -76,9 +76,9 @@ function updateManualCameraNear() {
       }
 
       // 브레이크 개방 — 솔레노이드 클랙 + 짧은 공기 해방음
-      function brakeRelease() { const c = ac(), t = c.currentTime; clack(c, t, 900, 0.05, 0.5); hiss(c, t + 0.02, 0.16, 0.10, 1200); }
+      function brakeRelease() { setTractionBrake(true); const c = ac(), t = c.currentTime; clack(c, t, 900, 0.05, 0.5); hiss(c, t + 0.02, 0.16, 0.10, 1200); }
       // 브레이크 체결 — 묵직한 쿵 + 클랙
-      function brakeSet() { const c = ac(), t = c.currentTime; thump(c, t, 58, 0.18, 0.5); clack(c, t + 0.03, 520, 0.06, 0.45); }
+      function brakeSet() { setTractionBrake(false); const c = ac(), t = c.currentTime; thump(c, t, 58, 0.18, 0.5); clack(c, t + 0.03, 520, 0.06, 0.45); }
 
       function clack(c, t, freq, dur, amp) {
         const src = c.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
@@ -182,6 +182,9 @@ function updateManualCameraNear() {
       if (!deltaY) return;
       const ud = (mrGrp && mrGrp.userData) || {};
       if (mainSheaveGrp)      mainSheaveGrp.rotation.z      -= deltaY / (ud.mainR || 0.33);
+      // 웜은 휠(=시브 축)과 25:1로 맞물린다. 절대각으로 맞춰 이물림 위상이 누적 오차 없이 유지된다.
+      const tr = ud.traction;
+      if (tr && mainSheaveGrp) tr.worm.rotation.z = tr.wormPerSheave * mainSheaveGrp.rotation.z;
       if (deflectorSheaveGrp) deflectorSheaveGrp.rotation.z -= deltaY / (ud.defRadius || 0.144);
     }
 
@@ -401,6 +404,12 @@ function updateManualCameraNear() {
       gsap.to(camera.position, { x: px, y: py, z: pz, duration: dur, ease });
       gsap.to(controls.target, { x: tx, y: ty, z: tz, duration: dur, ease, onComplete: onDone });
     }
+    // 권상기 주도르래 축 중심(월드). 절개·관찰 카메라 기준점.
+    function _tractionWorld() {
+      const u = mrGrp.userData;
+      return { x: 0, y: u.mainY, z: u.mainZ };
+    }
+
     function _govWorld() { const v = new THREE.Vector3(); (governorWheelGrp || mrGrp).getWorldPosition(v); return v; }
     function _deviceWorld() {
       // 카 우측 하단 세이프티 기어 웨지/작동 샤프트 월드 좌표
@@ -785,6 +794,7 @@ function updateManualCameraNear() {
         'c-car': () => { const cy = carGrp.position.y; moveCam(0, cy, CAR_FRONT_Z - 0.35, 0, cy - 0.1, CAR_CTR_Z - 0.5, false); },
         'c-car-top': () => { const cy = carGrp.position.y + S.CAR_H / 2; moveCam(3.5, cy + 2, CAR_CTR_Z - 4, 0, cy, CAR_CTR_Z); },
         'c-governor': () => { const g = _govWorld(); moveCam(g.x + 1.05, g.y + 0.23, g.z + 0.53, g.x - 0.02, g.y + 0.02, g.z); },
+        'c-traction': () => { const m = _tractionWorld(); moveCam(m.x + 1.55, m.y + 0.75, m.z + 1.45, m.x - 0.18, m.y + 0.05, m.z + 0.12); },
         'c-shaft': () => moveCam(18, midY, 21, 0, midY, 0, false)
       };
       Object.keys(camViews).forEach(id => {
@@ -802,6 +812,30 @@ function updateManualCameraNear() {
             button.setAttribute('aria-pressed', String(key === id));
           });
         });
+      });
+      // 권상기 내부: 기어 케이스 절개 조각을 빼내 웜·휠 이물림과 오일 레벨을 보여준다.
+      const cutBtn = document.getElementById('tm-cutaway');
+      cutBtn.addEventListener('click', () => {
+        const on = !mrGrp.userData.traction.cutaway;
+        setTractionCutaway(on);
+        cutBtn.classList.toggle('active', on);
+        cutBtn.setAttribute('aria-pressed', String(on));
+        if (on && !overspeedActive && controls.enabled) {
+          const m = _tractionWorld(), wx = TRACTION_MACHINE_MOUNT.wheelX;
+          // 절개면은 -X(좌측 벽 쪽). 세로 화면에서 물러나도 벽 라이닝 앞에서 멈춘다.
+          const wallGap = (m.x + wx) - (-(S.SHAFT_W / 2) + MR_LINING_T) - 0.12;
+          const d = Math.min(wallGap, 0.95 * Math.max(1, 0.9 / camera.aspect));
+          controls.minDistance = MANUAL_CAMERA.minDistance;
+          gsap.killTweensOf(camera.position); gsap.killTweensOf(controls.target);
+          moveCam(m.x + wx - d, m.y + 0.05 + 0.26 * d, m.z + 0.02 + 0.30 * d, m.x + wx, m.y + 0.05, m.z + 0.02, false);
+        }
+      });
+      const mascotBtn = document.getElementById('c-mascot');
+      mascotBtn.addEventListener('click', () => {
+        const on = !Mascot.isVisible();
+        Mascot.setVisible(on);
+        mascotBtn.classList.toggle('active', on);
+        mascotBtn.setAttribute('aria-pressed', String(on));
       });
       document.getElementById('c-background').addEventListener('click', () => {
         setDetailedBackground(!outdoorPresentation.detailed);
@@ -908,7 +942,7 @@ function updateManualCameraNear() {
         camera.updateProjectionMatrix();
         gsap.to(camera.position, { x: position.x, y: position.y, z: position.z, duration: 0.75, ease: 'power2.inOut' });
         gsap.to(controls.target, { x: hit.point.x, y: hit.point.y, z: hit.point.z, duration: 0.75, ease: 'power2.inOut', onUpdate: () => controls.update() });
-        document.querySelectorAll('#dd-cam [id^="c-"]:not(#c-background)').forEach(button => {
+        document.querySelectorAll('#dd-cam [id^="c-"]:not(#c-background):not(#c-mascot)').forEach(button => {
           button.classList.remove('active'); button.setAttribute('aria-pressed', 'false');
         });
       }, true);

@@ -16,51 +16,34 @@ try{
  await page.goto(`http://127.0.0.1:${server.address().port}/index.html`,{waitUntil:'networkidle'});
  await page.waitForFunction(()=>govHandles()?.ready&&ropeObjs.length===5&&document.getElementById('loading').classList.contains('hide'));
  const result=await page.evaluate(()=>{
-  // Frozen pre-optimization construction is the geometric regression reference.
-  function legacy(r,cy,wy){
-   const Rm=r.mainR,Rd=r.defR,dz=r.defCenterZ-r.mainZ,dy=r.defY-r.mainY,D=Math.hypot(dz,dy);
-   let a=Math.atan2(dy,dz)-Math.acos((Rm-Rd)/D);if(a<0)a+=Math.PI*2;
-   const pts=[new THREE.Vector3(r.rx,cy,CAR_CTR_Z)];
-   const arc=(z,y,R,a0,a1,n)=>{for(let i=0;i<=n;i++){const t=a0+(a1-a0)*i/n;pts.push(new THREE.Vector3(r.rx,y+R*Math.sin(t),z+R*Math.cos(t)));}};
-   arc(r.mainZ,r.mainY,Rm,0,a,22);arc(r.defCenterZ,r.defY,Rd,a,Math.PI,12);
-   pts.push(new THREE.Vector3(r.rx,wy,cwtGrp.position.z));
-   const curve=new THREE.CurvePath();for(let i=0;i<pts.length-1;i++)curve.add(new THREE.LineCurve3(pts[i],pts[i+1]));
-   return new THREE.TubeGeometry(curve,96,r.ropeR,7,false);
-  }
+  // 시브 감김 호는 5본 공유 정적 튜브, 카·균형추 하강부만 로프별로 갱신된다.
   const cy0=carGrp.position.y,wy0=cwtGrp.position.y,wz0=cwtGrp.position.z;
-  const geometry=ropeObjs[0].line.geometry,position=geometry.attributes.position,normal=geometry.attributes.normal,index=geometry.index,uv=geometry.attributes.uv;
-  let maxPositionError=0,maxNormalError=0,topology=true,bounds=true,reused=true;
-  const vertex=new THREE.Vector3();let poses=0;
+  const geometry=ropeObjs[0].line.geometry,position=geometry.attributes.position,version=position.version;
+  const s=wireRopeShape,top=new THREE.Vector3(),bot=new THREE.Vector3();
+  let maxEndError=0,maxTopError=0,staticArc=true,reused=true,poses=0;
   try{
    for(let k=0;k<=24;k++){
     const y=FLOOR_Y[0]+S.CAR_H/2-.35+(FLOOR_Y.at(-1)-FLOOR_Y[0]+.7)*k/24;
     carGrp.position.y=y;cwtGrp.position.y=wy0+cy0-y;
     refreshRopes();scene.updateMatrixWorld(true);poses++;
-    reused&&=geometry.attributes.position===position&&geometry.attributes.normal===normal&&geometry.index===index&&geometry.attributes.uv===uv;
+    staticArc&&=position.version===version;
     for(const r of ropeObjs){
      reused&&=r.line.geometry===geometry;
-     const expected=legacy(r,y+S.CAR_H/2+.68,cwtGrp.position.y+S.CWT_H/2+.31);
-     const a=expected.attributes.position,b=expected.attributes.normal;
-     topology&&=a.count===position.count&&expected.index.count===index.count;
-     for(let i=0;i<position.count;i++){
-      vertex.fromBufferAttribute(position,i);
-      bounds&&=geometry.boundingBox.containsPoint(vertex)&&vertex.distanceTo(geometry.boundingSphere.center)<=geometry.boundingSphere.radius+1e-6;
-      r.line.localToWorld(vertex);
-      maxPositionError=Math.max(maxPositionError,Math.abs(vertex.x-a.getX(i)),Math.abs(vertex.y-a.getY(i)),Math.abs(vertex.z-a.getZ(i)));
-      maxNormalError=Math.max(maxNormalError,Math.abs(normal.getX(i)-b.getX(i)),Math.abs(normal.getY(i)-b.getY(i)),Math.abs(normal.getZ(i)-b.getZ(i)));
+     for(const [d,ey,ez,ty,tz] of [[r.carDrop,y+S.CAR_H/2+CAR_ROPE_END_DY,CAR_CTR_Z,s.carTopY,s.carTopZ],
+                                   [r.cwtDrop,cwtGrp.position.y+S.CWT_H/2+CWT_ROPE_END_DY,cwtGrp.position.z,s.cwtTopY,s.cwtTopZ]]){
+      top.set(0,.5,0);bot.set(0,-.5,0);d.localToWorld(top);d.localToWorld(bot);
+      maxEndError=Math.max(maxEndError,bot.distanceTo(new THREE.Vector3(r.hx,ey,ez+r.hz)));
+      maxTopError=Math.max(maxTopError,top.distanceTo(new THREE.Vector3(r.rx,ty,tz)));
      }
-     for(let i=0;i<index.count;i++)topology&&=index.array[i]===expected.index.array[i];
-     for(let i=0;i<uv.array.length;i++)topology&&=uv.array[i]===expected.attributes.uv.array[i];
-     expected.dispose();
     }
    }
   }finally{carGrp.position.y=cy0;cwtGrp.position.y=wy0;cwtGrp.position.z=wz0;refreshRopes();}
-  const version=position.version;refreshRopes();const stationaryUploadSkipped=position.version===version;
-  return {poses,ropes:ropeObjs.length,maxPositionError,maxNormalError,topology,bounds,reused,stationaryUploadSkipped};
+  const uv=ropeObjs[0].carDrop.geometry.attributes.uv,uvVersion=uv.version;refreshRopes();const stationaryUploadSkipped=uv.version===uvVersion;
+  return {poses,ropes:ropeObjs.length,maxEndError,maxTopError,staticArc,reused,stationaryUploadSkipped};
  });
  assert.equal(result.ropes,5);assert.equal(result.poses,25);
- assert.ok(result.maxPositionError<2e-6,JSON.stringify(result));assert.ok(result.maxNormalError<2e-6,JSON.stringify(result));
- for(const key of ['topology','bounds','reused','stationaryUploadSkipped'])assert.equal(result[key],true,key);
+ assert.ok(result.maxEndError<1e-6,JSON.stringify(result));assert.ok(result.maxTopError<1e-6,JSON.stringify(result));
+ for(const key of ['staticArc','reused','stationaryUploadSkipped'])assert.equal(result[key],true,key);
  console.log('GEOMETRY',JSON.stringify(result));
  for(const target of [3,0]){
   await page.waitForFunction(()=>!moving&&!doorOpen&&!gsap.isTweening(carDoorL.position));

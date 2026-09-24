@@ -92,7 +92,7 @@ try {
     assert.equal(shoe.intersections, 0, `${shoe.name}: rail penetration`);
     assert.ok(Math.abs(shoe.clearance - 0.0005) < 1e-8);
     assert.equal(shoe.height, 0.12);
-    assert.ok(shoe.materials.every(name => name.startsWith('Shoe_')), 'Missing GLB material');
+    assert.ok(shoe.materials.every(name => /^(Shoe|Oiler)_/.test(name)), 'Missing GLB material'); // Oiler_ = 공용 상자형 오일통
     if(shoe.name.endsWith('Lower')){
       assert.equal(shoe.lowerDesign,'enclosed-yellow-zinc');
       assert.equal(shoe.legacyAdjuster,false);

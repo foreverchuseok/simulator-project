@@ -16,6 +16,10 @@ AI 공통 규칙과 `PLAN.md` 운영 방식은 루트 `AGENTS.md`를 따른다.
 - 승장 인터록 렌더 검증: `blender/scripts/render_hall_interlock.py`.
 - 현재 `buildHatchDoors()`는 이 GLB를 로드하지 않는다. 헤더는 양단 브라켓·C레일만 올린다. 다시 붙일 때는 `docs/DOOR-REBUILD.md` 행거 케이스 계약을 본다.
 - 세이프티기어는 예외적으로 기존 경로 `assets/safety_gear.glb`를 사용한다.
+- 균형추: `blender/scripts/counterweight.py` → `models/gltf/counterweight.glb` (프레임·검은 주물 웨이트·번호·상하 가이드슈·오일통). 외곽 치수는 루트 extras(`railSpan`·`depth`·`height`·`topBeamH`)로 내보내고 `js/elevator.js` `buildCounterWeight()`가 로드 시 `S`·`CWT_TOP_BEAM_H`와 대조한다. 로프 히치는 JS(`buildBabbittHitch`, 스프링 없음).
+- 상자형 오일통: `car_guide_shoe.py`의 `build_box_oiler()`가 카 상부 슈와 균형추가 같이 쓰는 원본이다. 카 슈를 고치면 `car_guide_shoe.py`·`counterweight.py` 둘 다 다시 내보낸다.
+- 권상기(웜 기어드): `blender/scripts/traction_machine.py` → `models/gltf/traction_machine.glb` + `models/gltf/deflector_sheave.glb`(현수도르래, 같은 시브 설계). 장착 수치는 `js/environment.js`의 `TRACTION_MACHINE_MOUNT`를 읽는다. 노드·절개·연동 계약은 `docs/TRACTION-MACHINE.md`를 따른다.
+- 로프브레이크: `blender/scripts/rope_brake.py` → `models/gltf/rope_brake.glb`. `js/machine-room-safety.js`의 `RopeBrake`에 장착하며 받침·배선은 유지한다. 치수 공유와 검증은 `docs/MACHINE-ROOM-SAFETY.md`를 따른다.
 
 앱이 읽는 최종 형식은 glTF Binary 단일 파일인 `.glb`다.
 현재 프로젝트는 `.blend` 파일을 필수 원본으로 사용하지 않고 Python `bpy` 스크립트를 형상 원본으로 사용한다.

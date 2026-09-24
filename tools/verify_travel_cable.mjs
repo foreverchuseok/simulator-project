@@ -55,7 +55,8 @@ server.listen(PORT, async () => {
     out.const = {
       CAR_H: S.CAR_H, CWT_H: S.CWT_H, CAR_RAIL_X, CAR_RAIL_Z, RAIL_BRACKET_Y, RAIL_BRACKET_BAND,
       FLOOR_Y: FLOOR_Y.slice(), FLOORS, Y0,
-      TC_X, TC_LOOP_R, TC_CAR_Z, TC_FIX_Z, TC_PIT_CLEAR, TC_HANGER_UP, TC_W, TC_CAR_HANGER_LY,
+      initialCarY: carGrp.position.y, initialCwtY: cwtGrp.position.y,
+      TC_X, TC_CAR_X, TC_T, TC_LOOP_R, TC_CAR_Z, TC_FIX_Z, TC_PIT_CLEAR, TC_HANGER_UP, TC_W, TC_CAR_HANGER_LY,
       FLS_Z, FLS_LEVER_L, FLS_ROLLER_R, FLS_TRIP_ANGLE, FLS_OVERTRAVEL, FLS_LEAD,
       FLS_PIVOT_X, FLS_CAM_FACE_X, CAM_MID_LY, CAM_VANE_W, FLS_PAIR_DZ, LS_TRIP, SLD_DIST,
       CAM_VANES: Object.fromEntries(Object.entries(CAM_VANES).map(([k, v]) => [k, { botLY: v.botLY, topLY: v.topLY, dz: v.dz }])),
@@ -133,7 +134,7 @@ server.listen(PORT, async () => {
 
   // (1) B 지점 + 해치 케이블 행거
   const carYb = T.bY + C.CAR_H / 2;
-  const cwtPlate = (12.5 - (carYb - (C.FLOOR_Y[0] + C.CAR_H / 2))) - C.CWT_H / 2;
+  const cwtPlate = C.initialCwtY - (carYb - C.initialCarY) - C.CWT_H / 2;
   ok('(1) B 지점 = 균형추 충돌판 높이 = 카 바닥 높이',
      Math.abs(T.bY - cwtPlate) < 1e-6, `카 바닥 ${mm(T.bY)} / 충돌판 ${mm(cwtPlate)}`);
   ok('(1) 해치 케이블 행거 = B 지점 카 바닥 +1,000mm',
@@ -264,11 +265,11 @@ server.listen(PORT, async () => {
   ok('(9) 카측 가닥이 좌측 레일 플랜지 Z 밖',
      C.TC_CAR_Z > railFlangeZ[1] + 0.05,
      `카측 가닥 Z=${mm(C.TC_CAR_Z)} vs 플랜지 끝 ${mm(railFlangeZ[1])}`);
-  ok('(9) 케이블이 카 폭(스타일/가이드슈) 바깥',
+  ok('(9) 승강로측 가닥이 카 폭(스타일/가이드슈) 바깥',
      Math.abs(C.TC_X) > C.CAR_RAIL_X + 0.10, `X=${mm(C.TC_X)} vs 레일 ${mm(C.CAR_RAIL_X)}`);
-  ok('(9) 리본 메시가 계약 X 레인 안 (폭 ±TC_W/2)',
-     Math.abs(R.ribbonBox.min[0] - (C.TC_X - C.TC_W / 2)) < 1e-6 &&
-     Math.abs(R.ribbonBox.max[0] - (C.TC_X + C.TC_W / 2)) < 1e-6,
+  ok('(9) 리본이 고정측에서 카 하부로 돌아오는 X 범위 안',
+     Math.abs(R.ribbonBox.min[0] - (C.TC_X - C.TC_T / 2)) < 1e-6 &&
+     Math.abs(R.ribbonBox.max[0] - (C.TC_CAR_X + C.TC_T / 2)) < 1e-6,
      `X ∈ [${mm(R.ribbonBox.min[0])}, ${mm(R.ribbonBox.max[0])}]`);
 
   ok('(0) 콘솔·페이지 에러 없음', errs.length === 0, errs.slice(0, 3).join(' | ') || '없음');
@@ -280,7 +281,7 @@ server.listen(PORT, async () => {
       aligned: pit.position.x===top.position.x && pit.position.z===top.position.z,
       stop: !!pit.getObjectByName('pitEstopButton') && !top.getObjectByName('pitEstopButton'),
       lights: shaftCableGrp.children.filter(o=>o.userData.type==='shaft-led').length,
-      left: TC_X<0, color: travelCable.ribbon.material.color.getHex()===TC_COLOR };
+      left: TC_X<0, color: travelCable.ribbon.material.color.clone().convertLinearToSRGB().getHex()===TC_COLOR };
   });
   ok('(10) 상하 박스 승강장 +1m, 동일 벽면 위치, 하부만 ESTOP', Math.abs(mr.pitOffset-1)<1e-9 && Math.abs(mr.topOffset-1)<1e-9 && mr.aligned && mr.stop, JSON.stringify(mr));
   ok('(10) 피트·각 층 LED 및 좌측 회색 이동케이블', mr.lights===C.FLOORS+1 && mr.left && mr.color, JSON.stringify(mr));
