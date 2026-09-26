@@ -28,6 +28,18 @@ const CarDoor = (() => {
   }
   let drive;
   const vec=new THREE.Vector3();
+  // Two bounded Bezier spans keep the moving lead behind the header.
+  // Share control points so door travel only updates the existing tube buffers.
+  class EdgeFlexCurve extends THREE.Curve {
+    constructor(points) {
+      super();this.points=points;
+      this.spans=[new THREE.CubicBezierCurve3(...points.slice(0,4)),
+        new THREE.CubicBezierCurve3(...points.slice(3,7))];
+    }
+    getPoint(t,target=new THREE.Vector3()) {
+      return this.spans[t<.5?0:1].getPoint(t<.5?t*2:t*2-1,target);
+    }
+  }
   function build() {
     const d=dimensions(), root=new THREE.Group();root.name='carDoorOperator';carGrp.add(root);
     const steel=M.ss(0x87929c), zinc=M.ss(0x8d8559), dark=M.paint(0x242c32), rubber=M.paint(0x161b1e);
@@ -121,23 +133,27 @@ const CarDoor = (() => {
         .userData={type:'door-light-curtain',visualOnly:true};
       for(let y=d.bottom+0.07;y<d.top-0.06;y+=0.10)cyl('beamLens',0.003,0.001,green,beamX,y,d.doorZ+0.0355,g,8);
       box('doorMeetingRubber',0.003,h-0.012,0.008,rubber,edgeX,mid,d.doorZ,g);
-      // Thin lower leads follow the user's 八-shaped route; nothing loops over the leaves.
-      const leadZ=d.doorZ+.030;
-      cable('edgeCable',[[beamX,d.bottom+h*.49,leadZ],[beamX+side*.014,d.bottom+h*.30,leadZ],
-        [beamX+side*.050,d.bottom+.24,leadZ],[beamX+side*.16,d.bottom+.13,leadZ],
-        [side*.28,d.bottom+.095,leadZ]],spec.edgeWireR,g)
-        .userData={type:'door-edge-lead',side,radius:spec.edgeWireR};
-      for(const [cx,cy] of [[beamX+side*.014,d.bottom+h*.30],[side*.28,d.bottom+.095]])
-        box('edgeCableClamp',.008,.004,.004,linkMetal,cx,cy,leadZ,g);
-      const anchorX=side*(d.sillW/2+.025),outsideZ=HALL_SILL_SHAFT_Z-SILL_GAP-CAR_CTR_Z+.012;
-      const tail=cable('edgeCableFlex'+side,[[side*(d.cx+.28),d.bottom+.095,leadZ],
-        [side*(d.cx+.34),d.bottom+.06,outsideZ],[side*(d.cx+.39),d.floor-.075,outsideZ],
-        [anchorX,d.floor-.09,outsideZ],[anchorX,CarWiring.layout.underY,d.doorZ-.06]],spec.edgeWireR);
+      // User reference 0015461: leads leave the TOP of the edge and hide behind the header.
+      const leadZ=d.doorZ+.030,backZ=d.doorZ-.065;
+      const lead=CarWiring.run(g,'edgeCable',[
+        [beamX,d.top-.16,leadZ],[beamX,d.top-.025,leadZ],
+        [beamX+side*.045,d.top+.015,leadZ],[side*.15,d.top+.015,leadZ],
+        [side*.15,d.top+.015,backZ],[side*.15,d.trackY+.12,backZ]
+      ],{radius:spec.edgeWireR,bend:.012,supports:false});
+      lead.userData.type='door-edge-lead';lead.userData.side=side;
+      const anchorX=side*(d.headerW/2-.08),flexY=d.trackY+.12;
+      const flexPoints=[[side*(d.cx+.15),flexY,backZ],
+        [side*(d.cx+.15),flexY+.05,backZ],[side*(d.cx+.15),flexY+.09,backZ],
+        [(side*(d.cx+.15)+anchorX)/2,flexY+.09,backZ],
+        [anchorX,flexY+.09,backZ],[anchorX,flexY+.05,backZ],
+        [anchorX,flexY,backZ]].map(p=>new THREE.Vector3(...p));
+      const tail=new THREE.Mesh(new THREE.TubeGeometry(new EdgeFlexCurve(flexPoints),40,spec.edgeWireR,6,false),rubber);
+      tail.name='edgeCableFlex'+side;root.add(tail);
       tail.userData={type:'door-edge-flex',side};
       edgeTails.push({mesh:tail,side});
-      const w=CarWiring.layout,outer=side*w.outerX,backZ=d.doorZ-.06;
-      CarWiring.run(root,'edgeCableReturn'+side,[[anchorX,w.underY,backZ],[outer,w.underY,backZ],
-        [outer,w.underY,w.frontLane],[outer,w.overY,w.frontLane],
+      const w=CarWiring.layout;
+      CarWiring.run(root,'edgeCableReturn'+side,[[anchorX,flexY,backZ],
+        [anchorX,w.overY,backZ],[CarWiring.laneX('door'),w.overY,backZ],
         [CarWiring.laneX('door'),w.overY,w.frontLane],[CarWiring.laneX('door'),w.roofY,w.frontLane],
         ...CarWiring.toBox('door')],{radius:spec.edgeWireR});
       return g;
@@ -403,7 +419,8 @@ const CarDoor = (() => {
     if(q.wireTravel!==s){
       for(const {mesh,side} of q.edgeTails){
         const p=mesh.geometry.parameters.path.points,cx=side*(q.d.cx+s);
-        p[0].x=cx+side*.28;p[1].x=cx+side*.34;p[2].x=cx+side*.39;
+        p[0].x=p[1].x=p[2].x=cx+side*.15;
+        p[3].x=(p[2].x+p[6].x)/2;
         refreshCable(mesh);
       }
       q.wireTravel=s;

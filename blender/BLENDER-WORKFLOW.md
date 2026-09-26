@@ -21,6 +21,7 @@ AI 공통 규칙과 `PLAN.md` 운영 방식은 루트 `AGENTS.md`를 따른다.
 - 권상기(웜 기어드): `blender/scripts/traction_machine.py` → `models/gltf/traction_machine.glb` + `models/gltf/deflector_sheave.glb`(현수도르래, 같은 시브 설계). 장착 수치는 `js/environment.js`의 `TRACTION_MACHINE_MOUNT`를 읽는다. 노드·절개·연동 계약은 `docs/TRACTION-MACHINE.md`를 따른다.
 - 로프브레이크: `blender/scripts/rope_brake.py` → `models/gltf/rope_brake.glb`. `js/machine-room-safety.js`의 `RopeBrake`에 장착하며 받침·배선은 유지한다. 치수 공유와 검증은 `docs/MACHINE-ROOM-SAFETY.md`를 따른다.
 - 종단 리미트 스위치(S3-B1370형): `blender/scripts/limit_switch.py` → `models/gltf/limit_switch.glb`. `index.html`의 `LIMIT_SWITCH_MODEL`·`FLS_LEVER_L`·`FLS_ROLLER_R`를 읽는다. 원점은 레버 고정축이고, 노드는 `SwitchBody`·`ContactWindow`·`ContactBridge`·`Lever`>`Roller`다. 장착·검증은 `docs/TRAVEL-CABLE-TERMINAL.md`를 따른다.
+- 승장 도어 의장면·홀 호출버튼: `blender/scripts/hall_door_button.py` → `models/gltf/hall_door_panel.glb` + `models/gltf/hall_call_button.glb`. 치수는 `js/elevator.js`의 `HALL_FINISH` JSON 한 줄을 읽고, 로더 `js/hall-finish.js`가 extras와 대조한다. 도어는 JS 상자를 먼저 세운 뒤 GLB 패널로 교체하며 삼각키·인터록·행거·스티커(`hand.png`/`lean.png`)는 JS가 그대로 붙인다. 버튼 노드는 `ButtonUp`/`ButtonDown`(각 `…Body`·`…Lamp`)이고 종단층은 한 방향만 남긴다.
 - 피트 사다리 배꼽 스위치: `blender/scripts/pit_ladder_switch.py` → `models/gltf/pit_ladder_switch.glb`. `js/pit-ladder.js`의 `PIT_LADDER_SWITCH`에서 눌린 끝 위치와 스트로크를 읽는다. `SwitchBody`는 고정, `SwitchPlunger`는 +X로 움직이며 끝의 원점이 X=0이다. JS 래퍼가 눌림/해제 위치를 적용한다. 높이 기준과 검증은 `docs/ROADMAP.md`의 사다리 인계 항목 및 `tools/verify_pit_ladder.mjs`를 참고한다.
 
 앱이 읽는 최종 형식은 glTF Binary 단일 파일인 `.glb`다.

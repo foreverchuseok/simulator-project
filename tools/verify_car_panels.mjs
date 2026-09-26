@@ -49,7 +49,7 @@ try {
   const wcop=scene.getObjectByName('carAccessibleOPB');
   const wcButtons=wcop.children.filter(o=>o.userData.type==='accessible-cop-button');
   const finishY=bounds(scene.getObjectByName('carFloorFinish')).max.y;
-  check('accessible buttons at 850mm',wcButtons.length===7&&wcButtons.every(b=>Math.abs(b.getWorldPosition(new THREE.Vector3()).y-finishY-0.85)<1e-6));
+  check('accessible buttons at 1050mm',wcButtons.length===7&&wcButtons.every(b=>Math.abs(b.getWorldPosition(new THREE.Vector3()).y-finishY-1.05)<1e-6));
   check('accessible OPB on opaque entry-right wall',wcop.position.x<0&&wcop.getWorldDirection(new THREE.Vector3()).x>0.99&&bounds(wcop).min.z>bounds(scene.getObjectByName('carInteriorHandrail')).max.z);
   check('accessible OPB away from entrance corner',CAR_FRONT_Z-bounds(wcop).max.z>0.4);
   check('seven braille plates',wcop.children.filter(o=>o.name==='accessibleBraillePlate').length===7);
@@ -72,7 +72,7 @@ try {
    if(view==='pm1') {camera.position.set(-0.72,y-S.CAR_H/2-0.42,z+0.78);controls.target.set(-1.18,y-S.CAR_H/2-0.12,z+0.12);}
    if(view==='pm2') {camera.position.set(0.72,y-S.CAR_H/2-0.42,z-0.78);controls.target.set(1.18,y-S.CAR_H/2-0.12,z-0.04);}
    if(view==='load-wiring') {camera.position.set(-3.4,y-S.CAR_H/2-1.6,z+3.2);controls.target.set(-0.8,y-S.CAR_H/2+0.3,z+0.3);}
-   if(view==='accessible') {camera.position.set(0.15,y-0.05,z+0.75);controls.target.set(-1.12,y-S.CAR_H/2+0.85,z+0.25);}
+   if(view==='accessible') {camera.position.set(0.15,y-0.05,z+0.75);controls.target.set(-1.12,y-S.CAR_H/2+1.05,z+0.25);}
    controls.update();
   },view);
   await page.screenshot({path:path.join(root,`.shot-car-panels-${view}.png`)});

@@ -60,5 +60,16 @@ const HallManual = (() => {
     refresh();
   }
   function pick(f) { if (select(f)) { el('hall-panel').hidden = false; key(f); } }
-  return {bind,key,open,select,observe,pick,get selected(){return selected;}};
+  function resetAll() {
+    CarDoor.state.coupledFloor=-1;
+    hatchDoors.forEach((h,f)=>{
+      if(h.keyTween)gsap.killTweensOf(h.keyTween);
+      gsap.killTweensOf(h.hook.rotation);
+      h.manualOpen=0;h.manualActive=false;
+      h.right.position.x=h.right.userData.cx;h.left.position.x=h.left.userData.cx;
+      setEmergencyKey(f,0);spinDoorDrive(h);HallInterlock.update(h);
+    });
+    refresh();
+  }
+  return {bind,key,open,select,observe,pick,resetAll,get selected(){return selected;}};
 })();

@@ -70,14 +70,63 @@ function buildCarPanels(parent) {
   const cuts=[-sillD/2,groove-0.005,groove+0.005,guideGroove-0.005,guideGroove+0.005,sillD/2];
   for(let i=0;i<cuts.length-1;i+=2) box('sillLand',door.sillW,0.01,cuts[i+1]-cuts[i],steel,0,bottom-0.005,sillZ+(cuts[i]+cuts[i+1])/2,sill);
   sill.userData={grooveZ:door.doorZ,guideGrooveZ:door.guideZ,width:door.sillW,topY:bottom,grooveWidth:0.010};
-  // 후면 손잡이: 창 테두리와 중앙 이음 기둥의 고정판에 지지한다.
-  const railY=bottom+0.90, railZ=rearZ+0.09, railW=rearWidth-0.16;
-  const rail=createCylinder(0.018,0.018,railW,steel,0,railY,railZ,root);
-  rail.name='carInteriorHandrail'; rail.rotation.z=Math.PI/2;
-  for(const x of [-railW/2,-rearWidth/6,rearWidth/6,railW/2]) {
-    box('handrailBackingPlate',0.055,0.065,0.015,trim,x,railY,rearZ+0.02);
-    const support=createCylinder(0.011,0.011,0.065,steel,x,railY,rearZ+0.055,root); support.rotation.x=Math.PI/2;
+  // 마감바닥 기준 850mm, Ø35mm. 출입구를 비우고 양측·후면을 둥근 코너로 연속 연결한다.
+  const handrails=new THREE.Group(); handrails.name='carAccessibleHandrails';root.add(handrails);
+  const hr={height:0.850,diameter:0.035,wallOffset:0.085,bendRadius:0.060,frontInset:0.12};
+  const railY=bottom+hr.height, railX=sideX-hr.wallOffset, railZ=rearZ+hr.wallOffset;
+  const railFront=frontZ-hr.frontInset, r=hr.bendRadius, tubeR=hr.diameter/2;
+  handrails.userData={...hr,floorY:bottom,continuous:true,sides:['left','rear','right'],joints:[]};
+  function railTube(name,a,b,radius=tubeR,group=handrails) {
+    const start=new THREE.Vector3(...a),end=new THREE.Vector3(...b),delta=end.clone().sub(start);
+    const m=createCylinder(radius,radius,delta.length(),steel,...start.clone().add(end).multiplyScalar(0.5).toArray(),group);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),delta.normalize());m.name=name;
+    if(group===handrails) m.userData={start:a,end:b,diameter:hr.diameter};
+    return m;
   }
+  function elbow(name,x,z,angle) {
+    const m=new THREE.Mesh(new THREE.TorusGeometry(r,tubeR,12,16,Math.PI/2),steel);
+    m.name=name;m.position.set(x,railY,z);m.rotation.set(Math.PI/2,0,angle);
+    m.castShadow=true;m.receiveShadow=true;handrails.add(m);
+    m.userData={start:[x+r*Math.cos(angle),railY,z+r*Math.sin(angle)],end:[x+r*Math.cos(angle+Math.PI/2),railY,z+r*Math.sin(angle+Math.PI/2)],diameter:hr.diameter};
+    return m;
+  }
+  // 순서대로 이어지는 관 중심선. 조인트 간극은 0, 앞쪽 끝은 벽으로 돌아간다.
+  const path=[
+    railTube('handrailLeftReturn',[-sideX,railY,railFront+r],[-railX-r,railY,railFront+r]),
+    elbow('handrailLeftFrontBend',-railX-r,railFront,0),
+    railTube('handrailLeft',[-railX,railY,railFront],[-railX,railY,railZ+r]),
+    elbow('handrailLeftRearBend',-railX+r,railZ+r,Math.PI),
+    railTube('carInteriorHandrail',[-railX+r,railY,railZ],[railX-r,railY,railZ]),
+    elbow('handrailRightRearBend',railX-r,railZ+r,-Math.PI/2),
+    railTube('handrailRight',[railX,railY,railZ+r],[railX,railY,railFront]),
+    elbow('handrailRightFrontBend',railX+r,railFront,Math.PI/2),
+    railTube('handrailRightReturn',[railX+r,railY,railFront+r],[sideX,railY,railFront+r])
+  ];
+  // 앞쪽 두 코너는 경로 진행 방향만 반대이며 형상은 같은 원호다.
+  for(const i of [1,7]) [path[i].userData.start,path[i].userData.end]=[path[i].userData.end,path[i].userData.start];
+  handrails.userData.joints=path.slice(1).map((part,i)=>[path[i].name,part.name]);
+  const mounts=new THREE.Group();mounts.name='handrailWallMounts';handrails.add(mounts);
+  const plate=(x,z,side=false)=>{
+    createBox(side?0.02:0.060,0.070,side?0.060:0.02,trim,x,railY,z,mounts);
+    for(const dy of [-0.023,0.023]) {
+      const bolt=createCylinder(0.0035,0.0035,0.006,steel,x,railY+dy,z,mounts);
+      if(side){bolt.rotation.z=Math.PI/2;bolt.position.x-=Math.sign(x)*0.013;}
+      else {bolt.rotation.x=Math.PI/2;bolt.position.z+=0.013;}
+    }
+  };
+  // 유리 자체가 아니라 기존 금속 판넬 이음 기둥/앞쪽 테두리에 고정판을 둔다.
+  for(const x of [-rearWidth/6,rearWidth/6]) {
+    plate(x,rearZ+0.018);
+    railTube('',[x,railY,rearZ+0.028],[x,railY,railZ],0.010,mounts);
+  }
+  for(const sign of [-1,1]) {
+    for(const z of [sideMid-sideLength/6,sideMid+sideLength/6]) {
+      plate(sign*(sideX-0.018),z,true);
+      railTube('',[sign*(sideX-0.028),railY,z],[sign*railX,railY,z],0.010,mounts);
+    }
+    plate(sign*(sideX-0.010),railFront+r,true);
+  }
+  batchStaticChildren(mounts,'handrailMounts');
   // 천장 덮개, 절곡 테두리, 보강대와 스타일 방진 고정 브라켓(218–219p).
   const roof=new THREE.Group(); roof.name='carRoof'; root.add(roof);
   box('roofDeck',rearWidth+0.03,0.025,sideLength+0.04,roofMat,0,H/2-0.0125,sideMid,roof);
@@ -155,9 +204,11 @@ function buildCarControls(parent,{floorY,frontZ,sideX}) {
   opb.userData={visualOnly:true,displayFloor:4,floors:[1,2,3,4]};
 
   // 현대 NEO OPDNB210의 금속 표판/원형 버튼/노란 호출 버튼을 4층 가로형으로 재구성.
-  // 진입 방향은 -Z이므로 진입 우측은 -X(불투명 벽). 버튼 중심은 마감바닥 +850mm.
+  // 진입 방향은 -Z이므로 진입 우측은 -X(불투명 벽).
+  // 2026-09-27 사용자 승인: 850mm 연속 손잡이를 피해 버튼 중심을 1050mm로 올린다.
+  const accessibleButtonHeight=1.050;
   const wcop=new THREE.Group();wcop.name='carAccessibleOPB';
-  wcop.position.set(-sideX+0.030,floorY+0.850,0.25);
+  wcop.position.set(-sideX+0.030,floorY+accessibleButtonHeight,0.25);
   wcop.rotation.y=Math.PI/2;root.add(wcop);
   box('accessibleOPBBack',0.82,0.22,0.020,dark,0,0,0,wcop);
   box('accessibleOPBFace',0.81,0.21,0.005,metal,0,0,0.0125,wcop);
@@ -183,7 +234,7 @@ function buildCarControls(parent,{floorY,frontZ,sideX}) {
     cyl(0.024,0.006,metal,0,0,0,b,'z');
     cyl(0.021,0.005,key.id==='call'?brass:dark,0,0,0.004,b,'z');
     label(key.text,0.035,0.026,0,0,0.007,b);
-    b.userData={type:'accessible-cop-button',action:key.id,visualOnly:true,centerHeight:0.850};
+    b.userData={type:'accessible-cop-button',action:key.id,visualOnly:true,centerHeight:accessibleButtonHeight};
     const plate=box('accessibleBraillePlate',0.035,0.013,0.001,metal,x,-0.041,0.016,wcop);
     plate.userData.brailleCells=key.dots;
     key.dots.forEach((cell,ci)=>cell.forEach(dot=>{
@@ -193,7 +244,7 @@ function buildCarControls(parent,{floorY,frontZ,sideX}) {
       bead.position.set(x+dx,-0.041+dy,0.0165);bead.name='accessibleBrailleDot';wcop.add(bead);
     }));
   });
-  wcop.userData={visualOnly:true,reference:'Hyundai NEO OPDNB210',buttonHeight:0.850,entrySide:'right',wall:'opaque-left',floorCount:4};
+  wcop.userData={visualOnly:true,reference:'Hyundai NEO OPDNB210',buttonHeight:accessibleButtonHeight,entrySide:'right',wall:'opaque-left',floorCount:4};
 
   // 221p: 상부 난간 왼쪽 앞, 난간 안쪽에 걸친 긴 카 탑 박스와 네 고정 볼트.
   const topBox=new THREE.Group();topBox.name='carTopBox';

@@ -4,6 +4,11 @@
        한쪽만 바꾸면 하부 링크가 웨지와 어긋난다. */
     const SG_TRIP_ROT = -0.38;
 
+    /* 승장 도어 의장면·홀 호출버튼 GLB 계약 — blender/scripts/hall_door_button.py 가 이 JSON 을 읽는다.
+       panelH 는 buildHatchDoorPanel() 의 dh(행거 플랜지 아래 ~ 실 위 5mm)와 같아야 하며, 로드 시 대조한다.
+       btnCenterY 는 승장 바닥에서 호출버튼 판 중심 높이(편의법 0.8~1.2m 안). */
+    const HALL_FINISH = {"panelW":0.775,"panelH":2.1565,"panelT":0.032,"plateW":0.09,"plateH":0.26,"plateT":0.004,"btnCenterY":1.02};
+
     /* ==========================================================================
        주로프 5본 바빗(Babbitt) 소켓 히치 — 카 크로스헤드·균형추 상부 공용
        원본: MR 로프체결도 「TOP BEAM 로프히치 홀」 5본 · 후락 칸 (균형추가 카 후면 -Z).
@@ -1342,8 +1347,8 @@
         const linerMat = hpPlateMat;
         const rubberMat = M.paint(0x181a1d);
 
-        // 1. 메인 도어 패널 본체
-        createBox(dw, dh, dt, panMat, pX, yCtr, zCtr, grp);
+        // 1. 메인 도어 패널 본체 — 상자는 대체용, 실사 GLB(hall_door_panel.glb)가 오면 같은 자리에서 교체된다
+        HallFinish.dressPanel(createBox(dw, dh, dt, panMat, pX, yCtr, zCtr, grp), grp);
 
         // 2. 상단 탭 플레이트 & 조절 심 라이너 2개소 (도면 175p 3번)
         [-0.120, 0.120].forEach(bx => {

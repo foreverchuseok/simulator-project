@@ -93,7 +93,8 @@ Claude Code, Google Antigravity, Codex, Cursor는 도어 작업을 시작하기 
   - `left` 그룹(월드 −X 판) 상단 `SPRING HANGER` 체결 러그가 스프링 −X 끝을 끌고 다닌다
 
 - 승장 도어 패널 본체 어셈블리 — `js/elevator.js` **`buildHatchDoorPanel(grp, side, cx, g)`** (도면 175~176p)
-  - 프리미엄 실버 헤어라인 스테인리스 패널 (폭 775mm × 높이 2158mm × 두께 32mm)
+  - 프리미엄 실버 헤어라인 스테인리스 패널 (폭 775mm × 높이 2156.5mm × 두께 32mm)
+  - 2026-09-27 실사화: 본체는 `hall_door_panel.glb`(홀 면·둘레 R1.6 헤어라인, 승강로 면 도장 강판)로 교체된다. 치수 계약은 `HALL_FINISH`, 로더는 `js/hall-finish.js`. GLB 로드 전·실패 시 기존 상자가 남는다.
   - 행거 하단 L플랜지 ↔ 상단 탭 플레이트 & 조절 심 라이너(Liner) M8 볼트 결합
   - 중앙 맞물림 턱 & 흑색 고무 완충 스트립 (완전 닫힘 시 중앙 **5mm** — 안전기준 7.6.2.2.1 손끼임 방지. `DOOR_MEET_GAP`)
   - 승강로 측 후면 세로 보강 C채널 2줄 (폭 50mm, 높이 dh * 0.94)
@@ -119,7 +120,7 @@ Claude Code, Google Antigravity, Codex, Cursor는 도어 작업을 시작하기 
 
 그대로 둔 것:
 
-- 로비 전면벽 개구부, 출입 프레임, 홀버튼, 점자 — `js/environment.js` `buildFrontWallAndLobby()`
+- 로비 전면벽 개구부, 출입 프레임, 점자 — `js/environment.js` `buildFrontWallAndLobby()`. 홀 호출버튼은 2026-09-27부터 `hall_call_button.glb`(판 중심 승장 바닥 +1.02m, 1층 ▲·최상층 ▼만)
 - 도어 치수 `S.DOOR_W` 1.50, `S.DOOR_H` 2.10 — `js/config.js`
 - 운행 FSM `openDoors()` / `closeDoors()`는 `CarDoor.open()` / `CarDoor.close()`를 호출한다. 카문 위치에서 승장문 위치를 먼저 갱신한 뒤 `spinDoorDrive(h)`를 호출한다.
 - 스티커 PNG `assets/bg/hand.png`, `assets/bg/lean.png` — 삭제 금지

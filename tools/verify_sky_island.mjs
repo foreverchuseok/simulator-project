@@ -34,8 +34,7 @@ try {
     const island = scene.getObjectByName('skyIslandBody');
     const box = new THREE.Box3().setFromObject(island);
     // 보도블록 상면에서 아래로 쏘아 섬이 실제로 받치는지 확인한다.
-    const paver = scene.getObjectByName('outdoorGround').children
-      .find(o => o.isMesh && o.geometry.parameters?.width === 13);
+    const paver = scene.getObjectByName('plazaPaver');
     const pBox = new THREE.Box3().setFromObject(paver);
     const ray = new THREE.Raycaster();
     const down = new THREE.Vector3(0, -1, 0);

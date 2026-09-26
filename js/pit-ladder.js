@@ -164,7 +164,8 @@ const PitLadder = (() => {
     setPose(false);
     actionButton = document.createElement('button');
     actionButton.id = 'pit-ladder-action'; actionButton.type = 'button';
-    actionButton.style.cssText = 'position:fixed;z-index:12;min-height:44px;padding:8px 12px;border:1px solid #a5b8c5;border-radius:22px;background:#f8fbff;color:#182533;box-shadow:0 2px 8px #0005;cursor:pointer;font:600 13px sans-serif;display:none';
+    actionButton.className = 'part-action ladder-icon';
+    actionButton.hidden = true;
     actionButton.addEventListener('click', () => {
       if (!toggle()) updateStatus('v-dir', '카를 사다리보다 높이 올려 정지한 후 조작', '#f0883e');
     });
@@ -196,35 +197,25 @@ const PitLadder = (() => {
     pose(open ? 1 : 0);
     root.userData.deployed = open;
     setContact(!open);
-    const button = document.getElementById('btn-pit-ladder');
-    if (button) {
-      button.textContent = '사다리';
-      button.title = open ? '피트 사다리 접기' : '피트 사다리 펴기';
-      button.classList.toggle('warn', open);
-      button.setAttribute('aria-pressed', String(open));
-    }
-    const output = document.getElementById('pit-ladder-status');
-    if (output) output.textContent = open ? '펼침 · 운행 차단' : '접힘 · 운행 가능';
     syncButton();
   }
   function syncButton() {
     if (!actionButton) return;
-    actionButton.textContent = busy ? '↔ 사다리 이동 중' : deployed ? '↔ 사다리 접기' : '↔ 사다리 펼치기';
+    actionButton.classList.toggle('active', deployed || busy);
     actionButton.setAttribute('aria-label', deployed ? '피트 사다리 접기' : '피트 사다리 펼치기');
     actionButton.setAttribute('aria-pressed', String(deployed));
     actionButton.disabled = busy;
-    actionButton.style.borderColor = deployed || busy ? '#cf5034' : '#a5b8c5';
+
   }
   function update() {
     if (!actionButton || !root) return;
-    anchor.set(D.ux + frame.position.x, 1.34, -D.width / 2 - 0.065 + frame.position.z); root.localToWorld(anchor);
+    anchor.set(D.ux + frame.position.x, 1.8, -D.width / 2 - 0.065 + frame.position.z); root.localToWorld(anchor);
     const near = camera.position.distanceToSquared(anchor) < 49;
     anchor.project(camera);
     const visible = near && root.visible && pitGrp.visible && anchor.z > -1 && anchor.z < 1 && Math.abs(anchor.x) < 0.95 && Math.abs(anchor.y) < 0.9;
-    actionButton.style.display = visible ? 'block' : 'none';
+    actionButton.hidden = !visible;
     if (visible) {
-      actionButton.style.left = Math.min(innerWidth - 150, Math.max(8, (anchor.x + 1) * innerWidth / 2 + 18)) + 'px';
-      actionButton.style.top = Math.min(innerHeight - 52, Math.max(8, (1 - anchor.y) * innerHeight / 2)) + 'px';
+      PartActions.positionButton(actionButton,(anchor.x+1)*innerWidth/2+18,(1-anchor.y)*innerHeight/2-22);
     }
   }
   function toggle() {
@@ -241,5 +232,5 @@ const PitLadder = (() => {
     return true;
   }
   return { build, toggle, update, get secured() { return !!root && root.userData.contactClosed; },
-    get deployed() { return deployed; }, dimensions: D };
+    get deployed() { return deployed; }, get busy() { return busy; }, dimensions: D };
 })();

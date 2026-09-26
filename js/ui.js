@@ -417,6 +417,70 @@ function updateManualCameraNear() {
       updateStatus('v-dir', msg || '■ 점검 정지 (INS)', '#f0883e');
     }
 
+    let inspectionResetting=false;
+    async function resetInspections() {
+      if(inspectionResetting||!CarDoor.state?.ready)return;
+      inspectionResetting=true;
+      const buttons=[...document.querySelectorAll('[data-inspection-reset]')];
+      const surfaces=[document.getElementById('hud'),document.getElementById('hall-panel'),document.getElementById('pit-ladder-action'),document.getElementById('part-actions'),renderer.domElement].filter(Boolean);
+      const labels=buttons.map(b=>b.textContent),inert=surfaces.map(e=>e.inert);
+      buttons.forEach(b=>{b.disabled=true;b.textContent='리셋 중…';});
+      surfaces.forEach(e=>e.inert=true);
+      const wait=async test=>{
+        const start=performance.now();
+        while(!test()){
+          if(performance.now()-start>60000)throw new Error('점검 복귀 시간 초과');
+          await new Promise(resolve=>setTimeout(resolve,50));
+        }
+      };
+      try {
+        clearTimeout(autoTimer);insHold=0;insStop();
+        // Fault demonstrations retain their own mechanical recovery sequence.
+        if(UCMDemo.state.active){
+          await wait(()=>!CarDoor.state.busy);
+          UCMDemo.reset(document.getElementById('btn-ucm'));await wait(()=>!UCMDemo.state.active);
+        }
+        if(overspeedActive){
+          await wait(()=>governorPhase==='tripped'||!overspeedActive);
+          if(overspeedActive)resetGovernorFault(document.getElementById('btn-overspeed'));
+          await wait(()=>!overspeedActive&&!moving);
+          await new Promise(resolve=>setTimeout(resolve,350));
+        }
+        clearTimeout(autoTimer);
+        gsap.killTweensOf(carGrp.position);gsap.killTweensOf(cwtGrp.position);
+        moving=false;MACH.motorOff();MACH.brakeSet();
+        estop=false;
+        const stop=document.getElementById('btn-estop');
+        stop.classList.remove('armed');stop.setAttribute('aria-pressed','false');stop.setAttribute('aria-label','비상정지');
+        stop.querySelector('span').textContent=portraitHUD?.isPortrait()?'STOP':'정지';
+        HallManual.resetAll();
+        await new Promise(resolve=>CarDoor.close(resolve));
+        doorOpen=false;currentState=ELEVATOR_STATE.IDLE;
+        updateStatus('v-door','닫힘','#3fb950');
+        DoorBypass.setMode('off');
+        await wait(()=>!PitLadder.busy);
+        if(PitLadder.deployed&&!PitLadder.toggle())throw new Error('사다리 복귀 실패');
+        await wait(()=>PitLadder.secured);
+        document.getElementById('ucm-brake').value='normal';renderSegments();
+        setInspectionMode(false);
+        const nf=insNearestFloor();
+        if(!moving&&Math.abs(carGrp.position.y-FLOOR_Y[nf]-S.CAR_H/2)>.01)rescueToNearestFloor('점검 리셋 · 가까운 층 복귀',false);
+        await wait(()=>!moving);
+        clearTimeout(autoTimer);HallManual.resetAll();
+        curFloor=insNearestFloor();syncAllIndicators(curFloor+1,'');updateStatus('v-floor',(curFloor+1)+'F','#3fb950');
+        document.querySelectorAll('#fbtns .c-btn').forEach(b=>b.classList.toggle('active',Number(b.dataset.f)===curFloor));
+        document.querySelectorAll('#fbtns .called').forEach(b=>b.classList.remove('called'));
+        updateStatus('v-spd','0 m/min');updateStatus('v-dir','점검 전체 리셋 완료 · 자동운전','#3fb950');
+      } catch(error) {
+        console.error(error);updateStatus('v-dir','점검 리셋 미완료 · 다시 눌러 주세요','#f0883e');
+      } finally {
+        inspectionResetting=false;
+        surfaces.forEach((e,i)=>e.inert=inert[i]);
+        buttons.forEach((b,i)=>{b.disabled=false;b.textContent=labels[i];});
+        document.getElementById('inspection-reset').textContent=portraitHUD?.isPortrait()?'리셋':'점검 전체 리셋';
+      }
+    }
+
     // 점검 스위치 ON/OFF. ON: 자동 운전 즉시 차단 / OFF: 착상 위치가 아니면 최근접 층 착상
     function setInspectionMode(on) {
       if (!on && (DoorBypass.mode !== 'off' || !DoorBypass.hallSecured())) { updateStatus('v-dir', '승장문 닫기·재잠금 및 BYPASS 해제 후 AUT 전환', '#f0883e'); return; }
@@ -857,6 +921,7 @@ function updateManualCameraNear() {
     // 독 팝오버 — 한 번에 하나만 열림, 아이콘 재탭·다른 아이콘·접기 버튼으로 닫힘
     function closeAllMenus() {
       portraitHUD?.close();
+      PartActions.close();
       document.querySelectorAll('.sheet.open').forEach(d => d.classList.remove('open'));
       document.querySelectorAll('[data-menu].active').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-expanded', 'false'); });
     }
@@ -874,10 +939,9 @@ function updateManualCameraNear() {
         if (!slots.has(node)) { const marker = document.createComment('portrait-control-home'); node.before(marker); slots.set(node, marker); }
         return node;
       };
-      const actions = ['btn-overspeed', 'btn-ucm', 'hall-toggle', 'btn-pit-ladder'].map(id => remember(document.getElementById(id)));
+      const actions = ['hall-toggle', 'inspection-reset'].map(id => remember(document.getElementById(id)));
       const panels = {
         mode: remember(document.querySelector('#dd-inst .mode-row')),
-        brake: remember(document.getElementById('ucm-brake').closest('.field')),
         bypass: remember(document.getElementById('bypass-mode').closest('.field'))
       };
       const labels = new Map();
@@ -900,12 +964,10 @@ function updateManualCameraNear() {
         document.getElementById('mobile-eye-slash').style.display = '';
         if (media.matches) {
           menuButton.setAttribute('aria-controls', 'mobile-tools');
-          const brakeButton = dock.querySelector('[data-mobile-panel="brake"]');
-          actions.slice(0, 2).forEach(node => dock.insertBefore(node, brakeButton));
-          actions.slice(2).forEach(node => dock.insertBefore(node, dock.querySelector('[data-mobile-panel="bypass"]')));
-          shortLabel(actions[2], 'KEY'); shortLabel(actions[3], 'LAD');
+          actions.forEach(node => dock.insertBefore(node, dock.querySelector('[data-mobile-panel="bypass"]')));
+          shortLabel(actions[0], 'KEY'); shortLabel(actions[1], '리셋');
           for (const [id, text] of [['btn-aut','AUT'],['btn-ins','INS']]) shortLabel(document.getElementById(id),text);
-          for (const [id, values] of [['ucm-brake',['ON','FAIL','NONE']],['bypass-mode',['OFF','HALL','CAR']]]) {
+          for (const [id, values] of [['bypass-mode',['OFF','HALL','CAR']]]) {
             document.querySelectorAll(`.seg[data-for="${id}"] button`).forEach((node,i) => shortLabel(node,values[i]));
           }
           shortLabel(document.querySelector('#btn-estop span'), estop ? 'RESET' : 'STOP');
@@ -937,11 +999,6 @@ function updateManualCameraNear() {
         document.getElementById('mobile-eye-slash').style.display = hide ? 'none' : '';
       });
       actions.forEach(node => { if (!node.hasAttribute('aria-label')) node.setAttribute('aria-label',node.title); });
-      new MutationObserver(() => {
-        const ladder = actions[3];
-        ladder.setAttribute('aria-label', ladder.title);
-        if (media.matches && ladder.textContent !== 'LAD') ladder.textContent = 'LAD';
-      }).observe(actions[3], { childList: true, attributes: true, attributeFilter: ['title'] });
       media.addEventListener('change',sync);
       const api = { close, isPortrait: () => media.matches, toggle: () => {
         const wasOpen = !dock.hidden; closeAllMenus();
@@ -1006,6 +1063,7 @@ function updateManualCameraNear() {
       document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAllMenus(); });
       renderSegments();
       bindPortraitHUD();
+      PartActions.bind();
       showControlHint();
       // 세로 폰에서는 승장문 점검 패널이 같은 자리(운행바 위)에 뜨므로 고장 시트를 닫아 준다.
       document.getElementById('hall-toggle')?.addEventListener('click', () => {
@@ -1041,6 +1099,7 @@ function updateManualCameraNear() {
       });
 
       /* ── 점검(수동) 운전 ── AUT/INS 토글 + ▲▼ 홀드 투 런 ── */
+      document.querySelectorAll('[data-inspection-reset]').forEach(b=>b.addEventListener('click',resetInspections));
       document.querySelectorAll('[data-ins]').forEach(b => {
         b.addEventListener('click', () => setInspectionMode(b.dataset.ins === 'on'));
         b.classList.toggle('mode-on', b.dataset.ins === 'off');   // 기동 시 자동운전
@@ -1105,12 +1164,6 @@ function updateManualCameraNear() {
       };
       latchSources.forEach(b => new MutationObserver(syncResetPill).observe(b, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['disabled'] }));
       resetPill.addEventListener('click', () => document.getElementById(resetPill.dataset.src)?.click());
-
-      document.getElementById('btn-pit-ladder')?.addEventListener('click', () => {
-        if (!PitLadder.toggle()) updateStatus('v-dir', '카를 사다리보다 높이 올려 정지한 후 조작', '#f0883e');
-        else updateStatus('v-dir', PitLadder.deployed ? '사다리 접는 중' : '사다리 펼치는 중 · 운행 차단', '#f0883e');
-      });
-
 
       // 전체 보기 — 더블클릭으로 가까이 간 화면을 처음 운행 시점으로 되돌린다(부품별 카메라 프리셋은 두지 않는다).
       document.getElementById('c-shaft').addEventListener('click', () => {

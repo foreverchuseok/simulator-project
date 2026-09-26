@@ -59,9 +59,15 @@ try {
    }
    const tip=q.releaseLever.localToWorld(q.releaseTip.clone()),end=q.releaseWire.localToWorld(q.releaseWirePoints[0].clone());
    maxWireGap=Math.max(maxWireGap,tip.distanceTo(end));
-   for(const {mesh} of q.edgeTails){
+   for(const {mesh,side} of q.edgeTails){
     const curve=mesh.geometry.parameters.path;
+    if(curve.points.some(p=>p.y<d.trackY+.119||p.z>d.doorZ-.06))failures.push('edge flex outside header '+i);
+    const start=curve.getPoint(0),end=curve.getPoint(1);
+    const expectedX=side*(d.cx+d.stroke*i/100+.15);
+    if(Math.abs(start.x-expectedX)>1e-8)failures.push('edge lead detached '+i);
+    if(Math.abs(end.x-side*(d.headerW/2-.08))>1e-8)failures.push('return anchor moved '+i);
     for(let j=0;j<=160;j++){
+     if(Math.abs(curve.getPoint(j/160).x)>Math.abs(end.x)+1e-8)failures.push('flex outside anchor '+i);
      const p=mesh.localToWorld(curve.getPoint(j/160));
      for(const solid of solids){const v=solid.worldToLocal(p.clone());if(solid.geometry.boundingBox.clone().expandByScalar(q.spec.edgeWireR).containsPoint(v)){failures.push('flex touches sill '+i);break;}}
     }
@@ -88,5 +94,5 @@ try {
  await page.evaluate(()=>{carDoorR.position.x=CarDoor.dimensions().ox;CarDoor.pose();});
  await shot('open',[0,0,d.doorZ+4.4],[0,0,d.doorZ]);
  assert.deepEqual(errors,[]);fs.writeFileSync(out+'/report.json',JSON.stringify({upperLock,result,errors},null,2));
- console.log('PASS car lock, release wire, guide shoes and lower flex clearance.');
+ console.log('PASS car lock, release wire, guide shoes and upper edge wiring clearance.');
 } finally {await browser.close();}

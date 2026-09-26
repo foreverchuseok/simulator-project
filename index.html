@@ -699,6 +699,18 @@
       }
     }
 
+    .part-action { position:fixed; z-index:90; width:44px; height:44px; padding:0; border-radius:50%; border:1px solid rgba(230,244,255,.55); background:rgba(24,43,61,.48); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); color:white; box-shadow:0 3px 12px #0003; cursor:pointer; font-size:0; display:grid; place-items:center; }
+    .part-action::before { content:''; width:22px; height:22px; background:var(--part-icon) center/contain no-repeat; }
+    .part-action.active, .part-action[aria-expanded="true"] { background:rgba(27,112,174,.76); border-color:#a8e1ff; }
+    .part-action:disabled { opacity:.5; cursor:progress; }
+    .part-action:focus-visible { outline:2px solid #9fddff; outline-offset:3px; }
+    .part-action[hidden], #rope-brake-panel[hidden] { display:none; }
+    #rope-brake-panel { position:fixed; z-index:111; width:230px; max-width:calc(100vw - 16px); padding:10px; border-radius:16px; color:var(--ui-text); font-family:var(--ui-font); }
+    .part-panel-head { display:flex; align-items:center; justify-content:space-between; font-size:13px; font-weight:600; }
+    .part-panel-head button { width:44px; height:44px; border:0; border-radius:50%; background:transparent; color:inherit; font-size:22px; cursor:pointer; }
+    #rope-brake-panel .field-label { display:none; }
+    #rope-brake-panel .part-action { position:relative; margin:8px auto 0; }
+
     /* 승장문 점검 패널 — HUD 와 같은 톤. 데스크톱은 상태 카드 아래, 세로 폰은 운행바 위 */
     #hall-panel {
       position: fixed;
@@ -841,7 +853,7 @@
       #mobile-visibility svg { width: 21px; height: 21px; }
       #hud.tools-hidden > :not(#mobile-visibility):not(#statusbar):not(#fault-reset) { visibility: hidden !important; pointer-events: none !important; }
       #hud.tools-hidden #statusbar { opacity: .8; }
-      .portrait-tools-hidden #pit-ladder-action { visibility: hidden !important; }
+      .portrait-tools-hidden .part-action, .portrait-tools-hidden #rope-brake-panel { visibility: hidden !important; }
       #fault-reset { top: calc(var(--edge-t) + 64px); height: 44px; max-width: calc(100vw - 178px); padding: 0 9px; font-size: 11px; gap: 4px; }
       #fault-reset small { display: none; }
       .sheet { left: var(--edge); right: calc(var(--edge-r) + 66px); top: calc(var(--edge-t) + 118px); bottom: auto; width: auto; max-height: calc(100dvh - var(--edge-t) - var(--edge-b) - 180px); border-radius: 18px; }
@@ -903,6 +915,7 @@
       <div class="sheet glass" id="dd-inst" role="dialog" aria-label="고장·점검">
         <div class="sheet-head"><h3>고장·점검</h3><button class="sheet-close" data-close aria-label="닫기">✕</button></div>
 
+        <button id="inspection-reset" class="act-code" data-inspection-reset title="모든 층 문·삼각키·사다리·BYPASS·점검운전 원복" style="width:100%;min-height:44px">점검 전체 리셋</button>
         <h4><span class="l-full">운전 모드</span><span class="l-short">운전</span></h4>
         <div class="mode-row">
           <div class="seg">
@@ -916,34 +929,11 @@
         </div>
         <p class="note">점검 모드에서 버튼을 누르는 동안만 서행합니다.</p>
 
-        <h4><span class="l-full">고장 재현</span><span class="l-short">고장</span></h4>
-        <div class="acts">
-          <div class="act">
-            <button class="act-code red" id="btn-overspeed" title="과속(조속기) — 3층 이상">OVS</button>
-            <div class="act-txt"><b>과속</b><span>조속기 → 비상정지장치 작동 · 3층 이상</span></div>
-          </div>
-          <div class="act">
-            <button class="act-code red" id="btn-ucm" title="개문발차 — 문이 열린 채 카 출발 (로프브레이크)">UCM</button>
-            <div class="act-txt"><b><span class="l-full">개문발차</span><span class="l-short">개문</span></b><span>문 열린 채 출발 → 로프브레이크</span></div>
-          </div>
-        </div>
-        <div class="field">
-          <div class="field-label"><span><span class="l-full">로프브레이크 상태</span><span class="l-short">로프브레이크</span></span></div>
-          <select id="ucm-brake" class="seg-src" aria-label="개문발차 시연 로프브레이크 상태" tabindex="-1">
-            <option value="normal">정상</option><option value="fail">미작동</option><option value="none">미설치</option>
-          </select>
-          <div class="seg" data-for="ucm-brake"></div>
-        </div>
-
         <h4><span class="l-full">점검 도구</span><span class="l-short">점검</span></h4>
         <div class="acts">
           <div class="act">
             <button class="act-code amber" id="hall-toggle" title="층별 승장문 수동 개방 (삼각키)">문</button>
             <div class="act-txt"><b><span class="l-full">승장문 점검</span><span class="l-short">삼각키</span></b><span>삼각키로 층별 승장문 개방</span></div>
-          </div>
-          <div class="act">
-            <button class="act-code" id="btn-pit-ladder" aria-pressed="false" title="피트 사다리 펴기">사다리</button>
-            <div class="act-txt"><b><span class="l-full">피트 사다리</span><span class="l-short">피트</span></b><output id="pit-ladder-status" aria-live="polite">접힘 · 운행 가능</output></div>
           </div>
         </div>
         <div class="field">
@@ -1006,7 +996,6 @@
 
       <nav id="mobile-tools" class="portrait-only glass" aria-label="고장·점검 단축 도구" hidden>
         <button data-mobile-panel="mode" aria-label="운전 모드" aria-expanded="false">MODE</button>
-        <button data-mobile-panel="brake" aria-label="로프브레이크 상태" aria-expanded="false">BRK</button>
         <button data-mobile-panel="bypass" aria-label="접점 바이패스" aria-expanded="false">BYP</button>
       </nav>
       <section id="mobile-detail" class="portrait-only glass" aria-label="점검 설정" hidden>
@@ -1029,8 +1018,26 @@
   </div>
 
   <!-- 라이브러리 로드 -->
+  <div id="part-actions">
+    <button id="btn-overspeed" class="part-action governor-icon" aria-label="조속기 과속 시연" title="조속기 과속 시연 · 3층 이상" hidden>OVS</button>
+    <button id="rope-brake-action" class="part-action brake-icon" aria-label="로프브레이크 시연 설정" aria-expanded="false" aria-controls="rope-brake-panel" hidden></button>
+    <section id="rope-brake-panel" class="glass" aria-label="로프브레이크 시연" hidden>
+      <div class="part-panel-head"><span>로프브레이크</span><button id="rope-brake-dismiss" aria-label="접기">×</button></div>
+        <div class="field">
+          <div class="field-label"><span><span class="l-full">로프브레이크 상태</span><span class="l-short">로프브레이크</span></span></div>
+          <select id="ucm-brake" class="seg-src" aria-label="개문발차 시연 로프브레이크 상태" tabindex="-1">
+            <option value="normal">정상</option><option value="fail">미작동</option><option value="none">미설치</option>
+          </select>
+          <div class="seg" data-for="ucm-brake"></div>
+        </div>
+
+      <button id="btn-ucm" class="part-action play-icon" aria-label="개문발차 시연" title="개문발차 시연">UCM</button>
+    </section>
+  </div>
+
   <section id="hall-panel" aria-label="승장문 점검" hidden>
     <div class="hall-row"><strong>승장문 점검</strong><button id="hall-dismiss" aria-label="점검 패널 접기">접기</button></div>
+    <div class="hall-row"><button id="hall-reset" data-inspection-reset title="모든 층의 문과 점검 상태를 한 번에 원복">점검 전체 리셋</button></div>
     <label for="hall-floor"><span class="l-full">대상 층</span><span class="l-short">층</span></label><div class="hall-row"><select id="hall-floor"></select><button id="hall-observe">관찰 위치</button></div>
     <div class="hall-row"><button id="hall-key">삼각키 해제</button></div>
     <label for="hall-opening"><span class="l-full">승장문 개방량</span><span class="l-short">개방량</span></label><input id="hall-opening" type="range" min="0" max="100" value="0" aria-label="승장문 개방량">
@@ -1063,8 +1070,10 @@
   <script src="js/leveling-sensors.js"></script>
   <script src="js/safety-device.js"></script>
   <script src="js/elevator.js"></script>
+  <script src="js/hall-finish.js"></script>
   <script src="js/pit-ladder.js"></script>
   <script src="js/ucm-demo.js"></script>
+  <script src="js/part-actions.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/hall-manual.js"></script>
 
@@ -1559,6 +1568,7 @@
       UCMDemo.update(performance.now() / 1000);
       controls.update();
       if (camera.position.y < Y0 + 0.35) camera.position.y = Y0 + 0.35;
+      PartActions.update();
       PitLadder.update();
       renderer.render(scene, camera);
     }

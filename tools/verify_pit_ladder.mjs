@@ -113,7 +113,8 @@ try {
   await shot('folded', [0.60, 2.2, -1.20], [-1.55, 1.50, 0.85]);
   await page.evaluate(() => { camera.fov = 42; camera.updateProjectionMatrix(); });
   await shot('folded-switch', [-1.05, 3.0, 0.35], [-1.53, 2.80, 0.85]);
-  await page.evaluate(() => { camera.position.set(-.45, 1.45, .05); controls.target.set(-1.55, 1.0, .85); controls.update(); });
+  // 아이콘은 사다리 상단(1.8m) 곁에 뜬다 — 그 높이가 화면 안에 들어오는 시점에서 누른다.
+  await page.evaluate(() => { camera.position.set(-.35, 2.1, -.1); controls.target.set(-1.55, 1.75, .85); controls.update(); });
   await page.click('#pit-ladder-action');
   assert.equal(await page.evaluate(() => PitLadder.secured), false, 'contact opens immediately');
   await page.evaluate(() => moveElevator(2));
@@ -189,8 +190,8 @@ try {
   assert.equal(await page.evaluate(() => moving), false, 'inspection blocked while deployed');
   await page.evaluate(() => { insMode = false; rescueToNearestFloor(); });
   assert.equal(await page.evaluate(() => moving), false, 'rescue blocked while deployed');
-  await page.click('[data-menu="dd-inst"]');
-  await page.click('#btn-pit-ladder');
+  await page.evaluate(() => { camera.position.set(-.35,2.1,-.1); controls.target.set(-1.55,1.75,.85); controls.update(); });
+  await page.click('#pit-ladder-action');
   await page.waitForTimeout(400);
   assert.equal(await page.evaluate(() => PitLadder.secured), false, 'blocked until clips re-seat');
   await page.waitForFunction(() => !PitLadder.deployed && PitLadder.secured);
