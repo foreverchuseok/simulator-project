@@ -24,6 +24,7 @@
       font-family: 'Malgun Gothic', sans-serif;
       display: flex;
       height: 100vh;
+      height: 100dvh; /* ★모바일 크롬: 100vh 는 주소창이 숨은 높이라 하단 운행바가 화면 밖으로 밀린다 */
       overflow: hidden;
     }
 
@@ -383,7 +384,7 @@
 
     .act-txt { min-width: 0; }
     .act-txt b { display: block; font-size: 14px; font-weight: 700; }
-    .act-txt span, .act-txt output { display: block; margin-top: 2px; font-size: 12px; line-height: 1.4; color: var(--ui-sub); }
+    .act-txt > span, .act-txt > output { display: block; margin-top: 2px; font-size: 12px; line-height: 1.4; color: var(--ui-sub); }
 
     /* 세그먼트 (select 원본은 숨긴 채 값·이벤트를 그대로 쓴다) */
     .field { margin: 2px 0 10px; }
@@ -626,7 +627,7 @@
     }
 
     @media (max-width: 600px) {
-      :root { --rb-btn: 44px; }
+      :root { --rb-btn: 46px; }
       #statusbar { gap: 10px; padding: 8px 12px 8px 10px; border-radius: 16px; }
       .st-floor { min-width: 56px; }
       #v-floor { font-size: 28px; }
@@ -646,7 +647,7 @@
         right: 8px;
         bottom: calc(var(--caption-bottom) - 6px);
         width: auto;
-        max-height: min(62dvh, calc(100dvh - var(--caption-bottom) - 84px));
+        max-height: min(74dvh, calc(100dvh - var(--caption-bottom) - 80px));
         transform: translateY(14px);
         transform-origin: bottom center;
       }
@@ -738,6 +739,69 @@
     @media (max-width: 600px) {
       #hall-panel { top: auto; left: 8px; right: 8px; bottom: calc(var(--caption-bottom) - 6px); width: auto; max-height: min(60dvh, calc(100dvh - var(--caption-bottom) - 84px)); }
     }
+
+    /* ── 모바일 컴팩트 모드 (폰 세로 ≤600px · 가로 폰) — PC 화면은 바꾸지 않는다 ──
+       참고: Material 3(터치 48dp·세그먼트 칸마다 48dp·바텀시트 드래그 핸들), 모바일 3D 뷰어의 "설명은 걷어내고
+       필요한 조작만" 원칙. 설명·안내 문구를 숨기고, 약자·짧은 라벨 + 2열 타일로 한 화면에 들어가게 한다. */
+    .l-short { display: none !important; }
+    .mode-row .hold { margin-top: 8px; }
+
+    @media (max-width: 600px), (max-height: 500px) and (orientation: landscape) {
+      .l-full { display: none !important; }
+      .l-short { display: inline !important; }
+      #hud .sheet .note, #hud .sheet .help, #hud .sheet .help-title,
+      #hud .act-txt > span, #hud .act-txt > output, #hud .toggle small, #hud .field-label output { display: none; }
+
+      .sheet { padding: 8px 12px 12px; }
+      .sheet::before {                                   /* 바텀시트 드래그 핸들 모양 */
+        content: '';
+        display: block;
+        width: 38px;
+        height: 4px;
+        margin: 0 auto 6px;
+        border-radius: 2px;
+        background: rgba(255, 255, 255, 0.28);
+      }
+      .sheet-head h3 { font-size: 15px; }
+      .sheet h4 { margin: 10px 2px 6px; font-size: 12px; letter-spacing: 0.03em; }
+
+      /* 운전 모드: AUT·INS 와 ▲▼ 를 한 줄에 */
+      .mode-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .mode-row .hold { margin-top: 0; gap: 6px; }
+      .seg button { min-height: 48px; font-size: 14px; }
+      .seg button small { font-size: 11px; }
+      .hold button { min-height: 48px; font-size: 18px; }
+
+      /* 동작: 2열 타일 (약자 버튼 + 짧은 한글) */
+      .acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+      .acts .act { margin: 0; padding: 6px; gap: 9px; }
+      .acts .act-code { min-width: 60px; height: 48px; font-size: 15px; }
+      .act-txt b { font-size: 14px; white-space: nowrap; }
+      .field { margin: 0 0 6px; }
+      .field-label { margin-bottom: 5px; font-size: 12.5px; }
+
+      /* 설정: 토글 3개를 한 줄 칩으로 */
+      .toggles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+      .toggle { flex-direction: column; justify-content: center; gap: 6px; min-height: 76px; margin: 0; padding: 8px 4px; text-align: center; }
+      .toggle span b { font-size: 13.5px; }
+      .toggle::after { width: 38px; height: 22px; background: var(--ui-fill-2) radial-gradient(circle at 11px 50%, #f8fafc 8.5px, transparent 9px); }
+      .toggle.active::after, .toggle[aria-pressed="true"]::after { background: var(--ok) radial-gradient(circle at 27px 50%, #fff 8.5px, transparent 9px); }
+
+      /* 상태 카드: 칩이 레일과 겹치지 않게 */
+      #v-dir { max-width: calc(100vw - 250px); min-width: 64px; }
+
+      /* 승장문 점검 패널: 안내 문장 숨김 */
+      #hall-panel { padding: 10px 12px; }
+      #hall-panel p, #hall-panel label[for] { display: none; }   /* 층 선택·개방량 슬라이더는 라벨 없이도 자명하다 */
+      #hall-panel .hall-row:first-child > strong { flex: 3; }
+      #hall-panel label { margin: 6px 2px 3px; }
+      #hall-panel .hall-row { margin: 6px 0; }
+    }
+
+    @media (max-width: 380px) {
+      :root { --rb-btn: 42px; }
+    }
+
     /* 개문발차(UCM) 시연 중에는 근접 사다리 버튼을 숨긴다 (js/ucm-demo.js) */
     .ucm-active #pit-ladder-action { visibility: hidden !important; }
   </style>
@@ -789,66 +853,74 @@
       <div class="sheet glass" id="dd-inst" role="dialog" aria-label="고장·점검">
         <div class="sheet-head"><h3>고장·점검</h3><button class="sheet-close" data-close aria-label="닫기">✕</button></div>
 
-        <h4>운전 모드</h4>
-        <div class="seg">
-          <button id="btn-aut" data-ins="off" title="자동운전"><small>AUT</small>자동</button>
-          <button id="btn-ins" data-ins="on" title="점검(수동)운전"><small>INS</small>점검</button>
-        </div>
-        <div class="hold">
-          <button id="btn-ins-up" data-ins-dir="1" title="점검 상승 (누르는 동안 서행)" disabled>▲ 상승</button>
-          <button id="btn-ins-dn" data-ins-dir="-1" title="점검 하강 (누르는 동안 서행)" disabled>▼ 하강</button>
+        <h4><span class="l-full">운전 모드</span><span class="l-short">운전</span></h4>
+        <div class="mode-row">
+          <div class="seg">
+            <button id="btn-aut" data-ins="off" title="자동운전"><small>AUT</small>자동</button>
+            <button id="btn-ins" data-ins="on" title="점검(수동)운전"><small>INS</small>점검</button>
+          </div>
+          <div class="hold">
+            <button id="btn-ins-up" data-ins-dir="1" title="점검 상승 (누르는 동안 서행)" aria-label="점검 상승" disabled>▲<span class="l-full"> 상승</span></button>
+            <button id="btn-ins-dn" data-ins-dir="-1" title="점검 하강 (누르는 동안 서행)" aria-label="점검 하강" disabled>▼<span class="l-full"> 하강</span></button>
+          </div>
         </div>
         <p class="note">점검 모드에서 버튼을 누르는 동안만 서행합니다.</p>
 
-        <h4>고장 재현</h4>
-        <div class="act">
-          <button class="act-code red" id="btn-overspeed" title="과속(조속기)">OVS</button>
-          <div class="act-txt"><b>과속</b><span>조속기 → 비상정지장치 작동 · 3층 이상</span></div>
-        </div>
-        <div class="act">
-          <button class="act-code red" id="btn-ucm" title="개문발차 — 문이 열린 채 카 출발 (로프브레이크)">UCM</button>
-          <div class="act-txt"><b>개문발차</b><span>문 열린 채 출발 → 로프브레이크</span></div>
+        <h4><span class="l-full">고장 재현</span><span class="l-short">고장</span></h4>
+        <div class="acts">
+          <div class="act">
+            <button class="act-code red" id="btn-overspeed" title="과속(조속기) — 3층 이상">OVS</button>
+            <div class="act-txt"><b>과속</b><span>조속기 → 비상정지장치 작동 · 3층 이상</span></div>
+          </div>
+          <div class="act">
+            <button class="act-code red" id="btn-ucm" title="개문발차 — 문이 열린 채 카 출발 (로프브레이크)">UCM</button>
+            <div class="act-txt"><b><span class="l-full">개문발차</span><span class="l-short">개문</span></b><span>문 열린 채 출발 → 로프브레이크</span></div>
+          </div>
         </div>
         <div class="field">
-          <div class="field-label"><span>로프브레이크 상태</span></div>
+          <div class="field-label"><span><span class="l-full">로프브레이크 상태</span><span class="l-short">로프브레이크</span></span></div>
           <select id="ucm-brake" class="seg-src" aria-label="개문발차 시연 로프브레이크 상태" tabindex="-1">
             <option value="normal">정상</option><option value="fail">미작동</option><option value="none">미설치</option>
           </select>
           <div class="seg" data-for="ucm-brake"></div>
         </div>
 
-        <h4>점검 도구</h4>
-        <div class="act">
-          <button class="act-code amber" id="hall-toggle" title="층별 승장문 수동 개방">문</button>
-          <div class="act-txt"><b>승장문 점검</b><span>삼각키로 층별 승장문 개방</span></div>
+        <h4><span class="l-full">점검 도구</span><span class="l-short">점검</span></h4>
+        <div class="acts">
+          <div class="act">
+            <button class="act-code amber" id="hall-toggle" title="층별 승장문 수동 개방 (삼각키)">문</button>
+            <div class="act-txt"><b><span class="l-full">승장문 점검</span><span class="l-short">삼각키</span></b><span>삼각키로 층별 승장문 개방</span></div>
+          </div>
+          <div class="act">
+            <button class="act-code" id="btn-pit-ladder" aria-pressed="false" title="피트 사다리 펴기">사다리</button>
+            <div class="act-txt"><b><span class="l-full">피트 사다리</span><span class="l-short">피트</span></b><output id="pit-ladder-status" aria-live="polite">접힘 · 운행 가능</output></div>
+          </div>
         </div>
         <div class="field">
-          <div class="field-label"><span>BYPASS (접점 우회)</span><output id="bypass-status" aria-live="polite">BYPASS 해제</output></div>
+          <div class="field-label"><span><span class="l-full">BYPASS (접점 우회)</span><span class="l-short">BYP</span></span><output id="bypass-status" aria-live="polite">BYPASS 해제</output></div>
           <select id="bypass-mode" class="seg-src" aria-label="바이패스 접점 선택" tabindex="-1">
             <option value="off">해제</option><option value="hall">승장문</option><option value="car">카문</option>
           </select>
           <div class="seg" data-for="bypass-mode"></div>
-        </div>
-        <div class="act">
-          <button class="act-code" id="btn-pit-ladder" aria-pressed="false" title="피트 사다리 펴기">사다리</button>
-          <div class="act-txt"><b>피트 사다리</b><output id="pit-ladder-status" aria-live="polite">접힘 · 운행 가능</output></div>
         </div>
       </div>
 
       <!-- 시트: 설정 -->
       <div class="sheet glass" id="dd-view" role="dialog" aria-label="설정">
         <div class="sheet-head"><h3>설정</h3><button class="sheet-close" data-close aria-label="닫기">✕</button></div>
-        <h4>정격 속도</h4>
+        <h4><span class="l-full">정격 속도</span><span class="l-short">속도 m/min</span></h4>
         <select id="speed-select" class="seg-src" title="정격 속도" tabindex="-1">
           <option value="60">60 m/min</option>
           <option value="90">90 m/min</option>
         </select>
         <div class="seg" data-for="speed-select"></div>
         <h4>보기</h4>
-        <button class="toggle" id="tm-cutaway" aria-pressed="false" title="기어 케이스 절개 — 웜·휠 이물림과 오일 레벨"><span><b>권상기 내부</b><small>기어 케이스 절개 · 웜·휠 이물림</small></span></button>
-        <button class="toggle" id="c-background" aria-pressed="false" title="기존 건물과 자연 풍경 표시"><span><b>주변 풍경</b><small>하늘·구름·조명</small></span></button>
-        <button class="toggle active" id="c-mascot" aria-pressed="true" title="기계실 마스코트 표시/숨김"><span><b>캐릭터</b><small>기계실 마스코트 「승강곰」</small></span></button>
-        <h4>조작 방법</h4>
+        <div class="toggles">
+          <button class="toggle" id="tm-cutaway" aria-pressed="false" title="기어 케이스 절개 — 웜·휠 이물림과 오일 레벨"><span><b><span class="l-full">권상기 내부</span><span class="l-short">권상기</span></b><small>기어 케이스 절개 · 웜·휠 이물림</small></span></button>
+          <button class="toggle" id="c-background" aria-pressed="false" title="기존 건물과 자연 풍경 표시"><span><b><span class="l-full">주변 풍경</span><span class="l-short">풍경</span></b><small>하늘·구름·조명</small></span></button>
+          <button class="toggle active" id="c-mascot" aria-pressed="true" title="기계실 마스코트 표시/숨김"><span><b>캐릭터</b><small>기계실 마스코트 「승강곰」</small></span></button>
+        </div>
+        <h4 class="help-title">조작 방법</h4>
         <dl class="help">
           <dt>회전</dt><dd>드래그 · 한 손가락</dd>
           <dt>확대</dt><dd>마우스 휠 · 두 손가락 벌리기</dd>
@@ -897,16 +969,18 @@
   <!-- 라이브러리 로드 -->
   <section id="hall-panel" aria-label="승장문 점검" hidden>
     <div class="hall-row"><strong>승장문 점검</strong><button id="hall-dismiss" aria-label="점검 패널 접기">접기</button></div>
-    <label for="hall-floor">대상 층</label><div class="hall-row"><select id="hall-floor"></select><button id="hall-observe">관찰 위치</button></div>
+    <label for="hall-floor"><span class="l-full">대상 층</span><span class="l-short">층</span></label><div class="hall-row"><select id="hall-floor"></select><button id="hall-observe">관찰 위치</button></div>
     <div class="hall-row"><button id="hall-key">삼각키 해제</button></div>
-    <label for="hall-opening">승장문 개방량</label><input id="hall-opening" type="range" min="0" max="100" value="0" aria-label="승장문 개방량">
+    <label for="hall-opening"><span class="l-full">승장문 개방량</span><span class="l-short">개방량</span></label><input id="hall-opening" type="range" min="0" max="100" value="0" aria-label="승장문 개방량">
     <div class="hall-row"><button id="hall-open">완전 열기</button><button id="hall-close">닫기</button></div>
     <output id="hall-message" aria-live="polite"></output>
     <!-- 절차 전체를 이 패널에서 끝낸다: 고장·점검 시트의 BYPASS·운전 모드·▲▼ 와 같은 원본을 공유한다 -->
-    <label>BYPASS (접점 우회)</label><div class="seg" data-for="bypass-mode"></div>
-    <label>운전 모드</label>
-    <div class="seg"><button data-ins="off" title="자동운전"><small>AUT</small>자동</button><button data-ins="on" title="점검(수동)운전"><small>INS</small>점검</button></div>
-    <div class="hold"><button data-ins-dir="1" title="점검 상승 (누르는 동안 서행)" disabled>▲ 상승</button><button data-ins-dir="-1" title="점검 하강 (누르는 동안 서행)" disabled>▼ 하강</button></div>
+    <label><span class="l-full">BYPASS (접점 우회)</span><span class="l-short">BYP</span></label><div class="seg" data-for="bypass-mode"></div>
+    <label><span class="l-full">운전 모드</span><span class="l-short">운전</span></label>
+    <div class="mode-row">
+      <div class="seg"><button data-ins="off" title="자동운전"><small>AUT</small>자동</button><button data-ins="on" title="점검(수동)운전"><small>INS</small>점검</button></div>
+      <div class="hold"><button data-ins-dir="1" title="점검 상승 (누르는 동안 서행)" aria-label="점검 상승" disabled>▲<span class="l-full"> 상승</span></button><button data-ins-dir="-1" title="점검 하강 (누르는 동안 서행)" aria-label="점검 하강" disabled>▼<span class="l-full"> 하강</span></button></div>
+    </div>
     <p>삼각키 해제 → 문 열기 → 승장문 BYPASS → ▲·▼를 누르는 동안 이동.</p>
     <p>복귀: 닫기 → 재잠금 → BYPASS 해제 → 자동.</p>
   </section>

@@ -29,7 +29,7 @@ try {
     await page.evaluate(m => { document.getElementById('ucm-brake').value = m; UCMDemo.start(document.getElementById('btn-ucm')); }, mode);
     // 매 프레임: 카 바닥 아래 에이프런 높이 구간(바닥 −0.75m ~ 바닥)의 캐릭터 정점이 에이프런 면(CAR_FRONT_Z)을 넘는 최대량
     await page.evaluate(() => {
-      const v = new THREE.Vector3(), mon = window.__ucmMon = { pen: 0, gap: Infinity, at: '' };
+      const v = new THREE.Vector3(), mon = window.__ucmMon = { pen: 0, gap: Infinity, floorGap: Infinity, at: '' };
       mon.fn = () => {
         const c = UCMDemo.character; if (!c.visible) return;
         const top = carGrp.position.y - S.CAR_H / 2, bottom = top - 0.75;
@@ -41,6 +41,7 @@ try {
           const a = o.geometry.attributes.position;
           for (let i = 0; i < a.count; i++) {
             v.fromBufferAttribute(a, i).applyMatrix4(o.matrixWorld);
+            if (v.z < CAR_FRONT_Z && v.y >= top - 0.001) mon.floorGap = Math.min(mon.floorGap, v.y - top); // 카 바닥 위 정점
             if (v.y <= bottom || v.y >= top) continue;
             const d = CAR_FRONT_Z - v.z;
             if (d > mon.pen) { mon.pen = d; mon.at = UCMDemo.state.stage; }
@@ -53,15 +54,16 @@ try {
     await until(() => UCMDemo.state.stage === 'boarding' && UCMDemo.character.visible);
     await page.waitForTimeout(2200); await shot(`${mode}-1-boarding`);
     await until(() => UCMDemo.state.stage === 'moving');
-    // 승장 화면에서 카가 눈에 보이게 올라가고, 승객은 내민 발을 뺀다(깜짝).
-    await until(() => UCMDemo.state.rise >= 0.08 || UCMDemo.state.view !== 'landing');
-    await shot(`${mode}-2-departure`);
+    // 승장 화면: 카가 올라가며 승객이 걸려 넘어지고, 상체가 올라간 카 바닥을 덮친 뒤 기계실로 간다.
+    await until(() => UCMDemo.state.landed || UCMDemo.state.view !== 'landing');
+    await page.waitForTimeout(300); await shot(`${mode}-2-departure`);
     await until(() => UCMDemo.state.view === 'machine-room');
-    const sw = await page.evaluate(() => ({ rise: UCMDemo.state.riseAtSwitch, startled: UCMDemo.state.startled }));
+    const sw = await page.evaluate(() => ({ rise: UCMDemo.state.riseAtSwitch, startled: UCMDemo.state.startled, landed: UCMDemo.state.landed, theta: UCMDemo.state.theta, trigger: UCMDemo.motion.trigger }));
     results[mode + 'Landing'] = sw;
-    assert.ok(sw.startled && sw.rise >= 0.08 && sw.rise < 0.28, `car visibly rises on the landing view before the grip: ${JSON.stringify(sw)}`);
+    assert.ok(sw.startled && sw.landed && sw.theta > 0.8 && sw.rise >= 0.15 && sw.rise < sw.trigger,
+      `passenger falls onto the rising car floor before the machine-room view: ${JSON.stringify(sw)}`);
     if (mode === 'normal') {
-      await page.waitForTimeout(1800); await shot(`${mode}-3a-rope-moving`);
+      await page.waitForTimeout(1750); if (!(await page.evaluate(() => UCMDemo.state.bang))) await shot(`${mode}-3a-rope-moving`);
       await until(() => UCMDemo.state.bang);
       await page.waitForTimeout(350); await shot(`${mode}-3-bang`);
       assert.equal(await page.evaluate(() => UCMDemo.state.bangView), 'machine-room', 'grip is seen on the machine-room view');
@@ -80,7 +82,7 @@ try {
       assert.equal(r.estop, true); assert.equal(r.doorOpen, true); assert.equal(r.btn, 'RST');
     } else {
       await page.waitForTimeout(1500); await shot(`${mode}-3-machine-room`);
-      await until(() => UCMDemo.state.stage === 'falling');
+      await until(() => UCMDemo.state.returned);
       await page.waitForTimeout(450); await shot(`${mode}-3b-before-card`);
       await until(() => UCMDemo.state.stage === 'done');
       await page.waitForTimeout(1600); await shot(`${mode}-4-fatal`);
@@ -92,10 +94,10 @@ try {
       assert.equal(r.brakeVisible, mode !== 'none');
       assert.ok(Math.abs(r.jawUp) < 1e-9, 'jaws stay open');
     }
-    const mon = await page.evaluate(() => { gsap.ticker.remove(window.__ucmMon.fn); const { pen, gap, at } = window.__ucmMon; return { pen, gap, at }; });
+    const mon = await page.evaluate(() => { gsap.ticker.remove(window.__ucmMon.fn); const { pen, gap, floorGap, at } = window.__ucmMon; return { pen, gap, floorGap, at }; });
     results[mode + 'Apron'] = mon;
     assert.ok(mon.pen < 0.001, `character never passes through the apron: ${JSON.stringify(mon)}`);
-    if (mode === 'normal') assert.ok(mon.gap < 0.01, `toe actually reaches the apron: ${JSON.stringify(mon)}`);
+    assert.ok(mon.floorGap >= -0.001 && mon.floorGap < 0.015, `upper body rests on the car floor without sinking: ${JSON.stringify(mon)}`);
     // 복귀
     await page.evaluate(() => UCMDemo.reset(document.getElementById('btn-ucm')));
     await until(() => !UCMDemo.state.active && !moving && !doorOpen && !estop, null, 60000);

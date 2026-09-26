@@ -14,16 +14,23 @@ const UCMDemo = (() => {
   const RB = { upperTravel: -0.013, lowerTravel: 0.009 };
   const MOTION = {
     accel: 0.8,        // 브레이크 고장 상승 가속도 (m/s², 불평형 하중)
-    trigger: 0.28,     // 문 열림 상태로 착상 구역을 벗어난 것을 검출하는 상승량 (m)
+    trigger: 0.33,     // 문 열림 상태로 착상 구역을 벗어난 것을 검출하는 상승량 (m) → 정지 약 0.45m (에이프런 60%, 2/3 이전)
     response: 0.04,    // 검출 → 로프 파지까지 지연 (s)
     decel: 3.0,        // 로프브레이크 제동 감속도 (m/s²)
     vMax: 1.0,         // 미작동 시 상한 속도 (m/s)
     failEnd: 1.3,      // 미작동 시 화면 전환 뒤 멈추는 상승량 (m)
-    startle: 0.015     // 카 바닥이 이만큼 올라오면 문턱 위로 내민 발을 빼며 놀란다 (m)
+    startle: 0.015,    // 카 바닥이 이만큼 올라오면 문턱 위로 내민 발을 빼며 놀란다 (m)
+    trip: 0.07,        // 카 문턱이 이만큼 올라오면 걸려 앞으로 넘어지기 시작한다 (m)
+    fatalAt: 0.8       // 미작동·미설치: 들려 올라가는 모습이 이 높이에 이르면 안내 카드로 전환 (m)
   };
+  /* 넘어짐 — 허리를 굽혀 상체가 올라간 카 바닥을 덮친다(다리는 승장에 선 채 수직, 에이프런 면 바깥).
+     굽힘각별 "카 안쪽(CAR_FRONT_Z 너머) 정점의 최저 높이" 표를 시연 시작 때 한 번 만들고, 매 프레임
+     카 바닥 높이에 맞는 최대 굽힘각을 고른다. 바닥이 계속 올라오면 상체가 떠밀려 올라가고,
+     굽힘각이 lift 보다 작아져야 하면(미작동) 몸 전체가 카 바닥에 실려 들린다. */
+  const LEAN = { step: .01, max: 1.5, clear: .006, lift: .35, standOff: .26, gravity: 30 }; // lift .35: 정상 정지(≈0.45m)에서는 들리지 않는다
   /* 시간 배율(느린 동작) — 승장에서는 카가 눈에 보이게(약 +0.12m) 올라가고, 기계실로 가는 동안은
      거의 멈춘 듯하다가, 기계실에서 로프가 천천히 흐르다 파지된다. */
-  const TS = { landing: .35, transit: .05, machineRoom: .2, fail: .45, failLean: .5 };
+  const TS = { landing: .35, landed: .12, transit: .03, machineRoom: .12, failBack: .05, failLanding: .3 };
   let char = null, parts = null, stars = null, btn = null;
   const U = { active: false, stage: 'rest', mode: 'normal', tl: null, tick: null, ts: 0, rise: 0, v: 0,
     baseY: 0, cwtBase: 0, gripAt: -1, stopped: false, jaws: null, walk: 0, t0: 0 };
@@ -138,10 +145,60 @@ const UCMDemo = (() => {
     q.arms.forEach((a, i) => tl.to(p.arms[i].rotation, { x: a.x, z: a.z, duration: dur, ease }, at));
   }
   const POSE = {
-    bump: { bodyY: .42, bodyX: .38, legs: [0, -.25], arms: [{ x: -1.0, z: -.4 }, { x: -1.0, z: .4 }] },   // 발끝이 에이프런에 걸려 휘청
-    sit:  { bodyY: .2, bodyX: -.12, legs: [-1.0, -.9], arms: [{ x: .7, z: -.5 }, { x: .7, z: .5 }] },     // 엉덩방아
-    lean: { bodyY: .42, bodyX: .7, legs: [0, -.15], arms: [{ x: -1.5, z: -.3 }, { x: -1.5, z: .3 }] }    // 올라가는 에이프런에 손을 짚음
+    sit:  { bodyY: .2, bodyX: -.12, legs: [-1.0, -.9], arms: [{ x: .7, z: -.5 }, { x: .7, z: .5 }] }      // 엉덩방아
   };
+
+  function leanPose(th) {
+    // 상체 θ 굽힘, 다리는 −θ 로 되돌려 수직 유지, 팔은 앞으로 뻗어 카 바닥을 짚는다.
+    return { bodyY: .42, bodyX: th, legs: [-th, -th], arms: [{ x: -1.3, z: -.25 }, { x: -1.3, z: .25 }] };
+  }
+  function buildLeanTable() {
+    const saved = readPose(), pos = char.position.clone(), rotY = char.rotation.y, sc = char.scale.x, headX = parts.head.rotation.x;
+    char.position.set(0, 0, 0); char.rotation.set(0, Math.PI, 0); char.scale.setScalar(1); parts.head.rotation.x = 0;
+    const table = [];
+    for (let i = 0; i * LEAN.step <= LEAN.max + 1e-9; i++) {
+      applyPose(leanPose(i * LEAN.step)); char.updateMatrixWorld(true);
+      let low = Infinity;
+      char.traverse(o => {
+        if (!o.isMesh) return;
+        for (let x = o; x && x !== char; x = x.parent) if (x.userData.ucmDecal) return;
+        const a = o.geometry.attributes.position;
+        for (let k = 0; k < a.count; k++) {
+          _v.fromBufferAttribute(a, k).applyMatrix4(o.matrixWorld);
+          if (_v.z < -LEAN.standOff && _v.y < low) low = _v.y;   // 원점에서 앞(−Z)으로 standOff 넘으면 카 안쪽
+        }
+      });
+      table.push(low);
+    }
+    applyPose(saved); parts.head.rotation.x = headX;
+    char.position.copy(pos); char.rotation.set(0, rotY, 0); char.scale.setScalar(sc); char.updateMatrixWorld(true);
+    return table;
+  }
+  // 카 바닥 높이 h(승장 기준)에서 허용되는 최대 굽힘각과, 그래도 모자라면 몸이 들려야 하는 높이.
+  function leanFor(h) {
+    const need = h + LEAN.clear, T = U.leanTable;
+    let i = 0; while (i < T.length && T[i] >= need) i++;
+    const th = Math.max(0, i - 1) * LEAN.step;            // 보간하지 않는다 — 표본 사이에서 바닥을 뚫지 않게
+    if (th >= LEAN.lift) return { th, lift: 0 };
+    const iL = Math.round(LEAN.lift / LEAN.step);
+    return { th: LEAN.lift, lift: Math.max(0, need - T[iL]) };
+  }
+  function applyLean(th) {
+    parts.body.rotation.x = th;
+    parts.legs.forEach(l => { l.rotation.x = -th; });
+  }
+  function fallTick(dt) {
+    const { th, lift } = leanFor(U.rise);
+    U.fallW += LEAN.gravity * dt;
+    let next = U.theta + U.fallW * dt;
+    if (next >= th) {
+      next = th; U.fallW = 0;
+      if (!U.landed) { U.landed = true; onLanded(); }
+    }
+    U.theta = next; applyLean(next);
+    char.position.y = FLOOR_Y[U.f] + (next >= th - 1e-9 ? lift : 0);
+    if (lift > 0 && U.stage === 'moving' && U.mode !== 'normal') U.stage = 'falling';   // 몸이 카 바닥에 실려 들리기 시작
+  }
 
   // 렌더 루프에서 호출 — 걷기 흔들림과 별 회전만 (형상 생성 없음)
   function update(t) {
@@ -202,10 +259,10 @@ const UCMDemo = (() => {
     const L = FLOOR_Y[U.f], z = FRONT_WALL_INNER_Z;
     _camTo(1.05, L + 0.78, z + 2.15, 0.12, L + 0.36, z - 0.2, dur, 'power2.inOut');
   }
-  /* 기계실: 로프 진입 방향 정면(브레이크 로컬 −Z 쪽, 로프 높이 약간 위).
-     열림에서는 윗턱이 노란 덮개 안에 숨어 있다가, 파지 순간 황동 윗턱 판이 덮개 아래로 내려와
-     로프 5가닥을 누르는 모습이 정면으로 보인다. 로프 꼬임 무늬가 흐르다 멈추는 것도 같은 화면에서 보인다. */
-  const MR_VIEW = { cam: [0.08, 0.07, -0.5], target: [0, -0.005, -0.04] };
+  /* 기계실: 로프브레이크 옆·뒤 사선(브레이크 로컬 +X·−Z, 로프 높이 약간 위). 정면만 보면 브레이크 뒷면이
+     너무 강조된다(사용자 지적). 이 시점은 현수도르래·로프 흐름과 함께, 파지 순간 황동 윗턱 판이
+     덮개 아래로 내려와 로프를 누르는 모습이 옆에서 보인다. */
+  const MR_VIEW = { cam: [0.54, 0.14, -0.7], target: [0.01, -0.01, 0] };
   function mrCam(dur) {
     const body = scene.getObjectByName('RopeBrake');
     body.updateMatrixWorld(true);
@@ -228,6 +285,7 @@ const UCMDemo = (() => {
     if (!dt) return;
     U.t0 += dt;
     if (!U.startled && U.rise >= MOTION.startle) startle();
+    if (!U.falling && U.rise >= MOTION.trip) trip();
     if (U.mode === 'normal' && U.gripAt < 0 && U.rise >= MOTION.trigger) U.gripAt = U.t0 + MOTION.response;
     if (U.gripAt >= 0 && U.t0 >= U.gripAt) {
       if (!U.bang) { U.bang = true; ropeBrakeBang(); }
@@ -238,6 +296,8 @@ const UCMDemo = (() => {
     let r = U.rise + U.v * dt;
     if (U.mode !== 'normal' && r >= MOTION.failEnd) { r = MOTION.failEnd; U.v = 0; }
     U.rise = r; setRise(r);
+    if (U.falling) fallTick(dt);
+    if (U.mode !== 'normal' && U.returned && !U.fatalShown && U.rise >= MOTION.fatalAt) { U.fatalShown = true; fatal(); }
     MACH.setDrive(Math.min(U.v / MOTION.vMax, 1) * .6);
     if (U.v === 0 && (U.bang || r >= MOTION.failEnd)) { U.stopped = true; onCarStopped(); }
   }
@@ -288,7 +348,8 @@ const UCMDemo = (() => {
     const inst = brakeInstall();
     if (mode !== 'none' && !(inst?.userData.ready && jaws())) { updateStatus('v-dir', '로프브레이크 모델 로딩 중', '#f0883e'); return; }
     Object.assign(U, { active: true, stage: 'boarding', mode, f: curFloor, rise: 0, v: 0, t0: 0, ts: 0, gripAt: -1,
-      bang: false, stopped: false, startled: false, view: 'landing', bangView: '', riseAtSwitch: 0, baseY: carGrp.position.y });
+      bang: false, stopped: false, startled: false, falling: false, landed: false, theta: 0, fallW: 0, returned: false, fatalShown: false,
+      view: 'landing', bangView: '', riseAtSwitch: 0, calls: [], baseY: carGrp.position.y });
     btn.disabled = true;
     if (inst) inst.visible = mode !== 'none';
     const go = () => { clearTimeout(autoTimer); run(); };
@@ -305,6 +366,7 @@ const UCMDemo = (() => {
     // 승장 문턱 위 (발 중심). 신발 앞코 = 발 중심 −0.12m → 한 걸음(−0.08m) 내딛으면 에이프런(CAR_FRONT_Z)에 닿는다.
     const standZ = CAR_FRONT_Z + .21;
     neutral();
+    U.leanTable ||= buildLeanTable();                     // 굽힘각 표 — 형상이 같으면 한 번만 만든다
     char.position.set(-.38, L, zWall + 1.6); char.rotation.set(0, Math.PI, 0); char.scale.setScalar(.01);
     char.visible = true;
     const brokenText = { normal: '정상', fail: '미작동', none: '미설치' }[U.mode];
@@ -324,31 +386,40 @@ const UCMDemo = (() => {
         MACH.resume(); MACH.brakeRelease(); MACH.motorOn();
         U.ts = TS.landing; U.view = 'landing'; U.tick = motionTick; gsap.ticker.add(motionTick);
       }, null, 2.6)
-      .call(() => { U.ts = TS.transit; U.view = 'machine-room'; U.riseAtSwitch = U.rise; mrCam(1.6); caption('기계실 · 느린 동작으로 로프가 움직이는 모습을 봅니다'); }, null, 4.2)
-      .call(() => { U.ts = TS.machineRoom; caption(U.mode === 'none'
-        ? '기계실 · 로프브레이크가 설치되어 있지 않습니다 — 로프를 잡을 장치가 없습니다'
+      ;
+  }
+  // 이후 흐름은 사건으로 잇는다: 넘어져 상체가 카 바닥에 닿으면(onLanded) → 잠깐 보여 주고 기계실로.
+  function later(sec, fn) { const c = gsap.delayedCall(sec, fn); U.calls.push(c); return c; }
+  function onLanded() {
+    MACH.bump?.();
+    caption('승객이 넘어지며 상체가 올라가는 카 바닥을 덮쳤습니다!', '#ffb4a8');
+    U.ts = TS.landed;                                       // 넘어진 순간을 잠깐 보여 준다
+    later(.8, toMachineRoom);
+  }
+  function toMachineRoom() {
+    U.ts = TS.transit; U.view = 'machine-room'; U.riseAtSwitch = U.rise; mrCam(1.6);
+    caption('기계실 · 느린 동작으로 로프가 움직이는 모습을 봅니다');
+    later(1.6, () => {
+      U.ts = TS.machineRoom;
+      caption(U.mode === 'none' ? '기계실 · 로프브레이크가 설치되어 있지 않습니다 — 로프를 잡을 장치가 없습니다'
         : U.mode === 'fail' ? '기계실 · 로프브레이크가 작동하지 않습니다 — 로프가 계속 움직입니다'
-        : '기계실 · 문 열림 상태에서 착상 구역을 벗어나는 순간을 감시합니다'); }, null, 5.8);
-    if (U.mode === 'normal') {
-      // 정지 후 1.4 s 기계실 관람 → 승장으로 돌아가 결과 확인
-      const waitStop = () => { if (!U.stopped) { gsap.delayedCall(.1, waitStop); return; }
-        gsap.delayedCall(2.2, () => {
-          U.ts = 1; U.view = 'landing'; landingCam(1.6);
-          caption('승장 · 카가 에이프런이 조금 보이는 높이에서 멈췄습니다');
-          gsap.delayedCall(1.5, stumble);
-        }); };
-      tl.call(waitStop, null, 5.8);
-    } else {
-      tl.call(() => { U.ts = TS.fail; U.view = 'landing'; landingCam(1.4); caption('승장 · 카가 멈추지 않고 계속 올라갑니다', '#ffb4a8'); }, null, 7.6)
-        .call(() => {
-          U.ts = TS.failLean; U.stage = 'falling';
-          // 올라가는 에이프런 쪽으로 쏠려 손을 짚는다. 에이프런이 지나갈 수 있는 높이 전체(카 바닥 최대 +1.3m)에서 면 바깥.
-          const z = clearZ(POSE.lean, FLOOR_Y[U.f] + MOTION.failEnd + .05, .004), lean = gsap.timeline();
-          lean.to(char.position, { z, duration: .9, ease: 'power1.in' }, 0);
-          toPose(lean, POSE.lean, 0, .9, 'power2.in');
-        }, null, 9.0)
-        .call(fatal, null, 9.9);
-    }
+        : '기계실 · 문 열림 상태에서 착상 구역을 벗어나는 순간을 감시합니다');
+      if (U.mode === 'normal') waitStop(); else later(1.8, failBack);
+    });
+  }
+  // 정지 후 2.2 s 기계실 관람 → 승장으로 돌아가 결과 확인
+  function waitStop() {
+    if (!U.stopped) { later(.1, waitStop); return; }
+    later(2.2, () => {
+      U.ts = 1; U.view = 'landing'; landingCam(1.6);
+      caption('승장 · 카가 에이프런이 조금 보이는 높이에서 멈췄습니다');
+      later(1.5, recover);
+    });
+  }
+  function failBack() {
+    U.ts = TS.failBack; U.view = 'landing'; landingCam(1.4);
+    caption('승장 · 카가 멈추지 않고 승객을 태운 채 계속 올라갑니다', '#ffb4a8');
+    later(1.4, () => { U.ts = TS.failLanding; U.returned = true; });
   }
 
   // 문턱 위로 내민 발 밑으로 카 바닥이 올라오기 시작하면 깜짝 놀라 발을 뺀다(시간이 아니라 상승량으로 발동).
@@ -356,7 +427,7 @@ const UCMDemo = (() => {
   function startle() {
     U.startled = true;
     const p = parts, s = gsap.timeline();
-    s.to(char.position, { z: char.position.z + .14, duration: .24, ease: 'power2.out' }, 0)
+    s.to(char.position, { z: CAR_FRONT_Z + LEAN.standOff, duration: .24, ease: 'power2.out' }, 0)
       .to(p.legs[1].rotation, { x: 0, duration: .24, ease: 'power3.in' }, 0)
       .to(p.arms[0].rotation, { z: -2.2, duration: .3 }, .05)      // "어?" 양팔 번쩍
       .to(p.arms[1].rotation, { z: 2.2, duration: .3 }, .05)
@@ -364,33 +435,43 @@ const UCMDemo = (() => {
       .to(p.mouth.scale, { x: .7, y: 1.6, duration: .25 }, .05);
   }
 
-  function stumble() {
-    // 올라간 에이프런에 발끝이 걸림 → 앞으로 휘청 → 엉덩방아 (전도, 경상)
-    // 두 자세의 캐릭터 위치는 카 바닥(올라간 문턱) 아래 정점이 에이프런 면 바깥에 남도록 실측으로 정한다.
-    const floorTop = carGrp.position.y - S.CAR_H / 2;
-    const bumpZ = clearZ(POSE.bump, floorTop, .003), sitZ = Math.max(clearZ(POSE.sit, floorTop, .03), bumpZ + .05);
-    const s = gsap.timeline({ onComplete: finishNormal });
-    const p = parts;
+  // 카 문턱이 정강이 높이로 올라오면 걸려 앞으로 넘어진다 — 팔을 앞으로 뻗고 고개를 바로 한다.
+  function trip() {
+    U.falling = true; U.fallW = 0; U.theta = parts.body.rotation.x;
+    gsap.killTweensOf(parts.arms[0].rotation); gsap.killTweensOf(parts.arms[1].rotation); gsap.killTweensOf(parts.head.rotation);
+    const reach = leanPose(0).arms;
+    reach.forEach((a, i) => gsap.to(parts.arms[i].rotation, { x: a.x, z: a.z, duration: .22 }));
+    gsap.to(parts.head.rotation, { x: 0, duration: .18 });
+    caption('카 문턱에 걸려 앞으로 넘어집니다', '#ffb4a8');
+  }
+  // 정상: 카가 멈춘 뒤 몸을 일으켜(상체를 카 바닥에서 떼고) 승장에 주저앉는다 — 경상.
+  function recover() {
+    const floorTop = carGrp.position.y - S.CAR_H / 2, p = parts;
+    const s = gsap.timeline();
     s.call(() => { U.stage = 'stumble'; }, null, 0)
-      .to(p.head.rotation, { x: .1, duration: .25 }, 0)
-      .to(char.position, { z: bumpZ, duration: .27, ease: 'power1.in' }, 0);
-    toPose(s, POSE.bump, 0, .27);                                                            // 에이프런에 부딪혀 휘청
-    s.call(() => MACH.bump?.(), null, .25)
-      .to(char.position, { z: sitZ, duration: .38, ease: 'power1.out' }, .3);               // 뒤로 밀려나며
-    toPose(s, POSE.sit, .3, .38, 'power1.in');                                               // 엉덩방아
-    s.to(p.body.rotation, { x: POSE.sit.bodyX - .1, duration: .12 }, .68)
-      .to(p.body.rotation, { x: POSE.sit.bodyX, duration: .2, ease: 'back.out(2)' }, .8)
-      .call(() => { stars.visible = true; p.mouth.scale.set(1, 1, 1); p.mouth.rotation.z = 0; }, null, .75);
+      .to(U, { theta: 0, duration: .6, ease: 'power2.inOut', onUpdate: () => applyLean(U.theta) }, 0)     // 상체를 일으킨다
+      .to(p.arms[0].rotation, { x: 0, z: -.3, duration: .5 }, .1)
+      .to(p.arms[1].rotation, { x: 0, z: .3, duration: .5 }, .1)
+      .to(char.position, { y: FLOOR_Y[U.f], duration: .3 }, 0)
+      .call(() => {
+        const sitZ = clearZ(POSE.sit, floorTop, .03), t = gsap.timeline({ onComplete: finishNormal });
+        t.to(char.position, { z: Math.max(sitZ, char.position.z), duration: .38, ease: 'power1.out' }, 0);   // 뒤로 물러나며
+        toPose(t, POSE.sit, 0, .38, 'power1.in');                                                            // 주저앉음
+        t.call(() => MACH.bump?.(), null, .36)
+          .to(p.body.rotation, { x: POSE.sit.bodyX - .1, duration: .12 }, .38)
+          .to(p.body.rotation, { x: POSE.sit.bodyX, duration: .2, ease: 'back.out(2)' }, .5)
+          .call(() => { stars.visible = true; p.mouth.scale.set(1, 1, 1); p.mouth.rotation.z = 0; }, null, .45);
+      }, null, .65);
   }
   function finishNormal() {
     U.stage = 'done';
     const mm = Math.round(U.rise * 1000), ratio = Math.round(U.rise / 0.75 * 100);
-    caption(`✔ 로프브레이크 정상 작동 — 카 +${mm}mm 정지 (에이프런 약 ${ratio}% 노출, 2/3 이전). 승객은 넘어졌지만 경상입니다. RST로 복귀`, '#b8f5c4');
+    caption(`✔ 로프브레이크 정상 작동 — 카 +${mm}mm 정지 (에이프런 약 ${ratio}% 노출, 2/3 이전). 승객은 넘어졌지만 카가 멈춰 경상입니다. RST로 복귀`, '#b8f5c4');
     if (btn) { btn.disabled = false; btn.textContent = 'RST'; }
     controls.enabled = true;
   }
   function fatal() {
-    U.stage = 'done';
+    U.stage = 'done'; U.falling = false;
     overlay(true, `<div style="max-width:min(560px,86vw);padding:26px 30px;border-radius:16px;background:#1d0606ee;border:2px solid #ff5a4f;color:#ffe9e6;font:16px/1.65 sans-serif;text-align:center;box-shadow:0 10px 40px #000a">
       <div style="font-size:44px;line-height:1">⚠</div>
       <div style="font-size:30px;font-weight:800;color:#ff6a5e;margin:6px 0 10px">사망사고</div>
@@ -407,7 +488,9 @@ const UCMDemo = (() => {
     btn = button || btn;
     if (!U.active || U.stage === 'resetting') return;
     U.stage = 'resetting'; if (btn) btn.disabled = true;
-    U.tl?.kill(); gsap.killTweensOf(parts.body.rotation); gsap.killTweensOf(char.position);
+    U.tl?.kill(); U.calls.forEach(c => c.kill()); U.calls = [];
+    gsap.killTweensOf(parts.body.rotation); gsap.killTweensOf(char.position); gsap.killTweensOf(U, 'theta');
+    U.falling = false; char.position.y = FLOOR_Y[U.f];
     if (U.tick) { gsap.ticker.remove(U.tick); U.tick = null; }
     U.stopped = true; U.walk = 0; U.ts = 0;
     overlay(false); char.visible = false; neutral();
@@ -436,5 +519,5 @@ const UCMDemo = (() => {
   }
   function toggle(button) { if (U.active) reset(button); else start(button); }
 
-  return { build, update, start, reset, toggle, get state() { return U; }, get character() { return char; }, motion: MOTION, jawTravel: RB };
+  return { build, update, start, reset, toggle, get state() { return U; }, get character() { return char; }, motion: MOTION, jawTravel: RB, lean: LEAN, leanFor };
 })();
