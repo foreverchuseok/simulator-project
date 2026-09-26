@@ -42,362 +42,626 @@
       outline: none;
     }
 
-    /* 힌트 UI */
-    .ui-hint {
-      position: absolute;
-      bottom: 20px;
-      left: 20px;
-      background-color: rgba(13, 17, 23, 0.88);
-      border: 1px solid #21262d;
-      border-radius: 8px;
-      padding: 10px 14px;
-      font-size: 12px;
-      color: #8b949e;
-      line-height: 1.4;
-      pointer-events: none;
-      z-index: 80;
+    /* ==========================================================================
+       HUD (2026-09-26 재설계)
+       ▪ 좌상단 상태 카드: 층·방향·상태 칩·속도 막대
+       ▪ 우상단 레일: 고장·점검 / 설정 / 전체 보기 (카메라 프리셋 메뉴 없음 — 부품은 더블클릭으로 접근)
+       ▪ 하단 운행바: 도어·층·비상정지 — 조작반처럼 항상 보인다
+       ▪ 시트: 데스크톱은 우측 패널, 세로 폰은 운행바 위 바텀시트, 가로 폰은 우측 패널
+       ========================================================================== */
+    :root {
+      --ui-bg: rgba(13, 20, 33, 0.74);
+      --ui-bg-strong: rgba(13, 20, 33, 0.9);
+      --ui-line: rgba(255, 255, 255, 0.12);
+      --ui-fill: rgba(148, 163, 184, 0.14);
+      --ui-fill-2: rgba(148, 163, 184, 0.24);
+      --ui-text: #f1f5f9;
+      --ui-sub: #9aa8bb;
+      --accent: #3b82f6;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --bad: #ef4444;
+      --info: #38bdf8;
+      --lit: #fbbf24;
+      --edge: max(12px, env(safe-area-inset-left));
+      --edge-r: max(12px, env(safe-area-inset-right));
+      --edge-t: max(12px, env(safe-area-inset-top));
+      --edge-b: max(14px, env(safe-area-inset-bottom));
+      --rb-btn: 52px;
+      --runbar-h: calc(var(--rb-btn) + 16px);
+      --caption-bottom: calc(var(--edge-b) + var(--runbar-h) + 14px);
+      --ui-font: 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
     }
 
-    /* ── HUD 컨테이너 — 기본 좌상단, 드래그 이동 가능 ── */
     #hud {
       position: absolute;
-      top: 10px;
-      left: 10px;
+      inset: 0;
       z-index: 100;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 8px;
-    }
-
-    /* 상태 디스플레이 (엘리베이터 인디케이터풍 LCD) — 드래그 핸들 겸용 */
-    #statusbar {
-      display: flex;
-      align-items: center;
-      gap: 9px;
-      padding: 6px 10px 6px 14px;
-      max-width: calc(100vw - 24px);
-      background: linear-gradient(180deg, #10161d, #1b232c);
-      border: 1px solid rgba(255, 255, 255, 0.5);
-      border-radius: 13px;
-      box-shadow: 0 8px 20px rgba(31, 41, 55, 0.25), inset 0 0 14px rgba(0, 0, 0, 0.55);
-      font-family: Consolas, 'Courier New', monospace;
-      font-size: 13.5px;
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      cursor: grab;
-      user-select: none;
-      touch-action: none;
-    }
-
-    #statusbar:active {
-      cursor: grabbing;
-    }
-
-    /* 접기/펴기 토글 */
-    #hud-toggle {
-      flex: none;
-      width: 24px;
-      height: 24px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border: none;
-      border-radius: 8px;
-      background: rgba(255, 255, 255, 0.09);
-      color: #8b949e;
-      cursor: pointer;
+      pointer-events: none;
+      font-family: var(--ui-font);
+      color: var(--ui-text);
       -webkit-tap-highlight-color: transparent;
     }
 
-    #hud-toggle svg {
-      width: 14px;
-      height: 14px;
-      transition: transform 0.2s ease;
+    #hud > * { pointer-events: auto; }
+
+    #hud button, #hall-panel button, #hall-panel select {
+      font-family: var(--ui-font);
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
     }
 
-    #hud.collapsed #hud-toggle svg {
-      transform: rotate(180deg);
+    #hud button:focus-visible, #hall-panel button:focus-visible {
+      outline: 2px solid var(--info);
+      outline-offset: 2px;
     }
 
-    #hud.collapsed #dock {
-      display: none;
+    .glass {
+      background: var(--ui-bg);
+      backdrop-filter: blur(18px) saturate(160%);
+      -webkit-backdrop-filter: blur(18px) saturate(160%);
+      border: 1px solid var(--ui-line);
+      box-shadow: 0 12px 32px rgba(2, 6, 23, 0.32);
     }
 
-    .tb-dot {
-      flex: none;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #34c759;
-      box-shadow: 0 0 8px rgba(52, 199, 89, 0.9);
+    /* ── 상태 카드 ── */
+    #statusbar {
+      position: absolute;
+      top: var(--edge-t);
+      left: var(--edge);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 10px 16px 10px 12px;
+      border-radius: 18px;
+      user-select: none;
     }
 
-    #statusbar #v-floor {
-      color: #3fb950;
-      text-shadow: 0 0 9px rgba(63, 185, 80, 0.7);
+    .st-floor {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 70px;
     }
 
-    #statusbar #v-spd {
-      color: #f0883e;
-      text-shadow: 0 0 9px rgba(240, 136, 62, 0.6);
-      white-space: nowrap;
+    #v-floor {
+      font-size: 34px;
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -0.02em;
+      font-variant-numeric: tabular-nums;
     }
 
-    .tb-sep {
-      flex: none;
-      width: 1px;
-      height: 14px;
-      background: rgba(255, 255, 255, 0.14);
+    .st-arrow {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
     }
 
-    #statusbar #v-dir {
-      color: #8b949e;
-      font-size: 11px;
+    .st-arrow i {
+      width: 0;
+      height: 0;
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      opacity: 0.22;
+      transition: opacity 0.2s;
+    }
+
+    .st-arrow .up { border-bottom: 8px solid currentColor; }
+    .st-arrow .dn { border-top: 8px solid currentColor; }
+    #statusbar[data-dir="up"] .st-arrow .up,
+    #statusbar[data-dir="down"] .st-arrow .dn { opacity: 1; color: var(--ok); animation: st-blink 1s ease-in-out infinite; }
+
+    @keyframes st-blink { 50% { opacity: 0.45; } }
+
+    .st-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    #v-dir {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      align-self: flex-start;
+      max-width: 260px;
+      padding: 4px 11px 4px 9px;
+      border-radius: 999px;
+      background: var(--ui-fill);
+      color: #e2e8f0 !important;
+      font-size: 12.5px;
       font-weight: 600;
-      font-family: 'Malgun Gothic', sans-serif;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
 
-    /* ── 가로 아이콘 독 (애플 스타일) — 서브메뉴와 동일 폭 ── */
-    #dock {
-      display: flex;
-      flex-direction: row;
-      justify-content: space-between;
-      width: 190px;
-      padding: 9px 14px;
-      background: rgba(255, 255, 255, 0.6);
-      backdrop-filter: blur(20px) saturate(180%);
-      -webkit-backdrop-filter: blur(20px) saturate(180%);
-      border: 1px solid rgba(255, 255, 255, 0.65);
-      border-radius: 24px;
-      box-shadow: 0 10px 30px rgba(31, 41, 55, 0.18);
+    #v-dir::before {
+      content: '';
+      flex: none;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #94a3b8;
     }
 
-    .dock-btn {
+    #v-dir[data-tone="ok"] { background: rgba(34, 197, 94, 0.18); color: #bbf7d0 !important; }
+    #v-dir[data-tone="ok"]::before { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+    #v-dir[data-tone="info"] { background: rgba(56, 189, 248, 0.16); color: #bae6fd !important; }
+    #v-dir[data-tone="info"]::before { background: var(--info); }
+    #v-dir[data-tone="warn"] { background: rgba(245, 158, 11, 0.2); color: #fde68a !important; }
+    #v-dir[data-tone="warn"]::before { background: var(--warn); }
+    #v-dir[data-tone="bad"] { background: rgba(239, 68, 68, 0.24); color: #fecaca !important; }
+    #v-dir[data-tone="bad"]::before { background: var(--bad); animation: st-blink 0.8s infinite; }
+
+    .st-speed {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .st-bar {
+      width: 104px;
+      height: 6px;
+      border-radius: 3px;
+      background: var(--ui-fill-2);
+      overflow: hidden;
+    }
+
+    .st-bar i {
+      display: block;
+      width: 0;
+      height: 100%;
+      border-radius: 3px;
+      background: linear-gradient(90deg, #38bdf8, #3b82f6);
+      transition: width 0.12s linear;
+    }
+
+    #statusbar[data-over] .st-bar i { background: linear-gradient(90deg, #f59e0b, #ef4444); }
+
+    #v-spd {
+      color: var(--ui-sub) !important;
+      font-size: 12px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    /* ── 고장 복귀 버튼 (상태 카드 아래) ── */
+    #fault-reset {
+      position: absolute;
+      top: calc(var(--edge-t) + 76px);
+      left: var(--edge);
+      height: 46px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 16px 0 13px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 15px;
+      background: linear-gradient(180deg, #ef4444, #b91c1c);
+      box-shadow: 0 10px 26px rgba(185, 28, 28, 0.4);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      animation: rb-armed 1.4s ease-in-out infinite;
+    }
+    #fault-reset[hidden] { display: none; }
+    #fault-reset svg { width: 19px; height: 19px; }
+    #fault-reset small { font-size: 11px; font-weight: 800; letter-spacing: 0.05em; opacity: 0.8; }
+    #fault-reset:disabled { opacity: 0.5; animation: none; cursor: progress; }
+    @media (max-width: 600px) { #fault-reset { top: calc(var(--edge-t) + 64px); } }
+
+    /* ── 우상단 레일 ── */
+    #rail {
+      position: absolute;
+      top: var(--edge-t);
+      right: var(--edge-r);
+      display: flex;
+      gap: 8px;
+    }
+
+    .rail-btn {
+      height: 46px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 15px 0 13px;
+      border-radius: 15px;
+      color: var(--ui-text);
+      font-size: 13.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    .rail-btn svg { width: 20px; height: 20px; flex: none; }
+    .rail-btn.warn svg { color: var(--warn); }
+    .rail-btn:hover { background: var(--ui-bg-strong); }
+    .rail-btn:active { transform: scale(0.96); }
+    .rail-btn.active { background: var(--accent); border-color: transparent; }
+    .rail-btn.active svg { color: #fff; }
+
+    /* ── 시트 (고장·점검 / 설정) ── */
+    .sheet {
+      position: absolute;
+      top: calc(var(--edge-t) + 58px);
+      right: var(--edge-r);
+      width: 324px;
+      max-height: calc(100dvh - var(--edge-t) - 58px - var(--caption-bottom) + 6px);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 14px 14px 16px;
+      border-radius: 20px;
+      background: var(--ui-bg-strong);
+      opacity: 0;
+      transform: translateY(-8px) scale(0.985);
+      transform-origin: top right;
+      pointer-events: none !important;
+      visibility: hidden;
+      transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.3, 1.3, 0.6, 1), visibility 0s linear 0.22s;
+    }
+
+    .sheet.open {
+      opacity: 1;
+      transform: none;
+      pointer-events: auto !important;
+      visibility: visible;
+      transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.3, 1.3, 0.6, 1);
+    }
+
+    .sheet-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 0 2px 4px;
+    }
+
+    .sheet-head h3 { font-size: 16px; font-weight: 700; }
+
+    .sheet-close {
+      width: 44px;
+      height: 44px;
+      border: none;
+      border-radius: 50%;
+      background: var(--ui-fill);
+      color: var(--ui-text);
+      font-size: 15px;
+      cursor: pointer;
+    }
+
+    .sheet h4 {
+      margin: 16px 2px 8px;
+      font-size: 11.5px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      color: var(--ui-sub);
+    }
+
+    .sheet .note {
+      margin: 6px 2px 0;
+      font-size: 11.5px;
+      line-height: 1.5;
+      color: var(--ui-sub);
+    }
+
+    /* 동작 행: 약자 버튼 + 한글 설명 */
+    .act {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 7px;
+      margin-bottom: 8px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .act-code {
+      flex: none;
+      min-width: 66px;
+      height: 44px;
+      padding: 0 8px;
+      border: none;
+      border-radius: 12px;
+      background: var(--ui-fill-2);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+      cursor: pointer;
+      transition: filter 0.15s, transform 0.1s;
+    }
+
+    .act-code.red { background: linear-gradient(180deg, #ef4444, #dc2626); }
+    .act-code.amber, .act-code.warn { background: linear-gradient(180deg, #f59e0b, #d97706); }
+    .act-code:hover:not(:disabled) { filter: brightness(1.1); }
+    .act-code:active:not(:disabled) { transform: scale(0.96); }
+    .act-code:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .act-txt { min-width: 0; }
+    .act-txt b { display: block; font-size: 14px; font-weight: 700; }
+    .act-txt span, .act-txt output { display: block; margin-top: 2px; font-size: 12px; line-height: 1.4; color: var(--ui-sub); }
+
+    /* 세그먼트 (select 원본은 숨긴 채 값·이벤트를 그대로 쓴다) */
+    .field { margin: 2px 0 10px; }
+
+    .field-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin: 0 2px 6px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #cbd5e1;
+    }
+
+    .field-label output { font-size: 11px; font-weight: 600; color: var(--ui-sub); }
+
+    .seg {
+      display: flex;
+      gap: 4px;
+      padding: 4px;
+      border-radius: 13px;
+      background: var(--ui-fill);
+    }
+
+    .seg button {
+      flex: 1;
+      min-height: 44px;
+      border: none;
+      border-radius: 10px;
+      background: transparent;
+      color: #cbd5e1;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .seg button small { display: block; font-size: 10px; font-weight: 700; letter-spacing: 0.05em; opacity: 0.7; }
+    .seg button:hover { background: rgba(255, 255, 255, 0.06); }
+    .seg button[aria-pressed="true"], .seg button.mode-on { background: #f1f5f9; color: #0f172a; }
+    .seg button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    .seg-src {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* 점검 홀드 ▲▼ */
+    .hold {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .hold button {
+      min-height: 48px;
+      border: 1px solid var(--ui-line);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--ui-text);
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .hold button:not(:disabled):active { background: var(--warn); color: #111827; }
+    .hold button:disabled { opacity: 0.32; cursor: not-allowed; }
+
+    /* 설정 토글 */
+    .toggle {
+      width: 100%;
+      min-height: 50px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 6px;
+      padding: 0 12px 0 14px;
+      border: none;
+      border-radius: 13px;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--ui-text);
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .toggle span b { display: block; font-size: 14px; font-weight: 600; }
+    .toggle span small { display: block; margin-top: 2px; font-size: 11.5px; color: var(--ui-sub); }
+
+    .toggle::after {
+      content: '';
+      flex: none;
+      width: 42px;
+      height: 25px;
+      border-radius: 13px;
+      background: var(--ui-fill-2) radial-gradient(circle at 12.5px 50%, #f8fafc 9.5px, transparent 10px);
+      transition: background 0.2s;
+    }
+
+    .toggle.active::after, .toggle[aria-pressed="true"]::after {
+      background: var(--ok) radial-gradient(circle at 29.5px 50%, #fff 9.5px, transparent 10px);
+    }
+
+    .help {
+      margin: 0 2px;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 6px 12px;
+      font-size: 12.5px;
+      color: #cbd5e1;
+    }
+
+    .help dt { color: var(--ui-sub); white-space: nowrap; }
+
+    /* ── 하단 운행바 (조작반) ── */
+    .runbar {
+      position: absolute;
+      left: 50%;
+      bottom: var(--edge-b);
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px;
+      border-radius: 24px;
+    }
+
+    .rb-sep {
+      flex: none;
+      width: 1px;
+      height: 34px;
+      margin: 0 3px;
+      background: var(--ui-line);
+    }
+
+    .rb-btn {
+      width: var(--rb-btn);
+      height: var(--rb-btn);
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 4px;
-      padding: 0;
+      justify-content: center;
+      gap: 3px;
       border: none;
-      background: none;
+      border-radius: 15px;
+      background: var(--ui-fill);
+      color: var(--ui-text);
       cursor: pointer;
-      font-family: inherit;
-      -webkit-tap-highlight-color: transparent;
+      transition: background 0.15s, transform 0.1s;
     }
 
-    .dock-icon {
-      width: 42px;
-      height: 42px;
-      border-radius: 12px;
+    .rb-btn svg { width: 24px; height: 18px; }
+    .rb-btn span { font-size: 10.5px; font-weight: 600; color: #cbd5e1; }
+    .rb-btn:hover { background: var(--ui-fill-2); }
+    .rb-btn:active, #fbtns .c-btn:active { transform: scale(0.94); }
+
+    #fbtns { display: flex; gap: 6px; }
+
+    #fbtns .c-btn {
+      width: var(--rb-btn);
+      height: var(--rb-btn);
       display: flex;
       align-items: center;
       justify-content: center;
-      color: #ffffff;
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 3px 9px rgba(31, 41, 55, 0.25);
-      transition: transform 0.16s ease;
+      border: 2px solid rgba(203, 213, 225, 0.32);
+      border-radius: 50%;
+      background: radial-gradient(circle at 50% 32%, #334155, #172033);
+      color: #e2e8f0;
+      font-size: 16px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s, box-shadow 0.2s, transform 0.1s;
     }
 
-    .dock-icon svg {
-      width: 21px;
-      height: 21px;
-    }
+    #fbtns .c-btn small { font-size: 10px; font-weight: 700; margin-left: 1px; opacity: 0.7; }
+    #fbtns .c-btn.active { border-color: var(--lit); color: var(--lit); box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.18), 0 0 18px rgba(251, 191, 36, 0.35); }
+    #fbtns .c-btn.called { border-color: var(--info); color: var(--info); animation: rb-call 1.1s ease-in-out infinite; }
 
-    .dock-btn:active .dock-icon {
-      transform: scale(0.88);
-    }
+    @keyframes rb-call { 50% { box-shadow: 0 0 0 5px rgba(56, 189, 248, 0.22); } }
 
-    .dock-btn.active .dock-icon {
-      outline: 3px solid rgba(10, 132, 255, 0.5);
-      outline-offset: 2px;
-    }
-
-    .dock-icon.ic-op {
-      background: linear-gradient(180deg, #4da3ff, #0a63e8);
-    }
-
-    .dock-icon.ic-cam {
-      background: linear-gradient(180deg, #5bd669, #26b33e);
-    }
-
-    .dock-icon.ic-inst {
-      background: linear-gradient(180deg, #ffb340, #f27d0c);
-    }
-
-    .dock-btn > span {
-      font-size: 9px;
-      font-weight: 600;
-      color: #3a3a3c;
-      letter-spacing: 0.01em;
-    }
-
-    /* ── 독 아래로 펼쳐지는 세로 서브메뉴 (HUD와 함께 이동) ── */
-    .dropdown {
-      position: absolute;
-      top: calc(100% + 8px);
-      left: 0;
-      z-index: 99;
-      width: 56px;
-      max-height: calc(100vh - 170px);
-      overflow-y: auto;
-      background: rgba(255, 255, 255, 0.72);
-      backdrop-filter: blur(24px) saturate(180%);
-      -webkit-backdrop-filter: blur(24px) saturate(180%);
-      border: 1px solid rgba(255, 255, 255, 0.7);
-      border-radius: 18px;
-      padding: 6px;
+    #btn-estop {
+      width: var(--rb-btn);
+      height: var(--rb-btn);
       display: flex;
       flex-direction: column;
-      gap: 7px;
-      box-shadow: 0 16px 44px rgba(31, 41, 55, 0.22);
-      opacity: 0;
-      transform: translateY(-10px) scale(0.94);
-      transform-origin: top left;
-      pointer-events: none;
-      transition: opacity 0.2s ease, transform 0.22s cubic-bezier(0.34, 1.45, 0.64, 1);
+      align-items: center;
+      justify-content: center;
+      gap: 1px;
+      border: 2px solid rgba(255, 255, 255, 0.25);
+      border-radius: 50%;
+      background: radial-gradient(circle at 50% 35%, #f87171, #b91c1c);
+      color: #fff;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(185, 28, 28, 0.45);
     }
 
-    .dropdown.open {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-      pointer-events: auto;
-    }
+    #btn-estop svg { width: 16px; height: 16px; }
+    #btn-estop span { font-size: 10px; font-weight: 800; }
+    #btn-estop.armed { background: #1e293b; border-color: var(--bad); color: #fecaca; animation: rb-armed 1s ease-in-out infinite; }
 
-    .dd-title {
-      font-size: 11px;
-      font-weight: 700;
-      color: #6e6e73;
-      letter-spacing: 0.06em;
-      margin-top: 2px;
-    }
+    @keyframes rb-armed { 50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.3); } }
 
-    .dd-title:first-child {
-      margin-top: 0;
-    }
-
-    .dd-select {
-      width: 44px;
-      height: 44px;
-      background: rgba(120, 120, 128, 0.12);
-      color: #1c1c1e;
-      border: none;
-      border-radius: 12px;
-      padding: 0;
-      font-size: 14px;
-      font-weight: 700;
-      font-family: inherit;
+    /* ── 조작 안내 토스트 (처음 한 번) ── */
+    .ui-hint {
+      position: absolute;
+      top: calc(var(--edge-t) + 76px);
+      left: 50%;
+      z-index: 90;
+      transform: translateX(-50%);
+      max-width: calc(100vw - 24px);
+      padding: 10px 16px;
+      border-radius: 14px;
+      background: var(--ui-bg);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid var(--ui-line);
+      color: #e2e8f0;
+      font-family: var(--ui-font);
+      font-size: 13px;
+      line-height: 1.5;
       text-align: center;
-      text-align-last: center;
-      -webkit-appearance: none;
-      appearance: none;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.6s ease;
     }
 
-    @media (max-width: 430px) {
-      #statusbar #v-dir,
-      .tb-sep.tb-dir-sep {
-        display: none;
-      }
+    .ui-hint.show { opacity: 1; }
+
+    /* ── 좁은 화면 ── */
+    @media (max-width: 760px) {
+      .rail-btn { width: 46px; padding: 0; justify-content: center; }
+      .rail-btn span { display: none; }
     }
 
-    @media (hover: none), (max-width: 700px) {
-      .ui-hint {
-        display: none;
+    @media (max-width: 600px) {
+      :root { --rb-btn: 44px; }
+      #statusbar { gap: 10px; padding: 8px 12px 8px 10px; border-radius: 16px; }
+      .st-floor { min-width: 56px; }
+      #v-floor { font-size: 28px; }
+      #v-dir { max-width: 148px; font-size: 11.5px; }
+      .st-bar { width: 60px; }
+      .runbar { gap: 4px; padding: 6px; border-radius: 20px; }
+      #fbtns { gap: 4px; }
+      .rb-sep { margin: 0 1px; height: 28px; }
+      .rb-btn span { display: none; }
+      .rb-btn svg { width: 22px; height: 16px; }
+      #btn-estop span { font-size: 9px; }
+      #fbtns .c-btn { font-size: 15px; }
+      /* 바텀시트 — 운행바 바로 위 */
+      .sheet {
+        top: auto;
+        left: 8px;
+        right: 8px;
+        bottom: calc(var(--caption-bottom) - 6px);
+        width: auto;
+        max-height: min(62dvh, calc(100dvh - var(--caption-bottom) - 84px));
+        transform: translateY(14px);
+        transform-origin: bottom center;
       }
+      .ui-hint { top: calc(var(--edge-t) + 64px); font-size: 12px; }
     }
 
-    /* ── 태블릿·폰 세로: 좌측 세로 HUD + 운행 메뉴는 우측 반대편 ── */
-    @media (orientation: portrait) and (max-width: 1100px) {
-      #hud {
-        top: max(10px, env(safe-area-inset-top));
-        left: max(8px, env(safe-area-inset-left));
-        gap: 6px;
-        max-width: 76px;
-      }
-
-      /* 층 · 속도 · 상태 세로 스택 */
-      #statusbar {
-        flex-direction: column;
-        align-items: center;
-        gap: 3px;
-        padding: 8px 8px 6px;
-        width: 68px;
-        max-width: 68px;
-        border-radius: 16px;
-        font-size: 12px;
-      }
-
-      #statusbar .tb-sep {
-        width: 28px;
-        height: 1px;
-      }
-
-      #statusbar #v-floor,
-      #statusbar #v-spd {
-        text-align: center;
-        line-height: 1.2;
-      }
-
-      #statusbar #v-spd {
-        font-size: 10.5px;
-      }
-
-      #statusbar #v-dir {
-        display: block;
-        font-size: 9px;
-        max-width: 56px;
-        text-align: center;
-        white-space: normal;
-        line-height: 1.25;
-      }
-
-      #hud-toggle {
-        margin-top: 2px;
-      }
-
-      /* 운행 · 카메라 · 고장 세로 독 */
-      #dock {
-        flex-direction: column;
-        align-items: center;
-        justify-content: flex-start;
-        width: 68px;
-        padding: 10px 6px;
-        gap: 10px;
-        border-radius: 20px;
-      }
-
-      .dock-icon {
-        width: 44px;
-        height: 44px;
-        border-radius: 13px;
-      }
-
-      .dock-btn > span {
-        font-size: 10px;
-      }
-
-      /* 서브메뉴 — 화면 반대편(우측) 세로 패널 (3D 가림 최소화) */
-      .dropdown {
-        position: fixed;
-        top: max(10px, env(safe-area-inset-top));
-        right: max(8px, env(safe-area-inset-right));
-        left: auto;
-        width: 56px;
-        max-height: calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
-        transform: translateX(12px) scale(0.96);
-        transform-origin: top right;
-      }
-
-      .dropdown.open {
-        transform: translateX(0) scale(1);
-      }
-
-      /* 운행 메뉴는 우측에서 세로로 (층·도어·속도) */
-      #dd-op {
-        width: 56px;
-      }
+    /* 가로 폰: 세로 공간이 좁다 */
+    @media (max-height: 500px) and (orientation: landscape) {
+      :root { --rb-btn: 44px; }
+      #statusbar { padding: 7px 12px 7px 10px; }
+      #v-floor { font-size: 26px; }
+      .runbar { gap: 4px; padding: 6px; }
+      .rb-btn span { display: none; }
+      .sheet { top: calc(var(--edge-t) + 54px); width: 300px; }
+      .ui-hint { display: none; }
     }
 
     /* 로딩 화면 */
@@ -434,102 +698,48 @@
       }
     }
 
-    /* 공통 버튼·그리드 (iOS 라이트 스타일) */
-    .grid-2 {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 7px;
-    }
-
-    .stack {
-      display: flex;
-      flex-direction: column;
-      gap: 7px;
-    }
-
-    #dd-cam { width: 132px; }
-    #dd-cam .c-btn { width: 100%; flex-shrink: 0; }
-    #dd-cam .dd-title { padding: 4px 3px; letter-spacing: 0; }
-
-    .c-btn {
-      width: 44px;
-      height: 44px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: rgba(120, 120, 128, 0.12);
-      border: none;
-      color: #1c1c1e;
-      border-radius: 12px;
-      padding: 0;
+    /* 승장문 점검 패널 — HUD 와 같은 톤. 데스크톱은 상태 카드 아래, 세로 폰은 운행바 위 */
+    #hall-panel {
+      position: fixed;
+      top: calc(var(--edge-t) + 76px);
+      left: var(--edge);
+      z-index: 110;
+      width: 276px;
+      max-height: calc(100dvh - var(--edge-t) - 76px - var(--caption-bottom));
+      overflow: auto;
+      padding: 14px;
+      border-radius: 18px;
+      background: var(--ui-bg-strong);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid var(--ui-line);
+      box-shadow: 0 12px 32px rgba(2, 6, 23, 0.35);
+      color: var(--ui-text);
+      font-family: var(--ui-font);
       font-size: 13px;
-      font-weight: 700;
-      cursor: pointer;
-      text-align: center;
-      font-family: inherit;
-      transition: background 0.15s, transform 0.1s;
-      -webkit-tap-highlight-color: transparent;
     }
-
-    .c-btn:hover {
-      background: rgba(120, 120, 128, 0.22);
+    #hall-panel[hidden] { display: none; }
+    .fault-latched #hall-panel { top: calc(var(--edge-t) + 132px); }
+    #hall-panel strong { font-size: 15px; }
+    #hall-panel label { display: block; margin: 10px 2px 4px; font-size: 12px; font-weight: 600; color: #cbd5e1; }
+    #hall-panel button, #hall-panel select { min-height: 44px; border: 1px solid var(--ui-line); border-radius: 11px; background: rgba(255, 255, 255, 0.07); color: var(--ui-text); padding: 6px 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    #hall-panel select option { color: #0f172a; }
+    #hall-panel #hall-key { background: var(--warn); border-color: transparent; color: #111827; }
+    #hall-panel .seg button { border: none; background: transparent; min-height: 44px; padding: 0; }
+    #hall-panel .seg button[aria-pressed="true"], #hall-panel .seg button.mode-on { background: #f1f5f9; color: #0f172a; }
+    #hall-panel .hold button { background: rgba(255, 255, 255, 0.05); }
+    #hall-panel .hold button:not(:disabled):active { background: var(--warn); color: #111827; }
+    #hall-panel .hall-row { display: flex; gap: 6px; margin: 8px 0; align-items: center; }
+    #hall-panel .hall-row > * { flex: 1; min-width: 0; }
+    #hall-panel .hall-row:first-child > strong { flex: 2; }
+    #hall-opening { width: 100%; min-height: 44px; accent-color: var(--warn); }
+    #hall-message { display: block; margin: 8px 2px; color: #fde68a; }
+    #hall-panel p { margin: 4px 2px 0; font-size: 11.5px; line-height: 1.5; color: var(--ui-sub); }
+    @media (max-width: 600px) {
+      #hall-panel { top: auto; left: 8px; right: 8px; bottom: calc(var(--caption-bottom) - 6px); width: auto; max-height: min(60dvh, calc(100dvh - var(--caption-bottom) - 84px)); }
     }
-
-    .c-btn:active {
-      transform: scale(0.96);
-    }
-
-    .c-btn.active {
-      background: #0a84ff;
-      color: #ffffff;
-    }
-
-    .c-btn.green {
-      background: #34c759;
-      color: #ffffff;
-    }
-
-    .c-btn.blue {
-      background: #0a84ff;
-      color: #ffffff;
-    }
-
-    .c-btn.red {
-      background: #ff3b30;
-      color: #ffffff;
-    }
-
-    .c-btn.warn {
-      background: #ff9f0a;
-      color: #ffffff;
-    }
-
-    /* 모드 선택 표시(AUT/INS) — 색상 클래스를 덮지 않도록 링으로만 강조 */
-    .c-btn.mode-on {
-      box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px #1c1c1e;
-    }
-
-    /* 점검 ▲▼ 는 INS 모드에서만 활성 */
-    .c-btn:disabled {
-      opacity: 0.3;
-      cursor: not-allowed;
-    }
-
-    .c-btn:disabled:hover {
-      background: rgba(120, 120, 128, 0.12);
-    }
-
-    .c-btn:disabled:active {
-      transform: none;
-    }
-    #hall-panel { position:fixed; top:100px; left:78px; z-index:110; width:230px; max-height:calc(100dvh - 120px); overflow:auto; padding:12px; border-radius:14px; background:rgba(245,249,253,.96); color:#182533; box-shadow:0 8px 30px #0004; font-size:13px; }
-    #hall-panel[hidden] { display:none; }
-    #hall-panel button, #hall-panel select { min-height:44px; border:1px solid #a8b6c6; border-radius:8px; background:#fff; color:#182533; padding:6px; cursor:pointer; }
-    #hall-panel .hall-row { display:flex; gap:6px; margin:8px 0; }
-    #hall-panel .hall-row > * { flex:1; min-width:0; }
-    #hall-opening { width:100%; min-height:44px; }
-    #hall-message { display:block; margin:8px 0; }
-    @media(max-width:600px) { #hall-panel { top:12px; left:8px; width:min(230px,calc(100vw - 112px)); max-height:calc(100dvh - 110px); } }
+    /* 개문발차(UCM) 시연 중에는 근접 사다리 버튼을 숨긴다 (js/ucm-demo.js) */
+    .ucm-active #pit-ladder-action { visibility: hidden !important; }
   </style>
 </head>
 
@@ -538,113 +748,139 @@
   <!-- 3D 캔버스 영역 -->
   <div id="canvas-wrap">
 
-    <!-- HUD: 상태 디스플레이 + 아이콘 독 + 서브메뉴 (기본 좌상단, 드래그 이동·접기 가능) -->
+    <!-- HUD: 상태 카드 · 우상단 레일 · 시트 · 하단 운행바. 기능 연결은 id 로만 한다(js/ui.js). -->
     <div id="hud">
 
-      <!-- 상태 디스플레이 (드래그 핸들) -->
-      <div id="statusbar">
-        <span class="tb-dot"></span>
-        <span id="v-floor">1F</span>
-        <span class="tb-sep"></span>
-        <span id="v-spd">0 m/min</span>
-        <span class="tb-sep tb-dir-sep"></span>
-        <span id="v-dir">정지 대기</span>
-        <button id="hud-toggle" title="메뉴 접기/펴기" aria-label="메뉴 접기/펴기">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="18 15 12 9 6 15"></polyline>
-          </svg>
+      <!-- 상태 카드: 층·방향·상태·속도 -->
+      <section id="statusbar" class="glass" aria-label="운행 상태" aria-live="polite">
+        <div class="st-floor">
+          <span class="st-arrow" aria-hidden="true"><i class="up"></i><i class="dn"></i></span>
+          <span id="v-floor">1F</span>
+        </div>
+        <div class="st-meta">
+          <span id="v-dir">정지 대기</span>
+          <div class="st-speed"><div class="st-bar" aria-hidden="true"><i id="st-bar-fill"></i></div><span id="v-spd">0 m/min</span></div>
+        </div>
+      </section>
+
+      <!-- 고장 래치 복귀 — OVS·UCM 이 RST 상태일 때만 보인다(시트를 다시 열지 않아도 된다) -->
+      <button id="fault-reset" hidden title="고장 복귀 (RST)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.5 15a9 9 0 1 0 2.1-9.4L1 10"/></svg>
+        <span>복귀</span><small>RST</small>
+      </button>
+
+      <!-- 우상단 레일 -->
+      <nav id="rail" aria-label="보조 메뉴">
+        <button class="rail-btn warn glass" data-menu="dd-inst" aria-expanded="false" aria-controls="dd-inst" title="고장 재현·점검 도구">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span>고장·점검</span>
+        </button>
+        <button class="rail-btn glass" data-menu="dd-view" aria-expanded="false" aria-controls="dd-view" title="속도·보기 설정">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="9" cy="7" r="2.4" fill="currentColor"/><circle cx="15" cy="17" r="2.4" fill="currentColor"/></svg>
+          <span>설정</span>
+        </button>
+        <button class="rail-btn glass" id="c-shaft" title="전체 보기 — 확대한 화면을 처음 시점으로" aria-label="전체 보기">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+          <span>전체 보기</span>
+        </button>
+      </nav>
+
+      <!-- 시트: 고장·점검 -->
+      <div class="sheet glass" id="dd-inst" role="dialog" aria-label="고장·점검">
+        <div class="sheet-head"><h3>고장·점검</h3><button class="sheet-close" data-close aria-label="닫기">✕</button></div>
+
+        <h4>운전 모드</h4>
+        <div class="seg">
+          <button id="btn-aut" data-ins="off" title="자동운전"><small>AUT</small>자동</button>
+          <button id="btn-ins" data-ins="on" title="점검(수동)운전"><small>INS</small>점검</button>
+        </div>
+        <div class="hold">
+          <button id="btn-ins-up" data-ins-dir="1" title="점검 상승 (누르는 동안 서행)" disabled>▲ 상승</button>
+          <button id="btn-ins-dn" data-ins-dir="-1" title="점검 하강 (누르는 동안 서행)" disabled>▼ 하강</button>
+        </div>
+        <p class="note">점검 모드에서 버튼을 누르는 동안만 서행합니다.</p>
+
+        <h4>고장 재현</h4>
+        <div class="act">
+          <button class="act-code red" id="btn-overspeed" title="과속(조속기)">OVS</button>
+          <div class="act-txt"><b>과속</b><span>조속기 → 비상정지장치 작동 · 3층 이상</span></div>
+        </div>
+        <div class="act">
+          <button class="act-code red" id="btn-ucm" title="개문발차 — 문이 열린 채 카 출발 (로프브레이크)">UCM</button>
+          <div class="act-txt"><b>개문발차</b><span>문 열린 채 출발 → 로프브레이크</span></div>
+        </div>
+        <div class="field">
+          <div class="field-label"><span>로프브레이크 상태</span></div>
+          <select id="ucm-brake" class="seg-src" aria-label="개문발차 시연 로프브레이크 상태" tabindex="-1">
+            <option value="normal">정상</option><option value="fail">미작동</option><option value="none">미설치</option>
+          </select>
+          <div class="seg" data-for="ucm-brake"></div>
+        </div>
+
+        <h4>점검 도구</h4>
+        <div class="act">
+          <button class="act-code amber" id="hall-toggle" title="층별 승장문 수동 개방">문</button>
+          <div class="act-txt"><b>승장문 점검</b><span>삼각키로 층별 승장문 개방</span></div>
+        </div>
+        <div class="field">
+          <div class="field-label"><span>BYPASS (접점 우회)</span><output id="bypass-status" aria-live="polite">BYPASS 해제</output></div>
+          <select id="bypass-mode" class="seg-src" aria-label="바이패스 접점 선택" tabindex="-1">
+            <option value="off">해제</option><option value="hall">승장문</option><option value="car">카문</option>
+          </select>
+          <div class="seg" data-for="bypass-mode"></div>
+        </div>
+        <div class="act">
+          <button class="act-code" id="btn-pit-ladder" aria-pressed="false" title="피트 사다리 펴기">사다리</button>
+          <div class="act-txt"><b>피트 사다리</b><output id="pit-ladder-status" aria-live="polite">접힘 · 운행 가능</output></div>
+        </div>
+      </div>
+
+      <!-- 시트: 설정 -->
+      <div class="sheet glass" id="dd-view" role="dialog" aria-label="설정">
+        <div class="sheet-head"><h3>설정</h3><button class="sheet-close" data-close aria-label="닫기">✕</button></div>
+        <h4>정격 속도</h4>
+        <select id="speed-select" class="seg-src" title="정격 속도" tabindex="-1">
+          <option value="60">60 m/min</option>
+          <option value="90">90 m/min</option>
+        </select>
+        <div class="seg" data-for="speed-select"></div>
+        <h4>보기</h4>
+        <button class="toggle" id="tm-cutaway" aria-pressed="false" title="기어 케이스 절개 — 웜·휠 이물림과 오일 레벨"><span><b>권상기 내부</b><small>기어 케이스 절개 · 웜·휠 이물림</small></span></button>
+        <button class="toggle" id="c-background" aria-pressed="false" title="기존 건물과 자연 풍경 표시"><span><b>주변 풍경</b><small>하늘·구름·조명</small></span></button>
+        <button class="toggle active" id="c-mascot" aria-pressed="true" title="기계실 마스코트 표시/숨김"><span><b>캐릭터</b><small>기계실 마스코트 「승강곰」</small></span></button>
+        <h4>조작 방법</h4>
+        <dl class="help">
+          <dt>회전</dt><dd>드래그 · 한 손가락</dd>
+          <dt>확대</dt><dd>마우스 휠 · 두 손가락 벌리기</dd>
+          <dt>이동</dt><dd>우클릭 드래그 · 두 손가락 끌기</dd>
+          <dt>가까이</dt><dd>부품 더블클릭 · 두 번 탭</dd>
+          <dt>돌아가기</dt><dd>오른쪽 위 「전체 보기」</dd>
+        </dl>
+      </div>
+
+      <!-- 하단 운행바 (조작반) -->
+      <div class="runbar glass" id="dd-op" role="toolbar" aria-label="운행 조작">
+        <button class="rb-btn" id="btn-open" title="도어 열림" aria-label="도어 열림">
+          <svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="14" y1="2" x2="14" y2="18"/><polyline points="7 5 2 10 7 15"/><polyline points="21 5 26 10 21 15"/></svg>
+          <span>열림</span>
+        </button>
+        <button class="rb-btn" id="btn-close" title="도어 닫힘" aria-label="도어 닫힘">
+          <svg viewBox="0 0 28 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="14" y1="2" x2="14" y2="18"/><polyline points="3 5 8 10 3 15"/><polyline points="25 5 20 10 25 15"/></svg>
+          <span>닫힘</span>
+        </button>
+        <span class="rb-sep" aria-hidden="true"></span>
+        <div id="fbtns" role="group" aria-label="목적층">
+          <button class="c-btn active" data-f="0" aria-label="1층">1<small>F</small></button>
+          <button class="c-btn" data-f="1" aria-label="2층">2<small>F</small></button>
+          <button class="c-btn" data-f="2" aria-label="3층">3<small>F</small></button>
+          <button class="c-btn" data-f="3" aria-label="4층">4<small>F</small></button>
+        </div>
+        <span class="rb-sep" aria-hidden="true"></span>
+        <button id="btn-estop" title="비상정지" aria-label="비상정지" aria-pressed="false">
+          <svg viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="1.5"/></svg>
+          <span>정지</span>
         </button>
       </div>
-
-      <!-- 가로 아이콘 독 (애플 스타일: 컬러 아이콘 + 작은 한글 라벨) -->
-      <nav id="dock">
-      <button class="dock-btn" data-menu="dd-op" title="운행 제어" aria-label="운행 메뉴">
-        <div class="dock-icon ic-op">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="7 9 12 4 17 9"></polyline>
-            <polyline points="7 15 12 20 17 15"></polyline>
-          </svg>
-        </div>
-        <span>운행</span>
-      </button>
-      <button class="dock-btn" data-menu="dd-cam" title="카메라 뷰" aria-label="카메라 메뉴">
-        <div class="dock-icon ic-cam">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M23 7l-7 5 7 5V7z"></path>
-            <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
-          </svg>
-        </div>
-        <span>카메라</span>
-      </button>
-      <button class="dock-btn" data-menu="dd-inst" title="고장 재현·안전장치 작동" aria-label="고장 메뉴">
-        <div class="dock-icon ic-inst">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-            <line x1="12" y1="9" x2="12" y2="13"></line>
-            <line x1="12" y1="17" x2="12.01" y2="17"></line>
-          </svg>
-        </div>
-        <span>고장</span>
-      </button>
-    </nav>
-
-    <!-- 드롭다운: 운행 (세로 배열, 아이콘 위주) -->
-    <div class="dropdown" id="dd-op">
-      <div class="stack">
-        <button class="c-btn green" id="btn-open" title="도어 열림">◀▶</button>
-        <button class="c-btn blue" id="btn-close" title="도어 닫힘">▶◀</button>
-        <button class="c-btn" id="btn-pax" title="탑승자 승·하차" style="font-size:19px;">🧍</button>
-      </div>
-      <div class="stack" id="fbtns">
-        <div class="c-btn" data-f="3">4F</div>
-        <div class="c-btn" data-f="2">3F</div>
-        <div class="c-btn" data-f="1">2F</div>
-        <div class="c-btn active" data-f="0">1F</div>
-      </div>
-      <button class="c-btn red" id="btn-estop" style="font-size:20px;" title="비상정지">■</button>
-      <select id="speed-select" class="dd-select" title="정격 속도">
-        <option value="60">60</option>
-        <option value="90">90</option>
-      </select>
-    </div>
-
-    <!-- 드롭다운: 카메라 (세로 일렬) -->
-    <div class="dropdown" id="dd-cam">
-      <div class="stack">
-        <button class="c-btn active" id="c-shaft" aria-pressed="true">전체 운행</button>
-        <div class="dd-title">부품 관찰</div>
-        <div style="font-size:11px;line-height:1.5;padding:0 3px 5px;color:#394957">부품 두 번 눌러 확대</div>
-        <button class="c-btn" id="c-mr" aria-pressed="false">기계실</button>
-        <button class="c-btn" id="c-pit" aria-pressed="false">피트</button>
-        <button class="c-btn" id="c-car" aria-pressed="false">카 내부</button>
-        <button class="c-btn" id="c-car-top" aria-pressed="false">카 상부</button>
-        <button class="c-btn" id="c-governor" aria-pressed="false">조속기</button>
-        <button class="c-btn" id="c-traction" aria-pressed="false">권상기</button>
-        <button class="c-btn" id="tm-cutaway" aria-pressed="false" title="기어 케이스 절개 — 웜·휠 이물림과 오일 레벨">권상기 내부</button>
-        <div class="dd-title">배경</div>
-        <button class="c-btn" id="c-background" aria-pressed="false" title="기존 건물과 자연 풍경 표시">주변 풍경</button>
-        <button class="c-btn active" id="c-mascot" aria-pressed="true" title="기계실 마스코트 표시/숨김">캐릭터</button>
-      </div>
-    </div>
-
-    <!-- 드롭다운: 고장 (고장 재현·안전장치 작동 — 현장 용어 영문) -->
-    <div class="dropdown" id="dd-inst">
-      <div class="stack">
-        <button class="c-btn blue" id="btn-aut" title="자동운전">AUT</button>
-        <button class="c-btn warn" id="btn-ins" title="점검(수동)운전">INS</button>
-        <button class="c-btn" id="btn-ins-up" title="점검 상승 (누르는 동안 서행)" disabled>▲</button>
-        <button class="c-btn" id="btn-ins-dn" title="점검 하강 (누르는 동안 서행)" disabled>▼</button>
-        <label for="bypass-mode" style="font-size:9px;line-height:1.4;text-align:center;color:#182533;font-weight:700">바이패스<br>BYPASS</label>
-        <select id="bypass-mode" aria-label="바이패스 접점 선택" style="width:100%;min-height:44px;background:#283646;color:white;border-radius:8px">
-          <option value="off">해제</option><option value="hall">승장문</option><option value="car">카문</option>
-        </select>
-        <output id="bypass-status" aria-live="polite" style="font-size:10px;color:#182533;text-align:center;font-weight:700">BYPASS 해제</output>
-        <button class="c-btn" id="hall-toggle" title="층별 승장문 수동 개방">문 점검</button>
-        <button class="c-btn red" title="도어 고장">DR</button>
-        <button class="c-btn red" id="btn-overspeed" title="과속(조속기)">OVS</button>
-        <button class="c-btn red" title="세이프티 기어">SAF</button>
-      </div>
-    </div>
 
     </div><!-- /#hud -->
 
@@ -655,12 +891,7 @@
       </span>
     </div>
     <canvas id="gl"></canvas>
-    <div class="ui-hint">
-      🖱 <b>좌클릭 드래그:</b> 화면 회전<br>
-      🖱 <b>마우스 휠:</b> 확대 / 축소<br>
-      🖱 <b>우클릭 드래그:</b> 화면 이동(Pan)<br>
-      🖱 <b>부품 더블클릭:</b> 가까이 보기
-    </div>
+    <div class="ui-hint" id="hint" role="note"></div>
   </div>
 
   <!-- 라이브러리 로드 -->
@@ -671,8 +902,13 @@
     <label for="hall-opening">승장문 개방량</label><input id="hall-opening" type="range" min="0" max="100" value="0" aria-label="승장문 개방량">
     <div class="hall-row"><button id="hall-open">완전 열기</button><button id="hall-close">닫기</button></div>
     <output id="hall-message" aria-live="polite"></output>
+    <!-- 절차 전체를 이 패널에서 끝낸다: 고장·점검 시트의 BYPASS·운전 모드·▲▼ 와 같은 원본을 공유한다 -->
+    <label>BYPASS (접점 우회)</label><div class="seg" data-for="bypass-mode"></div>
+    <label>운전 모드</label>
+    <div class="seg"><button data-ins="off" title="자동운전"><small>AUT</small>자동</button><button data-ins="on" title="점검(수동)운전"><small>INS</small>점검</button></div>
+    <div class="hold"><button data-ins-dir="1" title="점검 상승 (누르는 동안 서행)" disabled>▲ 상승</button><button data-ins-dir="-1" title="점검 하강 (누르는 동안 서행)" disabled>▼ 하강</button></div>
     <p>삼각키 해제 → 문 열기 → 승장문 BYPASS → ▲·▼를 누르는 동안 이동.</p>
-    <p>복귀: 닫기 → 재잠금 → BYPASS 해제 → AUT.</p>
+    <p>복귀: 닫기 → 재잠금 → BYPASS 해제 → 자동.</p>
   </section>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -691,6 +927,8 @@
   <script src="js/leveling-sensors.js"></script>
   <script src="js/safety-device.js"></script>
   <script src="js/elevator.js"></script>
+  <script src="js/pit-ladder.js"></script>
+  <script src="js/ucm-demo.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/hall-manual.js"></script>
 
@@ -786,10 +1024,16 @@
        하강 시 캠 하단이, 상승 시 캠 상단이 먼저 스위치를 밟는다. */
     const FLS_Z          = CAR_RAIL_Z - 0.34;      // 캠·스위치 공용 Z 레인 (레일 후면측)
     const FLS_LEVER_L    = 0.050;                  // 고정축~롤러축 48~52mm (부품설계 194p) 중앙값
-    const FLS_ROLLER_R   = 0.019;                  // 구형 금속 레버의 고무 롤러
+    const FLS_ROLLER_R   = 0.025;                  // S3-B1370형 고무 롤러 Ø50 (사진 비율 추정)
     const FLS_TRIP_ANGLE = 60 * Math.PI / 180;     // 동작각 50~70° (부품설계 197p) 중앙값
     const FLS_LEAD       = 0.060;                  // 캠 양단 절곡(리드인) 길이
-    const FLS_PIVOT_X    = -(CAR_RAIL_X - 0.020);  // 레버 고정축 X (레일 배면에서 20mm 카 쪽)
+    // 레버 고정축 X (레일 배면에서 14mm 카 쪽). 롤러 Ø50 로 커진 만큼 벽 쪽으로 옮겨 캠 면 X 는 유지한다.
+    const FLS_PIVOT_X    = -(CAR_RAIL_X - 0.014);
+    /* S3-B1370형 롤러 레버 리미트 스위치 GLB 장착 계약 (blender/scripts/limit_switch.py 가 이 줄을 읽는다).
+       원점 = 레버 고정축, +X = 레버 휴지 방향(캠 쪽), 회전축 = Z, 롤러 중심 Z = 캠 레인.
+       본체는 −Z 뒤쪽에 있고 뒷면(bodyBackZ)을 타공 앵글에 붙인다. 앞면(bodyFrontZ)의 유리창으로
+       접점이 보이며, 접점이 열리면 가동 접점(ContactBridge)이 −Y 로 bridgeStroke 만큼 내려간다. */
+    const LIMIT_SWITCH_MODEL = {"bodyMinX": -0.042, "bodyMaxX": 0.018, "bodyMinY": -0.024, "bodyMaxY": 0.024, "bodyFrontZ": -0.020, "bodyBackZ": -0.058, "capTopY": 0.042, "glandX": 0.008, "glandZ": -0.039, "glandBottomY": -0.036, "rollerW": 0.015, "bridgeStroke": 0.004};
     // 캠 면 X — 동작각에서 역산. 롤러가 완전히 눌렸을 때 롤러의 카 쪽 면 = 캠 면
     const FLS_CAM_FACE_X = FLS_PIVOT_X + FLS_LEVER_L * Math.cos(FLS_TRIP_ANGLE) + FLS_ROLLER_R;
     // 트립 거리 — 종단 착상면(카 바닥 레벨) 기준
@@ -857,10 +1101,19 @@
     /* ── 16.3 / 16.5 / 16.6 승강로 하네스 (185p, 189~192p) — 좌측 벽면 ──
        승강로를 두르는 벽은 좌측벽 하나뿐이라 제어반·새들 고정선은 모두 좌측이다. */
     const HARNESS_X = -(S.SHAFT_W / 2) + 0.065; // 벽 내면에서 65mm (새들 고정)
-    const HARNESS_Z = 1.10;                     // 승장 출입구 쪽 모서리 (피트 사다리 Z 회피)
-    const PIT_REMOTE_Y = FLOOR_Y[0] + 1.00;     // 요청 기준: 최하층 승강장 +1m
+    const HARNESS_Z = 1.10;                     // 승장 출입구 쪽 모서리
+    /* 승강로 조명 스위치·피트 정지 스위치 (검사기준, 현장사진 IMG_7829 / 20260922)
+       조명: 최상층·최하층 승강장 바닥 +1m, 출입구에서 수평 0.75m 이내.
+       피트 정지(+콘센트): 최하층만, 수평 동일, 승강장 바닥 +0.4m 이내(박스 상단 기준).
+       중앙개폐 승장문이 전면벽 안쪽 X −0.75~−1.53 을 쓸고 지나가므로 행정 밖인 좌측벽 전면 모서리에 둔다. */
+    const PIT_LIGHT_SWITCH_Y = FLOOR_Y[0] + 1.00;
     const TOP_LIGHT_SWITCH_Y = FLOOR_Y[FLOORS - 1] + 1.00;
-    const SHAFT_SWITCH_Z = FRONT_WALL_INNER_Z - 0.40 - 0.36; // 사다리 옆, 상하 동일 위치
+    const PIT_STOP_H = 0.170;                              // 노란 정지·콘센트 박스 높이
+    const PIT_STOP_Y = FLOOR_Y[0] + 0.40 - 0.015 - PIT_STOP_H / 2; // 상단 = 승강장 +0.385m
+    const LIGHT_SWITCH_Z = FRONT_WALL_INNER_Z - 0.050;     // 도어 접점 간선(HARNESS_Z) 앞
+    const PIT_STOP_Z = FRONT_WALL_INNER_Z - 0.085;         // 전면벽에 붙임, 간선은 상면 글랜드로 인입
+    /* ★카 도어 하부 케이블(car-door.js edgeCableFlex)이 벽 −1.588·Z 0.95~1.145 를 전 행정 쓸고 지나간다.
+       이 Z 띠 안의 벽부 돌출은 벽면에서 ~65mm 이하로 둔다(버섯 버튼은 띠 앞쪽 Z 로 뺀다). */
     const SHAFT_LIGHT_Z = CAR_RAIL_Z - 0.95; // 레일 브라켓 뒤 벽면
     const TC_COLOR = 0x73777c; // 현장 회색 PVC, 재질에서 sRGB→linear 변환
     /* 기계실 케이블 관통구 X — 제어반 캐비닛(폭 0.3 × scale 1.5) 바깥이라야 인출이 보인다.
@@ -1085,16 +1338,17 @@
       } else if (location.search.includes('flscam')) {
         // 하부 리미트·파이널 스위치(DLS/DFL) — 피트 레일 + 카 스타일 캠 하단
         controls.minDistance = 0.10;
+        // 유리창(스위치 +Z 면)이 보이도록 가로 브라켓보다 카 쪽, 스위치 앞에서 비스듬히 본다.
         const sy = TERMINAL_SWITCHES.find(s => s.name === (location.search.includes('flscam=2')?'ULS':'DLS')).y;
-        camera.position.set(FLS_PIVOT_X - 0.32, sy + 0.16, FLS_Z - 0.42);
-        controls.target.set(FLS_PIVOT_X + 0.02, sy - 0.02, FLS_Z);
+        camera.position.set(FLS_PIVOT_X + 0.03, sy + 0.12, FLS_Z + 0.28);
+        controls.target.set(FLS_PIVOT_X + 0.005, sy - 0.03, FLS_Z - 0.03);
         document.getElementById('loading').style.display = 'none';
       } else if (location.search.includes('sldcam')) {
         // 하부 강제감속 스위치(DSD) — 최하층 바닥 +1.5m 트립
         controls.minDistance = 0.10;
         const sy = TERMINAL_SWITCHES.find(s => s.name === 'DSD').y;
-        camera.position.set(FLS_PIVOT_X + 0.80, sy + 0.25, FLS_Z - 0.75);
-        controls.target.set(FLS_PIVOT_X + 0.03, sy, FLS_Z);
+        camera.position.set(FLS_PIVOT_X + 0.03, sy - 0.04, FLS_Z + 0.28); // 카 상부 빔 아래에서 본다
+        controls.target.set(FLS_PIVOT_X + 0.005, sy - 0.03, FLS_Z - 0.03);
         document.getElementById('loading').style.display = 'none';
       } else if (location.search.includes('mrcam=4')) {
         // 로프브레이크·현수도르래 근접 뷰
@@ -1134,6 +1388,8 @@
       buildTravelCable();       // 이동케이블(T-Cable) U 곡면 — 카·균형추 위치에서 길이 역산 (16.4)
       buildWireRopes();         // 로프
       buildPitFoundation();     // 피트
+      PitLadder.build(pitGrp);  // 좌측벽 측면 접이식 피트 사다리 (정지·조명 스위치 옆)
+      UCMDemo.build(scene);     // 개문발차 시연 승객 「퉁이」(평소 숨김)
       updateBuffers();          // 동적 완충기
 
       // ?tcam(해치 케이블 행거)만 빌드 결과(travelCable.hangerY)가 있어야 잡을 수 있다
@@ -1161,8 +1417,10 @@
       // 카가 실제로 움직인 만큼만 ui.js spinSheaves(deltaY)가 4개 시브를 돌린다
       // (방향·속도가 로프와 물리적으로 일치하고, 카가 멈추면 시브도 즉시 멈춘다).
       Mascot.update(performance.now() / 1000);
+      UCMDemo.update(performance.now() / 1000);
       controls.update();
       if (camera.position.y < Y0 + 0.35) camera.position.y = Y0 + 0.35;
+      PitLadder.update();
       renderer.render(scene, camera);
       if(typeof renderOverspeedInset==='function')renderOverspeedInset();
     }

@@ -93,7 +93,7 @@ try {
     await page.screenshot({ animations: 'disabled', path: path.join(out, `${label}-${name}.png`) });
   }
   // 상세 배경(주변 풍경)에서도 섬·구름만 보이는지
-  await page.click('[data-menu="dd-cam"]');
+  await page.click('[data-menu="dd-view"]');
   await page.click('#c-background');
   await page.waitForFunction(() => outdoorPresentation.detailed && outdoorPresentation.sky.visible);
   await page.evaluate(() => {

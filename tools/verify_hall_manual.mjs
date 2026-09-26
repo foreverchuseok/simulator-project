@@ -58,9 +58,11 @@ try {
  const dest=await page.evaluate(()=>curFloor===0?1:0);await page.evaluate(f=>moveElevator(f),dest);await page.waitForFunction(f=>curFloor===f&&!moving,dest,{timeout:30000});
  const touch=await browser.newContext({viewport:{width:412,height:915},isMobile:true,hasTouch:true});const tp=await touch.newPage();await ready(tp);
  await tp.tap('[data-menu="dd-inst"]');await tp.tap('#hall-toggle');await tp.selectOption('#hall-floor','1');await tp.tap('#hall-key');await tp.tap('#hall-open');await tp.tap('#hall-observe');
- await tp.selectOption('#bypass-mode','hall');
+ // 폰에서는 승장문 패널 하나로 절차를 끝낸다(고장·점검 시트는 닫힌다): 패널 안 BYPASS 세그먼트를 누른다.
+ await tp.tap('#hall-panel .seg[data-for="bypass-mode"] button[data-value="hall"]');
+ assert.equal(await tp.evaluate(()=>DoorBypass.mode),'hall');
  const bounds=await tp.locator('#hall-panel').boundingBox();assert.ok(bounds.x>=0&&bounds.x+bounds.width<=412);
- const up=await tp.locator('#btn-ins-up').boundingBox();
+ const up=await tp.locator('#hall-panel [data-ins-dir="1"]').boundingBox(); // 패널 안 ▲
  const cdp=await touch.newCDPSession(tp);await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:up.x+up.width/2,y:up.y+up.height/2}]});await tp.waitForFunction(()=>moving&&DoorBypass.active);
  await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await tp.waitForFunction(()=>!moving&&!DoorBypass.active);
  await tp.screenshot({path:`${out}/touch-open.png`});

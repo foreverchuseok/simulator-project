@@ -2908,35 +2908,36 @@
        buildLimitSwitches — 승강로(레일 고정) 종단 리미트 스위치 6개
        MR_설계.pdf 16.8 CAM ASSY 및 FLS ASSY 설치 (파일 137~138p, 책 135~136p)
 
-       스위치 방식: "레일 클립을 이용하여 FLS ASSY를 카 레일에 고정"(137p 2항).
-       캠은 카 스타일에 붙어 함께 움직이고(elevator.js buildCarCabin §7),
-       여기서는 레일에 남는 롤러 레버 리미트 스위치만 만든다.
+       2026-09-26: S3-B1370형 롤러 레버 스위치(models/gltf/limit_switch.glb). 취부는 스위치마다
+       레일 클립 1조 + 가로 평철 브라켓 + 끝 취부판(구형 방식). 세로 타공 앵글은 사용자가 반려했다.
          · 하부(피트): DFL 파이널 → DLS 리미트 → DSD 강제감속
          · 상부      : USD 강제감속 → ULS 리미트 → UFL 파이널
-       각 스위치 = 레일 클립 1조 + 슬롯 암 1본 + 수직 취부판 + 스위치 본체 + 롤러 레버.
-       높이 원본은 index.html TERMINAL_SWITCHES (트립점 ± 캠 끝단 로컬 Y).
-
-       구형 일렬 배치의 모델 트립점은 index.html의 LS_TRIP/FLS_OVERTRAVEL/SLD_DIST.
-       기존 MR 병렬 배치 수치를 중복 입력하지 않는다.
+       이 모델의 캠은 −X(벽 쪽)로 누르고 레버가 Z축으로 돈다. 그래서 스위치 넓은 면(유리창)이
+       +Z 를 보도록 세우고 뒷면을 취부판(법선 Z)에 붙인다.
+       유리창 안 가동 접점은 refreshTerminalDevices() 가 동작 상태대로 연다(elevator.js).
+       높이 원본은 index.html TERMINAL_SWITCHES, 형상 계약은 LIMIT_SWITCH_MODEL.
        ========================================================================== */
     function buildLimitSwitches() {
       limitGrp = new THREE.Group();
       limitGrp.name = 'limitGrp';
       terminalDevices.switches.length = 0;
+      terminalDevices.modelReady = false;
 
-      const railX      = -CAR_RAIL_X;            // 좌측 카 레일 배면 X (-1.3125)
-      const armX       = railX - 0.017;          // 슬롯 암 중심 X (레일 배면 뒤 8t 평철)
-      const armT       = 0.008;                  // 암 두께 (X)
-      const armH       = 0.035;                  // 암 높이 (Y)
+      const LS = LIMIT_SWITCH_MODEL;
+      const railX = -CAR_RAIL_X;                 // 좌측 카 레일 배면 X (-1.3125)
+      const armT = 0.008, armH = 0.035;          // 가로 평철 브라켓 두께(X)·높이(Y)
+      const tabT = 0.004, tabH = 0.060;          // 브라켓 끝 취부판 (스위치 뒷면이 붙는 판, 법선 Z)
       const flangeHalfZ = 0.0445;                // 13K 레일 베이스 플랜지 반폭 (rail_bracket.py 원본)
+      const tabZ1 = FLS_Z + LS.bodyBackZ, tabZ0 = tabZ1 - tabT;
+      const armX1 = FLS_PIVOT_X + LS.bodyMinX - 0.013;  // 복귀 스프링 브라켓 뒤로 지나간다
+      const armX0 = armX1 - armT;
+      const tabX0 = armX0, tabX1 = FLS_PIVOT_X + LS.bodyMaxX;
+      const trunkX = armX0 - 0.006, trunkZ = CAR_RAIL_Z - 0.065;
 
-      const armMat   = M.ss(0x9aa3ad);
-      const clipMat  = M.gold();
-      const boltMat  = M.ss(0xb8bec6);
-      const swBodyMat = M.ss(0x8a9196);          // 구형 다이캐스트 몸체
-      const swCapMat  = M.paint(0x972d27);       // 적갈색 회전 헤드
-      const leverMat  = M.ss(0xc0c7ce);
-      const rollerMat = new THREE.MeshStandardMaterial({ color: 0x22262b, roughness: 0.62, metalness: 0.12 });
+      const armMat = M.ss(0x9aa3ad);
+      const clipMat = M.gold();
+      const boltMat = M.ss(0xb8bec6);
+      const cableMat = M.paint(0x202124);
       function roundedOutline(w,h,r,Path=THREE.Shape) {
         const p=new Path(),x=-w/2,y=-h/2;
         p.moveTo(x+r,y);p.lineTo(x+w-r,y);p.quadraticCurveTo(x+w,y,x+w,y+r);
@@ -2944,121 +2945,108 @@
         p.lineTo(x+r,y+h);p.quadraticCurveTo(x,y+h,x,y+h-r);
         p.lineTo(x,y+r);p.quadraticCurveTo(x,y,x+r,y);return p;
       }
+      function slotHole(cx, cy, w, h) {
+        const hole = roundedOutline(w, h, Math.min(w, h) / 2 - 1e-4, THREE.Path);
+        hole.curves.forEach(c => { for (const k of ['v0','v1','v2','v3']) if (c[k]) { c[k].x += cx; c[k].y += cy; } });
+        return hole;
+      }
+      // 꺾인 배선은 구간별 메시로 둔다(한 메시면 AABB 가 커져 간극 검증이 오탐한다).
+      function tube(points, r, name) {
+        for (let i = 1; i < points.length; i++) {
+          const a = points[i - 1], b = points[i], d = b.clone().sub(a), len = d.length();
+          const m = createCylinder(r, r, len + r * 2, cableMat, ...a.clone().add(b).multiplyScalar(0.5).toArray(), limitGrp);
+          m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); m.name = name;
+        }
+      }
+      const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
-      /* 레일 클립 1조 — 베이스 플랜지 양쪽을 물고 M12 볼트로 암에 조인다 (195p, 202p) */
+      /* 레일 클립 1조 — 베이스 플랜지 양쪽을 물고 M12 볼트로 브라켓에 조인다 (195p, 202p) */
       function addRailClips(y) {
+        const x0 = armX1, x1 = railX + 0.008;
         [-1, 1].forEach(sg => {
           const cz = CAR_RAIL_Z + sg * flangeHalfZ;
-          createBox(0.034, 0.026, 0.020, clipMat, railX - 0.006, y, cz, limitGrp);
-          const bolt = createCylinder(0.006, 0.006, 0.046, boltMat, railX - 0.010, y, cz, limitGrp);
-          bolt.rotation.z = Math.PI / 2;
-          createCylinder(0.010, 0.010, 0.009, clipMat, railX + 0.014, y, cz, limitGrp).rotation.z = Math.PI / 2;
+          // ★플랜지 앞면 쪽 조(jaw)·너트는 세이프티기어 쐐기 스윕과 겹친다(문서의 기존 모델 한계, 레일 브라켓 클립과 동일).
+          const parts = [createBox(x1 - x0, 0.026, 0.020, clipMat, (x0 + x1) / 2, y, cz, limitGrp),
+            createCylinder(0.006, 0.006, x1 - armX0 + 0.012, boltMat, (armX0 - 0.004 + x1 + 0.008) / 2, y, cz, limitGrp),
+            createCylinder(0.010, 0.010, 0.009, clipMat, x1 + 0.008, y, cz, limitGrp)];
+          parts[1].rotation.z = parts[2].rotation.z = Math.PI / 2;
+          parts.forEach(m => { m.name = 'terminalRailClip'; });
         });
       }
+      /* 스위치 높이를 피해야 하는 레일 부품: 브라켓 단(실측 by −0.123 ~ +0.032, 검증 밴드 ±RAIL_BRACKET_BAND)
+         · 레일 이음판(createFullRail 5.0m 세그먼트, 이음점 −0.06 ~ +0.26). 겹치면 브라켓만 비켜 두고 취부판을 늘린다. */
+      const RAIL_SEG = 5.0;
+      const blocked = y => {
+        const lo = y - armH / 2 - 0.005, hi = y + armH / 2 + 0.005;
+        return RAIL_BRACKET_Y.some(by => Math.abs(y - by) < RAIL_BRACKET_BAND || (hi > by - 0.123 && lo < by + 0.032)) ||
+          (y > RAIL_SEG / 2 && (() => { const j = Math.round((y - 0.10) / RAIL_SEG) * RAIL_SEG; return hi + 0.013 > j - 0.06 && lo - 0.013 < j + 0.26; })());
+      };
 
-      /* 레일 브라켓 단과 겹치는 취부 높이를 밴드 밖으로 밀어낸다.
-         브라켓은 레일 배면(-X)에서 좌측 벽까지 뻗어 있어 캠·자석판 암과 같은 공간을 쓴다. */
-      function clearOfBracket(y) {
-        for (const by of RAIL_BRACKET_Y) {
-          const d = y - by;
-          if (Math.abs(d) < RAIL_BRACKET_BAND) return by + (d < 0 ? -1 : 1) * RAIL_BRACKET_BAND;
-        }
-        return y;
+      /* 스위치 1개 = 레일 클립 1조 + 가로 평철 브라켓(장공 2개) + 끝 취부판. 현장 구형 방식 그대로. */
+      function addSwitchBracket(spec) {
+        let armY = spec.y;
+        for (let k = 1; blocked(armY) && k < 60; k++) armY = spec.y + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.01;
+        const z0 = CAR_RAIL_Z + 0.075, z1 = tabZ0;
+        const zc = (z0 + z1) / 2, len = z0 - z1;
+        const outline = roundedOutline(len, armH, 0.002);
+        [0.30, 0.62].forEach(t => outline.holes.push(slotHole(-(z0 - len * t - zc), 0, 0.050, 0.010)));
+        const arm = new THREE.Mesh(new THREE.ExtrudeGeometry(outline, { depth: armT, bevelEnabled: false, curveSegments: 6 }), armMat);
+        arm.rotation.y = Math.PI / 2; arm.position.set(armX0, armY, zc); arm.name = 'terminalRailArm';
+        arm.userData.type = 'terminal-rail-arm'; limitGrp.add(arm);
+        addRailClips(armY);
+        // 끝 취부판: 브라켓 끝에서 직각으로 꺾여 스위치 뒷면을 받는다. 브라켓이 비켜 났으면 그만큼 길다.
+        const t0 = Math.min(spec.y - tabH / 2, armY - armH / 2), t1 = Math.max(spec.y + tabH / 2, armY + armH / 2);
+        const tab = createBox(tabX1 - tabX0, t1 - t0, tabT, armMat, (tabX0 + tabX1) / 2, (t0 + t1) / 2, (tabZ0 + tabZ1) / 2, limitGrp);
+        tab.name = 'terminalSwitchTab';
+        [LS.bodyMaxY - 0.006, LS.bodyMinY + 0.006].forEach(dy =>   // 본체 관통 나사 너트
+          createCylinder(0.0045, 0.0045, 0.004, boltMat, FLS_PIVOT_X + LS.bodyMaxX - 0.007, spec.y + dy, tabZ0 - 0.002, limitGrp).rotation.x = Math.PI / 2);
+        // 인출선: 글랜드 → 취부판 뒤 → 브라켓 아래를 따라 레일 뒤 간선으로.
+        const gy = spec.y + LS.glandBottomY, gx = FLS_PIVOT_X + LS.glandX, gz = FLS_Z + LS.glandZ;
+        const cy = Math.min(gy - 0.014, armY - armH / 2 - 0.008), zb = tabZ0 - 0.006;
+        tube([V(gx, gy + 0.002, gz), V(gx, cy, gz), V(gx, cy, zb), V(trunkX, cy, zb), V(trunkX, cy, trunkZ)],
+          0.003, 'terminalCable_' + spec.name);
+        return cy;
       }
 
-      /* 슬롯 암 1본 — 레일에서 목표 Z 레인까지 뻗는 평철. 길이조절 장공 2개. */
-      function addSlotArm(y, targetZ) {
-        const z0 = CAR_RAIL_Z - Math.sign(targetZ - CAR_RAIL_Z) * 0.075; // 레일 반대쪽 짧은 물림부
-        const zc = (z0 + targetZ) / 2;
-        const len = Math.abs(targetZ - z0);
-        const outline=roundedOutline(len,armH,0.002);
-        // 검은 사각형 대신 실제 관통 장공을 낸 아연도금 평철.
-        [0.30, 0.62].forEach(t => {
-          const hole=roundedOutline(0.050,0.010,0.005,THREE.Path);
-          const shift=-(z0+(targetZ-z0)*t-zc);
-          hole.curves.forEach(c=>{for(const key of ['v0','v1','v2','v3'])if(c[key])c[key].x+=shift;});
-          outline.holes.push(hole);
-        });
-        const arm=new THREE.Mesh(new THREE.ExtrudeGeometry(outline,{depth:armT,bevelEnabled:false,curveSegments:6}),armMat);
-        arm.rotation.y=Math.PI/2;arm.position.set(armX-armT/2,y,zc);arm.name='terminalRailArm';
-        arm.userData.type='terminal-rail-arm';limitGrp.add(arm);
-        addRailClips(y);
-      }
-
-      /* ── 롤러 레버 리미트 스위치 1개 (FLS ASSY) ──
-         레버는 고정축에서 +X(카 쪽)로 뻗고, 캠에 눌리면 dir 방향(하부 −, 상부 +)으로 60° 젖혀진다.
-         레버·롤러는 본체 옆면(+Z)의 축에 달려 본체와 다른 Z 평면에서 돈다. */
-      const bodyW = 0.046, bodyH = 0.105, bodyD = 0.038;
-      function addLimitSwitch(spec) {
-        const laneZ  = FLS_Z + spec.dz;              // 이 스위치의 레버 레인
-        const leverZ = laneZ;                        // 공용 캠 중앙과 롤러 중심 일치
-        const bodyZ  = laneZ - 0.027;                // 본체는 레버 뒤쪽
-        const pivotY = spec.y;
-        const bodyY  = pivotY - 0.050;               // 축은 본체 상단 근처
-        const bodyX  = FLS_PIVOT_X - 0.004;
-
-        // (a) 레일 클립 + 슬롯 암 (레일 브라켓 단 회피) + 수직 취부판
-        //     ★브라켓 단과 겹쳐 armY가 크게 밀리면(예: ULS/UFL이 상단 브라켓과 5cm 이내)
-        //     연결판이 그만큼 길어진다 — 폭 75mm 통판 그대로 늘리면 덩어리가 튀어나와 보이므로
-        //     늘어난 길이만큼 폭을 좁혀 얇은 스탠드오프 스트럿처럼 보이게 한다(하부와 같은 인상).
-        const armY = clearOfBracket(bodyY);
-        addSlotArm(armY, laneZ);
-        const plateX = railX - 0.012;
-        const stretch = Math.abs(armY - bodyY);
-        const plateH  = stretch + 0.130;
-        const plateD  = Math.max(0.028, 0.075 * (0.130 / plateH));
-        createBox(0.010, plateH, plateD, armMat, plateX, (armY + bodyY) / 2, laneZ - 0.010, limitGrp);
-        if (stretch < 0.010) {
-          [-0.030, 0.030].forEach(dy => {
-            createBox(0.002, 0.052, 0.010, M.paint(0x2b3038), plateX + 0.005, bodyY + dy, laneZ - 0.010, limitGrp);
-          });
-        }
-        // 암 ↔ 판 볼트
-        createCylinder(0.005, 0.005, 0.030, boltMat, armX + 0.004, armY, laneZ, limitGrp).rotation.z = Math.PI / 2;
-
-        // (b) 스위치 본체 + 케이블 글랜드 + 판 고정 볼트 2개
-        const body = new THREE.Mesh(new THREE.ExtrudeGeometry(roundedOutline(bodyW-0.002,bodyH-0.002,0.004),
-          {depth:bodyD-0.002,bevelEnabled:true,bevelSize:0.001,bevelThickness:0.001,bevelSegments:2,steps:1}),swBodyMat);
-        body.position.set(bodyX,bodyY,bodyZ-bodyD/2+0.001);limitGrp.add(body);
+      /* 스위치 래퍼 — GLB 로드 전에도 높이·가동부 핸들이 있어야 refreshTerminalDevices()가 돈다 */
+      TERMINAL_SWITCHES.forEach(spec => {
+        const body = new THREE.Group();
         body.name = 'terminalBody_' + spec.name;
-        body.userData = {type:'terminal-switch', name:spec.name, kind:spec.kind};
-        createBox(bodyW-0.005,bodyH-0.026,0.002,M.paint(0x34383a),bodyX,bodyY-0.005,bodyZ+bodyD/2+0.001,limitGrp);
-        for(const dx of [-0.016,0.016]) for(const dy of [-0.038,0.029]) {
-          createCylinder(0.0028,0.0028,0.003,boltMat,bodyX+dx,bodyY+dy,bodyZ+bodyD/2+0.003,limitGrp).rotation.x=Math.PI/2;
-        }
-        createBox(bodyW + 0.002, 0.020, bodyD + 0.002, swCapMat, bodyX, bodyY + bodyH / 2 - 0.010, bodyZ, limitGrp);
-        createCylinder(0.008, 0.008, 0.019, boltMat, bodyX, bodyY - bodyH / 2 - 0.009, bodyZ, limitGrp);
-        // 현장처럼 암 뒷면으로 정리한 검정 배선과 레일 배면 수직 간선.
-        const cablePts=[new THREE.Vector3(bodyX,bodyY-bodyH/2-0.019,bodyZ),
-          new THREE.Vector3(armX-0.012,bodyY-bodyH/2-0.030,bodyZ),
-          new THREE.Vector3(armX-0.012,armY-0.027,bodyZ),
-          new THREE.Vector3(armX-0.012,armY-0.027,CAR_RAIL_Z-0.065)];
-        const cable=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(cablePts),28,0.003,8,false),M.paint(0x202124));
-        cable.name='terminalCable_'+spec.name;limitGrp.add(cable);
-        [-0.032, 0.032].forEach(dy => {
-          createCylinder(0.004, 0.004, 0.014, boltMat, plateX + 0.010, bodyY + dy, bodyZ, limitGrp).rotation.z = Math.PI / 2;
-        });
-
-        // (c) 레버 + 롤러 — 고정축(피벗)에서 +X 로 뻗고, 캠에 눌리면 dir 방향으로 회전한다
+        body.position.set(FLS_PIVOT_X, spec.y, FLS_Z);
+        body.userData = { type: 'terminal-switch', name: spec.name, kind: spec.kind, contactClosed: true };
         const lever = new THREE.Group();
         lever.name = 'limitLever_' + spec.name;
-        lever.position.set(FLS_PIVOT_X, pivotY, leverZ);
-        limitGrp.add(lever);
-        createCylinder(0.006, 0.006, 0.030, M.ss(0xc8ced4), 0, 0, -0.012, lever).rotation.x = Math.PI / 2; // 고정축
-        createBox(FLS_LEVER_L, 0.014, 0.008, leverMat, FLS_LEVER_L / 2, 0, 0, lever);
-        createBox(FLS_LEVER_L * 0.6, 0.004, 0.010, M.paint(0x2b3038), FLS_LEVER_L / 2, 0, 0, lever); // 길이 조절 장공
-        const roller = createCylinder(FLS_ROLLER_R, FLS_ROLLER_R, 0.014, rollerMat, FLS_LEVER_L, 0, 0, lever);
-        roller.rotation.x = Math.PI / 2;
-        createCylinder(0.009, 0.009, 0.018, M.ss(0xd0d6dc), FLS_LEVER_L, 0, 0, lever).rotation.x = Math.PI / 2;
-        roller.userData = { type: 'terminal-switch', name: spec.name, kind: spec.kind };
+        lever.position.copy(body.position);
+        limitGrp.add(body, lever);
+        terminalDevices.switches.push({ ...spec, lever, body, bridge: null, roller: null, ratio: 0, contactOpen: false });
+      });
+      const cableYs = TERMINAL_SWITCHES.map(addSwitchBracket);
+      const tLo = Math.min(...cableYs), tHi = Math.max(...cableYs);
+      const trunk = createCylinder(0.005, 0.005, tHi - tLo, cableMat, trunkX, (tHi + tLo) / 2, trunkZ, limitGrp);
+      trunk.name = 'terminalFixedCableTrunk';
 
-        terminalDevices.switches.push({ ...spec, lever, body, ratio: 0 });
-      }
-
-      TERMINAL_SWITCHES.forEach(addLimitSwitch);
-      const cableLo=TERMINAL_SWITCHES[0].y-0.15, cableHi=TERMINAL_SWITCHES[5].y+0.12;
-      const trunk=createCylinder(0.005,0.005,cableHi-cableLo,M.paint(0x202124),armX-0.012,(cableHi+cableLo)/2,CAR_RAIL_Z-0.065,limitGrp);
-      trunk.name='terminalFixedCableTrunk';
+      new THREE.GLTFLoader().load('models/gltf/limit_switch.glb', gltf => {
+        const src = gltf.scene.getObjectByName('LimitSwitchModel');
+        const ext = src?.userData || {};
+        if (Object.keys(LS).some(k => !(Math.abs(ext[k] - LS[k]) < 1e-9)) ||
+            !(Math.abs(ext.leverL - FLS_LEVER_L) < 1e-9) || !(Math.abs(ext.rollerR - FLS_ROLLER_R) < 1e-9)) {
+          console.error('Limit switch: GLB mount contract mismatch — blender/scripts/limit_switch.py 재실행'); return;
+        }
+        const glass = M.glass();
+        glass.transmission = 0; glass.opacity = 0.2; glass.color.set(0xeef6fa); glass.depthWrite = false;
+        const part = name => gltf.scene.getObjectByName(name);
+        terminalDevices.switches.forEach(sw => {
+          const body = part('SwitchBody').clone(), win = part('ContactWindow').clone(), bridge = part('ContactBridge').clone();
+          const lever = part('Lever').clone();
+          win.traverse(o => { if (o.isMesh) { o.material = glass; o.renderOrder = 2; } });
+          sw.body.add(body, win, bridge); sw.lever.add(lever);
+          body.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+          lever.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+          sw.bridge = bridge; sw.roller = lever.getObjectByName('Roller');
+        });
+        terminalDevices.modelReady = true;
+        if (typeof refreshTerminalDevices === 'function') refreshTerminalDevices();
+      }, undefined, err => console.error('[Limit Switch Load Error]:', err));
 
       scene.add(limitGrp);
     }
@@ -3109,11 +3097,14 @@
       }
       // 제어반 하부에서 벽면으로 내려오는 검정 접점선과 조명선.
       const mrY = Y0 + TOTAL_H + 0.055;
+      // 도어 접점 간선은 피트 정지 박스 상면 글랜드로 들어간다(정지 스위치 직렬).
+      const stopTopY = PIT_STOP_Y + PIT_STOP_H / 2;
       [HARNESS_Z, SHAFT_LIGHT_Z - 0.40].forEach((z,i) => {
+        const bottomY = i ? pitY+0.85 : stopTopY+0.012;
         wire([[MR_CABLE_HOLE_X-0.16,mrY,HARNESS_Z],[MR_CABLE_HOLE_X,mrY,HARNESS_Z],
           [MR_CABLE_HOLE_X,CEIL_RUN_Y,HARNESS_Z],[wireX,CEIL_RUN_Y,HARNESS_Z],
-          [wireX,CEIL_RUN_Y,z],[wireX,i ? pitY+0.85 : PIT_REMOTE_Y,z]],i ? 'lightingRiser' : 'doorContactRiser');
-        for(let y=pitY+1; y<CEIL_RUN_Y; y+=1.5)
+          [wireX,CEIL_RUN_Y,z],[wireX,bottomY,z]],i ? 'lightingRiser' : 'doorContactRiser');
+        for(let y=pitY+1; y<CEIL_RUN_Y; y+=1.5) if(y>bottomY)
           createBox(0.05,0.014,0.022,metal,wallX+0.025,y,z,G);
       });
       for(let f=0; f<FLOORS; f++) {
@@ -3148,31 +3139,118 @@
             createBox(0.018,0.004,0.052,housing,wireX,ty,HARNESS_Z+0.01,G);
         });
       }
-      function switchBox(y, stop) {
-        const b = new THREE.Group(); b.position.set(wallX+0.052,y,SHAFT_SWITCH_Z);
-        b.name = stop ? 'pitSwitchBox' : 'topLightSwitchBox';
-        b.userData = {type:'shaft-switch-box', hasEstop:stop}; G.add(b);
-        createBox(0.09,0.29,0.12,metal,0,0,0,b);
-        createBox(0.006,0.278,0.108,M.ss(0xc2c4c5),0.048,0,0,b);
-        [-0.125,0.125].forEach(dy=>[-0.042,0.042].forEach(dz=>{
-          createCylinder(0.003,0.003,0.008,metal,0.054,dy,dz,b).rotation.z=Math.PI/2;
-        }));
-        // 白색 원형 상하 커버, 중앙 토글과 적색 버섯형 정지버튼.
-        if(stop) [-0.09,0.09].forEach(dy=>{
-          createCylinder(0.032,0.032,0.009,M.paint(0xe3e3df),0.057,dy,0,b).rotation.z=Math.PI/2;
-          [-0.011,0.011].forEach(dz=>createCylinder(0.003,0.003,0.002,black,0.063,dy,dz,b).rotation.z=Math.PI/2);
-        });
-        createBox(0.006,0.033,0.021,black,0.058,0,stop ? 0.032 : 0,b);
-        createCylinder(0.004,0.004,0.025,metal,0.071,0,stop ? 0.032 : 0,b).rotation.z=-Math.PI/3;
-        if(stop) {
-          createCylinder(0.025,0.025,0.006,M.paint(0xe4ba39),0.059,0,-0.022,b).rotation.z=Math.PI/2;
-          const button=createCylinder(0.020,0.018,0.024,M.paint(0xd52e25),0.075,0,-0.022,b);
-          button.rotation.z=Math.PI/2; button.name='pitEstopButton';
-        }
-        wire([[wireX,y,SHAFT_LIGHT_Z-0.40],[wireX,y,SHAFT_SWITCH_Z],[wallX+0.052,y-0.16,SHAFT_SWITCH_Z]],b.name+'Wire');
+      /* 박스 로컬 좌표: 원점 = 벽면, +X = 전면(승강로 안쪽), +Z = 승장 출입구 쪽. */
+      const flat = c => { const m=M.paint(c); m.clearcoat=0.15; m.roughness=0.6; return m; };
+      const faceX = o => { o.rotation.z=Math.PI/2; return o; };
+      function sticker(w, h, px, py, pz, parent, draw) {
+        const cv=document.createElement('canvas'); cv.width=Math.round(w*4000); cv.height=Math.round(h*4000);
+        const ctx=cv.getContext('2d'); draw(ctx,cv.width,cv.height);
+        const tex=new THREE.CanvasTexture(cv); tex.anisotropy=4;
+        const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshStandardMaterial({map:tex,roughness:0.55}));
+        m.position.set(px,py,pz); m.rotation.y=Math.PI/2; parent.add(m); return m;
       }
-      switchBox(PIT_REMOTE_Y,true); switchBox(TOP_LIGHT_SWITCH_Y,false);
-      wire([[wireX,PIT_REMOTE_Y,HARNESS_Z],[wireX,PIT_REMOTE_Y,SHAFT_SWITCH_Z]],'pitStopWire');
+      // 르그랑 슈퍼와이드 1구(사용자 제공 제품 사진): 아이보리 플레이트 + 펄실버 대형 락커, 노출 박스·측면 L브라켓.
+      function roundSlab(w, h, t, r, mat, px, py, pz, parent) {
+        const sh=new THREE.Shape(), x=w/2, y=h/2;
+        sh.moveTo(-x+r,-y); sh.lineTo(x-r,-y); sh.quadraticCurveTo(x,-y,x,-y+r); sh.lineTo(x,y-r);
+        sh.quadraticCurveTo(x,y,x-r,y); sh.lineTo(-x+r,y); sh.quadraticCurveTo(-x,y,-x,y-r);
+        sh.lineTo(-x,-y+r); sh.quadraticCurveTo(-x,-y,-x+r,-y);
+        const g=new THREE.ExtrudeGeometry(sh,{depth:t,bevelEnabled:false,curveSegments:4}); g.translate(0,0,-t/2);
+        const m=new THREE.Mesh(g,mat); m.position.set(px,py,pz); m.rotation.y=Math.PI/2;
+        m.castShadow=m.receiveShadow=true; parent.add(m); return m;
+      }
+      const LSW = {w:0.070, h:0.120, box:0.038, d:0.0555};
+      function lightSwitchBox(y, name) {
+        const b = new THREE.Group(); b.position.set(wallX,y,LIGHT_SWITCH_Z);
+        b.name = name; b.userData = {type:'shaft-light-switch', switchH:y-FLOOR_Y[name.startsWith('pit')?0:FLOORS-1]};
+        G.add(b);
+        const ivory = flat(0xebe1c6), body = flat(0xe0d7bd), galv = M.ss(0xb4b9bc), mark = flat(0xbdb6a2);
+        const pearl = new THREE.MeshStandardMaterial({color:0xcfd2d6, metalness:0.45, roughness:0.35});
+        createBox(LSW.box,LSW.h-0.006,LSW.w-0.006,body,LSW.box/2,0,0,b);
+        roundSlab(LSW.w,LSW.h,0.007,0.003,ivory,LSW.box+0.0035,0,0,b).name='lightPlate';
+        roundSlab(0.050,0.098,0.003,0.002,ivory,LSW.box+0.0085,0,0,b);
+        // 락커는 모듈 우측(-Z), 좌측 띠에 ‖ 표시, 락커에 ▸ 표시.
+        roundSlab(0.034,0.088,0.005,0.004,pearl,LSW.box+0.0125,0,-0.006,b).name='lightRocker';
+        for(const dz of [0.0165,0.0195]) createBox(0.0008,0.006,0.0008,mark,LSW.box+0.0104,-0.004,dz,b);
+        const tri = new THREE.Mesh(new THREE.CylinderGeometry(0.0022,0.0022,0.0008,3),flat(0xaeb2b7));
+        tri.position.set(LSW.d+0.0002,-0.004,-0.019); tri.rotation.set(Math.PI,0,Math.PI/2); b.add(tri);
+        // L브라켓: 벽 플랜지(앵커 1) + 박스 측면 다리(나사 2), 전면벽 쪽이 좁아 -Z 측에 둔다.
+        const sz = -(LSW.w-0.006)/2;
+        createBox(0.003,0.070,0.036,galv,0.0015,0.004,sz-0.018,b);
+        createBox(0.034,0.070,0.003,galv,0.017,0.004,sz-0.0015,b);
+        faceX(createCylinder(0.0065,0.0065,0.004,galv,0.005,0.020,sz-0.020,b));
+        faceX(createCylinder(0.0038,0.0038,0.006,M.ss(0xd9dcde),0.008,0.020,sz-0.020,b));
+        for(const dy of [-0.016,0.024]) createCylinder(0.0028,0.0028,0.004,M.gold(),0.022,dy,sz-0.003,b).rotation.x=Math.PI/2;
+        createCylinder(0.007,0.007,0.010,body,0.020,-LSW.h/2+0.001,0,b);
+        return b;
+      }
+      // 현장사진 20260922: 노란 비상정지 + LIGHT only 2구 콘센트 복합 박스(피트 전용).
+      const STOP_BZ = 0.048; // 버튼 열 로컬 Z (+ = 출입구 쪽)
+      function pitStopOutletBox() {
+        const W=0.165, H=PIT_STOP_H, D=0.060;
+        const b = new THREE.Group(); b.position.set(wallX,PIT_STOP_Y,PIT_STOP_Z);
+        b.name = 'pitStopOutletBox';
+        b.userData = {type:'pit-stop-outlet', hasEstop:true, outlets:2, topH:PIT_STOP_Y+H/2-FLOOR_Y[0]};
+        G.add(b);
+        const yellow = flat(0xf0c20c), white = flat(0xf2f1ec), red = flat(0xb81e22), gray = flat(0xb7babd);
+        createBox(D-0.010,H,W,yellow,(D-0.010)/2,0,0,b);
+        createBox(0.010,H-0.004,W-0.004,yellow,D-0.005,0,0,b);
+        for(const dy of [-1,1]) for(const dz of [-1,1])
+          faceX(createCylinder(0.0042,0.0042,0.004,M.gold(),D+0.002,dy*(H/2-0.009),dz*(W/2-0.009),b));
+        // 좌측: 가드 칼라 속 적색 버섯형 버튼(회전 복귀 화살표), 표지, 원형 블랭크 캡.
+        // 버튼 열은 카 도어 케이블 띠(Z≤1.145) 앞쪽으로 뺀다. 가드 돌기는 상하.
+        const by=0.042;
+        faceX(createCylinder(0.030,0.030,0.010,yellow,D+0.005,by,STOP_BZ,b));
+        faceX(createCylinder(0.024,0.024,0.002,black,D+0.0105,by,STOP_BZ,b));
+        for(const s of [-1,1]) createBox(0.010,0.010,0.020,yellow,D+0.010,by+s*0.033,STOP_BZ,b);
+        faceX(createCylinder(0.010,0.010,0.020,black,D+0.020,by,STOP_BZ,b));
+        const button = faceX(createCylinder(0.026,0.024,0.016,red,D+0.036,by,STOP_BZ,b));
+        button.name='pitEstopButton';
+        const arrow = new THREE.Mesh(new THREE.TorusGeometry(0.015,0.0017,6,20,Math.PI*1.6),white);
+        arrow.position.set(D+0.0445,by,STOP_BZ); arrow.rotation.y=Math.PI/2; b.add(arrow);
+        sticker(0.064,0.030,D+0.0005,-0.018,STOP_BZ-0.002,b,(c,w,h)=>{
+          c.fillStyle='#f6d94a';c.fillRect(0,0,w,h);c.strokeStyle='#d6352a';c.lineWidth=h*0.06;c.strokeRect(2,2,w-4,h-4);
+          c.fillStyle='#d6352a';c.font=`bold ${h*0.30}px sans-serif`;c.textBaseline='middle';
+          c.fillText('비상',w*0.08,h*0.34);c.fillText('정지',w*0.08,h*0.70);
+          c.font=`bold ${h*0.17}px sans-serif`;c.fillText('누름  당김',w*0.55,h*0.20);c.fillText('정지  주행',w*0.55,h*0.82);
+          c.fillRect(w*0.57,h*0.40,w*0.12,h*0.08);c.fillRect(w*0.61,h*0.40,w*0.04,h*0.26);
+          c.fillRect(w*0.76,h*0.34,w*0.12,h*0.08);c.fillRect(w*0.80,h*0.34,w*0.04,h*0.32);
+        });
+        faceX(createCylinder(0.021,0.021,0.004,yellow,D+0.002,-0.055,STOP_BZ,b));
+        // 우측: LIGHT only 백색 2구 접지 콘센트.
+        const oz=-0.040;
+        createBox(0.008,0.145,0.060,white,D+0.004,-0.004,oz,b);
+        sticker(0.046,0.011,D+0.0085,0.054,oz,b,(c,w,h)=>{
+          c.fillStyle='#f7f7f3';c.fillRect(0,0,w,h);c.strokeStyle='#d6352a';c.lineWidth=h*0.10;c.strokeRect(2,2,w-4,h-4);
+          c.fillStyle='#d6352a';c.font=`bold ${h*0.72}px sans-serif`;c.textAlign='center';c.textBaseline='middle';
+          c.fillText('LIGHT only',w/2,h*0.54);
+        });
+        for(const sy of [0.020,-0.040]) {
+          faceX(createCylinder(0.020,0.020,0.003,flat(0xdcdcd6),D+0.0075,sy,oz,b));
+          for(const dz of [-0.0075,0.0075]) faceX(createCylinder(0.0032,0.0032,0.002,black,D+0.009,sy,oz+dz,b));
+          for(const dy of [-0.019,0.019]) createBox(0.004,0.004,0.008,M.ss(0xc7b27a),D+0.008,sy+dy,oz,b);
+        }
+        // 하부 케이블 글랜드 2(좌: 콘센트 전원 인입, 우: 예비), 상부 간선·조명선 글랜드.
+        createCylinder(0.011,0.011,0.022,gray,0.034,-H/2-0.011,STOP_BZ,b);
+        createCylinder(0.011,0.011,0.022,flat(0x5a5e62),0.034,-H/2-0.011,oz,b);
+        createCylinder(0.009,0.009,0.018,gray,wireX-wallX,H/2+0.009,HARNESS_Z-PIT_STOP_Z,b);
+        createCylinder(0.008,0.008,0.016,gray,0.034,H/2+0.008,LIGHT_SWITCH_Z-PIT_STOP_Z,b);
+        return b;
+      }
+      // 조명 급전: 후면 조명 간선에서 도어 접점 간선을 X로 비켜 넘어 박스 상면으로 들어간다.
+      const hopX = wireX + 0.018;
+      [[PIT_LIGHT_SWITCH_Y,'pitLightSwitchBox'],[TOP_LIGHT_SWITCH_Y,'topLightSwitchBox']].forEach(([y,name])=>{
+        lightSwitchBox(y,name);
+        const yt=y+LSW.h/2+0.36; // 편 사다리 손잡이(문턱 +1.10m) 위로 넘긴다
+        wire([[wireX,yt,SHAFT_LIGHT_Z-0.40],[hopX,yt,SHAFT_LIGHT_Z-0.37],[hopX,yt,LIGHT_SWITCH_Z],
+          [hopX,y+LSW.h/2+0.035,LIGHT_SWITCH_Z],[wallX+0.020,y+LSW.h/2+0.012,LIGHT_SWITCH_Z],[wallX+0.020,y+LSW.h/2-0.004,LIGHT_SWITCH_Z]],name+'Wire');
+      });
+      pitStopOutletBox();
+      // 사진처럼 하부 조명 스위치에서 노란 박스 상면으로 내려오는 검정 선, 콘센트 전원선은 피트 바닥으로.
+      wire([[wallX+0.020,PIT_LIGHT_SWITCH_Y-LSW.h/2-0.002,LIGHT_SWITCH_Z],[wallX+0.020,PIT_LIGHT_SWITCH_Y-LSW.h/2-0.06,LIGHT_SWITCH_Z],
+        [wallX+0.034,stopTopY+0.05,LIGHT_SWITCH_Z],[wallX+0.034,stopTopY+0.010,LIGHT_SWITCH_Z]],'pitSwitchLinkWire');
+      wire([[wallX+0.034,PIT_STOP_Y-PIT_STOP_H/2-0.022,PIT_STOP_Z+STOP_BZ],[wallX+0.034,PIT_STOP_Y-PIT_STOP_H/2-0.10,PIT_STOP_Z+STOP_BZ],
+        [wireX,PIT_STOP_Y-PIT_STOP_H/2-0.16,PIT_STOP_Z+STOP_BZ],[wireX,pitY,PIT_STOP_Z+STOP_BZ]],'pitOutletFeedWire');
       [pitY+0.85,...FLOOR_Y.map(y=>y+2.0)].forEach((y,i)=>{
         const lamp=new THREE.Group(); lamp.name='shaftLED_'+i;
         lamp.userData={type:'shaft-led',level:i-1}; lamp.position.set(wallX+0.055,y,SHAFT_LIGHT_Z); G.add(lamp);
@@ -4289,50 +4367,6 @@
       createBox(S.SHAFT_W - 0.1, 0.02, S.SHAFT_D / 2 - SHAFT_BACK_Z - 0.1, M.paint(0x4b5563), 0, Y0 + 0.01, pitSlabCZ, pitGrp);
       buildPitScreen(pitGrp);
       
-      // [추가] 1. 피트 사다리 (승강로 좌측 벽면 안쪽 — 전면벽 관통 방지)
-      const ladderH = FLOOR_Y[0] + 1.1;
-      const WALL_GAP = 0.250; // 좌측 벽 내면 → 사다리 레일 중심 250mm (교재)
-      const ladderZ = FRONT_WALL_INNER_Z - 0.40;
-      const ladderX = -(S.SHAFT_W / 2) + WALL_GAP;
-      const rungCount = Math.floor(ladderH / 0.3); // 30cm 간격
-      const lMat = M.paint(0xf1c40f); // 안전 노란색
-
-      const ladderGrp = new THREE.Group();
-
-      // 수직 파이프 2개 (Z축 방향으로 벌어지도록 세팅)
-      createCylinder(0.02, 0.02, ladderH, lMat, -0.15, Y0 + ladderH / 2, 0, ladderGrp);
-      createCylinder(0.02, 0.02, ladderH, lMat, 0.15, Y0 + ladderH / 2, 0, ladderGrp);
-      
-      // 가로 발판(Rung)
-      for (let i = 1; i <= rungCount; i++) {
-        const ry = Y0 + i * 0.3;
-        const rung = createCylinder(0.015, 0.015, 0.3, lMat, 0, ry, 0, ladderGrp);
-        rung.rotation.z = Math.PI / 2;
-      }
-
-      // L브라켓 3단 × 좌우 레일 — 벽체 앙카 + 수평 암 (공중 부유 방지)
-      const brMat = M.ss(0x9aa3ad);
-      const brBolt = M.ss(0xb8bec6);
-      [Y0 + 0.32, Y0 + ladderH * 0.52, Y0 + ladderH - 0.22].forEach(by => {
-        [-0.15, 0.15].forEach(rx => {
-          createBox(0.072, 0.090, 0.006, brMat, rx, by, -(WALL_GAP - 0.003), ladderGrp);
-          createBox(0.010, 0.040, WALL_GAP - 0.028, brMat, rx, by, -WALL_GAP / 2, ladderGrp);
-          createBox(0.036, 0.048, 0.008, brMat, rx, by, -0.024, ladderGrp);
-          [-0.018, 0.018].forEach(oy => {
-            const anc = createCylinder(0.006, 0.006, 0.028, brBolt,
-              rx, by + oy, -(WALL_GAP + 0.008), ladderGrp);
-            anc.rotation.x = Math.PI / 2;
-          });
-          const rb = createCylinder(0.005, 0.005, 0.022, brBolt, rx, by, -0.012, ladderGrp);
-          rb.rotation.x = Math.PI / 2;
-        });
-      });
-
-      // Y축 기준 90도 회전시켜 좌측 벽면과 완벽히 평행하게 배치
-      ladderGrp.position.set(ladderX, 0, ladderZ);
-      ladderGrp.rotation.y = Math.PI / 2;
-      pitGrp.add(ladderGrp);
-
       // ─── 조속기 인장추 어셈블리 (Governor Tension Weight Assembly) ───
       // 조속기 휠 축 = Z축 방향(표현 기준) | X는 조속기와 GOV_TENS_X로 정렬
       const tensGovX = GOV_TENS_X;               // buildMachineRoom govX와 동일 축

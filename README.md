@@ -5,15 +5,24 @@ Three.js로 승강로, 카, 도어, 기계실, 피트와 안전장치를 구성�
 
 문서와 코드가 다르면 현재 코드가 기준이다.
 
-현재 단계는 **1단계 — 웹 최적화와 기본 사용 경험 정리**다. 사용 기준은 Galaxy S22 이상 / Chrome이며 기존 버전이 S22+에서 원활하다는 사용자 확인을 받았다. 부품 더블클릭·더블탭으로 가까이 보고 카메라 메뉴의 전체 운행으로 복귀할 수 있다. 새 카메라 조작의 실제 모바일 검증과 통합 확인이 남아 있다. 전체 순서와 다음 작업은 [공유 로드맵](docs/ROADMAP.md)을 참고한다.
+현재 단계는 **1단계 — 웹 최적화와 기본 사용 경험 정리**다. 사용 기준은 Galaxy S22 이상 / Chrome이며 기존 버전이 S22+에서 원활하다는 사용자 확인을 받았다. 부품 더블클릭·더블탭으로 가까이 보고 오른쪽 위 「전체 보기」로 복귀한다. 새 카메라 조작의 실제 모바일 검증과 통합 확인이 남아 있다. 전체 순서와 다음 작업은 [공유 로드맵](docs/ROADMAP.md)을 참고한다.
 
 ## 빠른 시작
 
 1. 프로젝트 루트에서 Live Server로 `index.html`을 연다.
-2. 화면의 층 버튼, 도어 버튼, 속도 선택, 카메라 메뉴와 고장 메뉴를 사용한다.
+2. 아래 운행바(도어·층·비상정지)와 오른쪽 위 「고장·점검」「설정」「전체 보기」를 사용한다.
 3. 코드나 GLB를 바꾼 뒤 브라우저에서 하드 리프레시한다.
 
-기본 화면은 부품 윤곽과 명암을 구분하는 청회색 관찰 배경이다. 카메라 메뉴에서 **전체 운행**, **부품 관찰** 프리셋을 선택하고, **주변 풍경**으로 기존 건물·자연 배경과 조명을 켜고 끌 수 있다.
+기본 화면은 부품 윤곽과 명암을 구분하는 청회색 관찰 배경이다. 「설정」에서 정격 속도, **권상기 내부**(절개), **주변 풍경**, **캐릭터**를 켜고 끈다.
+
+### 화면 구성 (2026-09-26 HUD 재설계)
+
+- 왼쪽 위 **상태 카드**: 층(지나는 층마다 갱신)·방향 화살표·상태 칩(정상 초록 / 안내 파랑 / 경고 주황 / 고장 빨강)·속도 막대(정격 130% = 가득). `updateStatus()`가 넘겨받은 색을 칩 톤으로 바꾼다.
+- 아래 **운행바**: 도어 열림·닫힘, 층 버튼(현재 층 점등, 호출 층 파란 링), 비상정지(누르면 「해제」로 바뀜). 메뉴를 열지 않고 바로 쓴다.
+- 오른쪽 위 **레일**: 「고장·점검」 시트(운전 모드 AUT/INS·▲▼, 과속 OVS, 개문발차 UCM·로프브레이크 상태, 승장문 점검, BYPASS, 피트 사다리), 「설정」 시트, 「전체 보기」.
+- 부품별 카메라 프리셋 메뉴는 없앴다. 부품은 더블클릭·더블탭으로 다가가고, 시연(OVS·UCM 등)은 카메라가 알아서 움직인다.
+- 선택 항목(로프브레이크 상태·BYPASS·정격 속도)은 숨긴 `<select>` 원본의 값·change 이벤트를 그대로 쓰고, 화면에는 세그먼트 버튼으로 보인다(`renderSegments()`).
+- 세로 폰(≤600px)에서는 시트와 승장문 점검 패널이 운행바 위 바텀시트로 뜨고, 가로 폰에서는 오른쪽 패널로 뜬다. 버튼은 모두 44px 이상이다. 검증: `node tools/verify_view_modes.mjs`.
 
 앱은 CDN의 Three.js r128, OrbitControls, GLTFLoader와 GSAP 3.12.2를 사용한다.
 `npm`은 Playwright 등 로컬 검증 도구용이며 앱 실행 자체에는 필요하지 않다.
@@ -29,7 +38,7 @@ Three.js로 승강로, 카, 도어, 기계실, 피트와 안전장치를 구성�
 - `docs/DOOR-REBUILD.md`: 도어 재공사 기록. 원본 코드는 `js/archive/doors.js`.
 - `docs/CAR-DOOR.md`: 카 도어 오퍼레이터·베인·카도어락·승장문 연동과 검증.
 - `docs/CAR-REBUILD.md`: 카 재공사 기록. 원본 코드는 `js/archive/car.js`.
-- `js/car-underbody.js`: 카 에이프런·CC27 빨간 경광등과 BYPASS 점검운전 경보. 고장 메뉴에서 우회할 문을 선택하고 ▲▼를 누른다.
+- `js/car-underbody.js`: 카 에이프런·CC27 빨간 경광등과 BYPASS 점검운전 경보. 「고장·점검」에서 우회할 문을 선택하고 ▲▼를 누른다.
 - `js/car-wiring.js`: 카 고정 검은 배선의 모서리 경로·고정 새들과 카탑 박스 하부의 단일 묶음 인입구/보호 부시. `tools/verify_car_wiring.mjs`로 형상·간섭을 확인한다.
 - `docs/CAR-CONTROLS.md`: 카 탑 박스·OPB·하중 감지.
 - `docs/PIT-SCREEN.md`: 후면 균형추 앞 노란색 철제 피트 스크린·Blender 원본·장착과 검증.
@@ -186,7 +195,7 @@ Three.js → OrbitControls → GLTFLoader → GSAP
 ### `js/ui.js`
 
 - 층 운행, 도어 열림·닫힘, 자동 닫힘.
-- HUD 이벤트와 카메라 프리셋.
+- HUD 이벤트(시트·세그먼트·전체 보기·조작 안내)와 상태 카드 갱신(`updateStatus()`).
 - Web Audio 기반 기계음과 파일 음원.
 - 과속 고장, 조속기 트립, 세이프티기어 정지와 복귀 시퀀스.
 
@@ -262,8 +271,8 @@ ESTOP
 `elevatorState`의 `slowdownActive`, `limitActive`, `finalLimitActive`는 선언되어 있지만 현재 운행 FSM과 연결되지 않았다.
 `landingDevices[]`와 `carSensors`도 시각적 배치·디버그 참조이며 실제 충돌 검출로 카를 감속하거나 정지시키지는 않는다.
 
-고장 메뉴 중 현재 실제 연결된 핵심 시나리오는 OVS 과속 고장이다.
-다른 메뉴 표시는 구현 완료 기능으로 간주하지 않는다.
+「고장·점검」에서 실제 연결된 고장 시나리오는 OVS 과속 고장과 UCM 개문발차(`js/ucm-demo.js`)다.
+동작이 연결되지 않았던 DR·SAF·탑승자 버튼은 2026-09-26 HUD 재설계에서 뺐다.
 
 ## 기능별 수정 위치
 
@@ -287,7 +296,7 @@ ESTOP
 | 전면벽·로비·점자 | `js/environment.js` | `buildFrontWallAndLobby()` |
 | 가이드레일 | `js/environment.js` | `buildGuideRails()` |
 | 층 센서·리미트 | `js/environment.js` | `buildShaftLandingDevices()`, `buildLimitSwitches()` |
-| 기계실 마스코트 「승강곰」 | `js/mascot.js` | `Mascot.build/update/setVisible`, 카메라 메뉴 「캐릭터」 버튼 |
+| 기계실 마스코트 「승강곰」 | `js/mascot.js` | `Mascot.build/update/setVisible`, 「설정」 「캐릭터」 토글 |
 | 기계실·권상기 | `js/environment.js` | `buildMachineRoom()`, `setTractionCutaway()`, `setTractionBrake()` |
 | 권상기 형상 | `blender/scripts/traction_machine.py` | 계약: `docs/TRACTION-MACHINE.md` |
 | 피트·완충기 | `js/environment.js` | `buildPitFoundation()`, `updateBuffers()` |

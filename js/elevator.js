@@ -628,6 +628,9 @@
      * 인디케이터 동기화: 전 층의 Canvas 텍스쳐를 실시간으로 업데이트
      */
     function syncAllIndicators(floorStr, dirStr) {
+      // HUD 상태 카드의 층 숫자도 승장 인디케이터와 같이 지나는 층마다 바꾼다(바뀔 때만 DOM 갱신).
+      const hudFloor = document.getElementById('v-floor'), label = floorStr + 'F';
+      if (hudFloor && hudFloor.textContent !== label) hudFloor.textContent = label;
       indicators.forEach(ind => {
         const ctx = ind.ctx;
         ctx.fillStyle = '#0a0c0e';
@@ -1887,7 +1890,13 @@
         }
         sw.ratio = r;
         sw.lever.rotation.z = sw.dir * FLS_TRIP_ANGLE * r;
-        if (r > 0.98) active[sw.kind] = true;
+        // 완전 동작에서 유리창 속 가동 접점이 고정 접점에서 떨어진다(운행 회로 개로).
+        sw.contactOpen = r > 0.98;
+        if (sw.contactOpen) active[sw.kind] = true;
+        sw.body.userData.contactClosed = !sw.contactOpen;
+        if (sw.bridge) sw.bridge.position.y = sw.contactOpen ? -LIMIT_SWITCH_MODEL.bridgeStroke : 0;
+        // 캠에 닿아 있는 동안 롤러가 캠 면을 굴러간다(캠 이동 거리 / 반지름).
+        if (sw.roller && r > 0) sw.roller.rotation.z = sw.dir * (sw.y - camBot) / FLS_ROLLER_R;
       });
       elevatorState.slowdownActive   = active.slowdown;
       elevatorState.limitActive      = active.limit;

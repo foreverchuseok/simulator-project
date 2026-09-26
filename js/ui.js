@@ -16,16 +16,18 @@ function updateManualCameraNear() {
        (기존 extracted_move.wav 통짜 블롭 루프 재생을 대체)
     ───────────────────────────────────────────────────────────── */
     const MACH = (() => {
-      let ctx = null, motor = null, running = false, noiseBuf = null;
+      const EFFECT_VOLUME = 1.2, ANNOUNCEMENT_EFFECT_VOLUME = 0.4;
+      let ctx = null, motor = null, running = false, noiseBuf = null, effects = null, doorStop = null;
       function ac() {
         if (!ctx) {
           const AC = window.AudioContext || window.webkitAudioContext;
           ctx = new AC();
+          effects = ctx.createGain(); effects.gain.value = EFFECT_VOLUME; effects.connect(ctx.destination);
           noiseBuf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 1.0), ctx.sampleRate);
           const d = noiseBuf.getChannelData(0);
           for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
         }
-        if (ctx.state === 'suspended') ctx.resume();
+        if (ctx.state === 'suspended') ctx.resume().catch(() => {});
         return ctx;
       }
       function resume() { try { ac(); } catch (e) { console.log(e); } }
@@ -35,21 +37,23 @@ function updateManualCameraNear() {
         const c = ac();
         if (running) return; running = true;
         const now = c.currentTime;
-        const master = c.createGain(); master.gain.value = 0.0001; master.connect(c.destination);
+        const master = c.createGain(); master.gain.value = 0.0001; master.connect(effects);
         const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 320; lp.Q.value = 0.7; lp.connect(master);
-        const base = 34;
-        const oscA = c.createOscillator(); oscA.type = 'sawtooth'; oscA.frequency.value = base;
-        const oscB = c.createOscillator(); oscB.type = 'sawtooth'; oscB.frequency.value = base * 2.01;
-        const oscC = c.createOscillator(); oscC.type = 'triangle'; oscC.frequency.value = base * 4;
-        const gLow = c.createGain(); gLow.gain.value = 0.5;
-        oscA.connect(gLow); oscB.connect(gLow); oscC.connect(gLow); gLow.connect(lp);
+        const base = 82;
+        const oscA = c.createOscillator(); oscA.type = 'sine'; oscA.frequency.value = base;
+        const oscB = c.createOscillator(); oscB.type = 'sine'; oscB.frequency.value = base * 2.0;
+        const oscC = c.createOscillator(); oscC.type = 'sine'; oscC.frequency.value = base * 4;
+        const gLow = c.createGain(); gLow.gain.value = 0.24;
+        const gUpper = c.createGain(); gUpper.gain.value = 0.045;
+        oscA.connect(gLow); oscB.connect(gUpper); oscC.connect(gUpper); gUpper.connect(lp); gLow.connect(lp);
         const whine = c.createOscillator(); whine.type = 'sine'; whine.frequency.value = 140;
-        const gWhine = c.createGain(); gWhine.gain.value = 0.06; whine.connect(gWhine); gWhine.connect(lp);
+        const gWhine = c.createGain(); gWhine.gain.value = 0.008; whine.connect(gWhine); gWhine.connect(lp);
         const noise = c.createBufferSource(); noise.buffer = noiseBuf; noise.loop = true;
-        const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 850; bp.Q.value = 0.8;
-        const gN = c.createGain(); gN.gain.value = 0.04; noise.connect(bp); bp.connect(gN); gN.connect(lp);
+        const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 420; bp.Q.value = 0.5;
+        const gN = c.createGain(); gN.gain.value = 0.13; noise.connect(bp); bp.connect(gN); gN.connect(lp);
         oscA.start(now); oscB.start(now); oscC.start(now); whine.start(now); noise.start(now);
-        motor = { c, master, lp, oscA, oscB, oscC, whine, noise, base };
+        motor = { c, master, lp, oscA, oscB, oscC, whine, noise, base,
+          nodes: [master, lp, oscA, oscB, oscC, whine, noise, gLow, gUpper, gWhine, bp, gN], lastDrive: -1 };
         setDrive(0);
       }
 
@@ -57,13 +61,15 @@ function updateManualCameraNear() {
       function setDrive(v) {
         if (!motor) return;
         v = Math.max(0, Math.min(1, v));
-        const t = motor.c.currentTime, tc = 0.05, f = motor.base * (1 + 0.55 * v);
-        motor.master.gain.setTargetAtTime(0.0001 + 0.20 * v, t, tc);
+        if (Math.abs(v - motor.lastDrive) < 0.008) return;
+        motor.lastDrive = v;
+        const t = motor.c.currentTime, tc = 0.09, f = motor.base * (1 + 0.24 * v);
+        motor.master.gain.setTargetAtTime(0.0001 + 0.10 * v, t, tc);
         motor.oscA.frequency.setTargetAtTime(f, t, tc);
-        motor.oscB.frequency.setTargetAtTime(f * 2.01, t, tc);
+        motor.oscB.frequency.setTargetAtTime(f * 2.0, t, tc);
         motor.oscC.frequency.setTargetAtTime(f * 4, t, tc);
-        motor.whine.frequency.setTargetAtTime(120 + 300 * v, t, tc);
-        motor.lp.frequency.setTargetAtTime(300 + 1500 * v, t, tc);
+        motor.whine.frequency.setTargetAtTime(240 + 80 * v, t, tc);
+        motor.lp.frequency.setTargetAtTime(380 + 240 * v, t, tc);
       }
 
       function motorOff() {
@@ -72,54 +78,164 @@ function updateManualCameraNear() {
         m.master.gain.setTargetAtTime(0.0001, t, 0.08);
         const stopAt = t + 0.5;
         [m.oscA, m.oscB, m.oscC, m.whine, m.noise].forEach(n => { try { n.stop(stopAt); } catch (e) {} });
+        m.noise.onended = () => m.nodes.forEach(n => n.disconnect());
         motor = null; running = false;
       }
 
-      // 브레이크 개방 — 솔레노이드 클랙 + 짧은 공기 해방음
-      function brakeRelease() { setTractionBrake(true); const c = ac(), t = c.currentTime; clack(c, t, 900, 0.05, 0.5); hiss(c, t + 0.02, 0.16, 0.10, 1200); }
+      // 브레이크 개방 — 작고 짧은 기계식 클릭
+      function brakeRelease() { setTractionBrake(true); const c = ac(), t = c.currentTime; clack(c, t, 700, 0.045, 0.09); }
       // 브레이크 체결 — 묵직한 쿵 + 클랙
-      function brakeSet() { setTractionBrake(false); const c = ac(), t = c.currentTime; thump(c, t, 58, 0.18, 0.5); clack(c, t + 0.03, 520, 0.06, 0.45); }
+      function brakeSet() { setTractionBrake(false); const c = ac(), t = c.currentTime; thump(c, t, 75, 0.09, 0.06); clack(c, t + 0.02, 520, 0.045, 0.09); }
+      // 로프브레이크 파지 — 강철 턱이 로프를 무는 "쾅" (UCM 시연)
+      function ropeBrakeBang() { const c = ac(), t = c.currentTime; thump(c, t, 48, 0.32, 0.5); clack(c, t, 340, 0.08, 0.35); clack(c, t + 0.015, 1400, 0.05, 0.18); hiss(c, t + 0.02, 0.35, 0.05, 2500); }
+      // 승객이 에이프런에 부딪히는 가벼운 "쿵"
+      function bump() { const c = ac(), t = c.currentTime; thump(c, t, 110, 0.12, 0.18); clack(c, t, 260, 0.05, 0.1); }
 
       function clack(c, t, freq, dur, amp) {
         const src = c.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
         const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = freq; bp.Q.value = 3;
         const g = c.createGain(); g.gain.setValueAtTime(amp, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-        src.connect(bp); bp.connect(g); g.connect(c.destination); src.start(t); src.stop(t + dur + 0.02);
+        src.connect(bp); bp.connect(g); g.connect(effects); src.start(t); src.stop(t + dur + 0.02);
+        src.onended = () => [src, bp, g].forEach(n => n.disconnect());
       }
       function hiss(c, t, dur, amp, hp) {
         const src = c.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
         const f = c.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = hp;
         const g = c.createGain();
         g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(amp, t + dur * 0.2); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-        src.connect(f); f.connect(g); g.connect(c.destination); src.start(t); src.stop(t + dur + 0.02);
+        src.connect(f); f.connect(g); g.connect(effects); src.start(t); src.stop(t + dur + 0.02);
+        src.onended = () => [src, f, g].forEach(n => n.disconnect());
       }
       function thump(c, t, freq, dur, amp) {
         const o = c.createOscillator(); o.type = 'sine';
         o.frequency.setValueAtTime(freq * 1.6, t); o.frequency.exponentialRampToValueAtTime(freq, t + dur);
         const g = c.createGain(); g.gain.setValueAtTime(amp, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-        o.connect(g); g.connect(c.destination); o.start(t); o.stop(t + dur + 0.02);
+        o.connect(g); g.connect(effects); o.start(t); o.stop(t + dur + 0.02);
+        o.onended = () => [o, g].forEach(n => n.disconnect());
       }
-      return { resume, motorOn, motorOff, setDrive, brakeRelease, brakeSet };
+      function duck(active) {
+        if (ctx) effects.gain.setTargetAtTime(active ? ANNOUNCEMENT_EFFECT_VOLUME : EFFECT_VOLUME, ctx.currentTime, 0.12);
+      }
+      // 도어 타임라인: 열림 .24 + 1.15초, 닫힘 .95 + .24초 (CarDoor).
+      function door(closing) {
+        const c = ac(), t = c.currentTime, duration = closing ? 1.19 : 1.39;
+        if (doorStop) doorStop();
+        const noise = c.createBufferSource(); noise.buffer = noiseBuf; noise.loop = true;
+        const filter = c.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 950; filter.Q.value = 0.5;
+        const oscillator = c.createOscillator(); oscillator.frequency.value = closing ? 175 : 155;
+        const toneGain = c.createGain(); toneGain.gain.value = 0.08;
+        const gain = c.createGain(); gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.linearRampToValueAtTime(0.065, t + 0.18);
+        gain.gain.setValueAtTime(0.065, t + duration - 0.3);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+        noise.connect(filter); filter.connect(gain); oscillator.connect(toneGain); toneGain.connect(gain); gain.connect(effects);
+        noise.start(t); oscillator.start(t); noise.stop(t + duration); oscillator.stop(t + duration);
+        const stop = () => {
+          gain.gain.cancelScheduledValues(c.currentTime);
+          gain.gain.setTargetAtTime(0.0001, c.currentTime, 0.015);
+        };
+        doorStop = stop;
+        noise.onended = () => {
+          [noise, filter, oscillator, toneGain, gain].forEach(n => n.disconnect());
+          if (doorStop === stop) doorStop = null;
+        };
+      }
+      function chime() {
+        const c = ac(), now = c.currentTime;
+        // 부드러운 장3도 하행 차임. 짧은 어택으로 클릭을 방지한다.
+        [659.25, 523.25].forEach((frequency, index) => {
+          const t = now + index * 0.25;
+          [1, 2].forEach((harmonic, partial) => {
+            const o = c.createOscillator(), g = c.createGain();
+            o.frequency.value = frequency * harmonic;
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.linearRampToValueAtTime(partial ? 0.009 : 0.075, t + 0.008);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + 0.65);
+            o.connect(g); g.connect(effects); o.start(t); o.stop(t + 0.7);
+            o.onended = () => { o.disconnect(); g.disconnect(); };
+          });
+        });
+      }
+      function effect(play) { return { currentTime: 0, play() { try { play(); return Promise.resolve(); } catch (e) { return Promise.reject(e); } } }; }
+      return { resume, motorOn, motorOff, setDrive, brakeRelease, brakeSet, duck, ropeBrakeBang, bump,
+        doorOpen: effect(() => door(false)), doorClose: effect(() => door(true)), chime: effect(chime) };
     })();
 
+    // 고정 한국어 신경망 음원 우선. 파일 재생 실패 시 기기 TTS로 대체한다.
+    let activeAnnouncement = null;
+    let announcementRequest = 0;
+    function koreanAnnouncement(text, file) {
+      const clip = new Audio(file);
+      clip.preload = 'auto'; clip.volume = 1;
+      return { currentTime: 0, play() {
+        const request = ++announcementRequest;
+        if (activeAnnouncement) { activeAnnouncement.pause(); activeAnnouncement.currentTime = 0; }
+        window.speechSynthesis?.cancel();
+        MACH.duck(false);
+        activeAnnouncement = clip;
+        clip.currentTime = 0;
+        clip.onplaying = () => { if (request === announcementRequest) MACH.duck(true); };
+        clip.onended = clip.onerror = () => {
+          if (request === announcementRequest) { MACH.duck(false); activeAnnouncement = null; }
+        };
+        return clip.play().catch(() => {
+        if (request !== announcementRequest) return;
+        MACH.duck(false); activeAnnouncement = null;
+        const synth = window.speechSynthesis;
+        if (!synth) return Promise.resolve();
+        const speak = () => {
+          if (request !== announcementRequest) return;
+          const voices = synth.getVoices().filter(v => /^ko(?:-|_)/i.test(v.lang));
+          const voice = voices.find(v => /sunhi|순희|natural|neural/i.test(v.name))
+            || voices.find(v => /google/i.test(v.name)) || voices[0];
+          if (!voice) { console.warn('한국어 음성 엔진을 사용할 수 없습니다.'); return; }
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.voice = voice; utterance.lang = 'ko-KR';
+          utterance.rate = 0.96; utterance.pitch = 1; utterance.volume = 1;
+          utterance.onstart = () => { if (request === announcementRequest) MACH.duck(true); };
+          utterance.onend = utterance.onerror = () => { if (request === announcementRequest) MACH.duck(false); };
+          synth.cancel(); MACH.duck(false); synth.speak(utterance);
+        };
+        if (synth.getVoices().length) speak();
+        else {
+          const ready = () => { clearTimeout(timer); synth.removeEventListener('voiceschanged', ready); speak(); };
+          const timer = setTimeout(() => synth.removeEventListener('voiceschanged', ready), 2000);
+          synth.addEventListener('voiceschanged', ready, { once: true });
+        }
+        });
+      }};
+    }
     const snd = {
-      doorOpen: new Audio('sound/door_open.wav'),
-      doorClose: new Audio('sound/door_close.wav'),
-      doorVoice: new Audio('sound/door_closing_voice.mp3'),
-      chime: new Audio('sound/chime.wav'),
-      departUp: new Audio('sound/depart_up.mp3'),
-      departDown: new Audio('sound/depart_down.mp3'),
+      doorOpen: MACH.doorOpen,
+      doorClose: MACH.doorClose,
+      doorVoice: koreanAnnouncement('문이 닫힙니다.', 'sound/announce_close.mp3'),
+      chime: MACH.chime,
+      departUp: koreanAnnouncement('올라갑니다.', 'sound/announce_up.mp3'),
+      departDown: koreanAnnouncement('내려갑니다.', 'sound/announce_down.mp3'),
       floor: [
-        new Audio('sound/floor_1.mp3'),
-        new Audio('sound/floor_2.mp3'),
-        new Audio('sound/floor_3.mp3'),
-        new Audio('sound/floor_4.mp3')
+        koreanAnnouncement('1층입니다.', 'sound/announce_floor_1.mp3'),
+        koreanAnnouncement('2층입니다.', 'sound/announce_floor_2.mp3'),
+        koreanAnnouncement('3층입니다.', 'sound/announce_floor_3.mp3'),
+        koreanAnnouncement('4층입니다.', 'sound/announce_floor_4.mp3')
       ]
     };
-    snd.doorOpen.volume = 0.5;
-    snd.doorClose.volume = 0.5;
 
-    function updateStatus(id, txt, col) { const e = document.getElementById(id); if (e) { e.textContent = txt; if (col) e.style.color = col; } console.log("Current FSM State:", currentState); }
+    /* 상태 카드 갱신. 호출부가 넘기는 색은 상태 칩의 톤(정상·안내·경고·고장)으로만 쓴다.
+       v-dir 문구의 ▲/▼ 로 방향 화살표를, v-spd 숫자로 속도 막대(정격 130% = 가득)를 움직인다. */
+    const STATUS_TONE = { '#3fb950': 'ok', '#8b949e': 'idle', '#f0883e': 'warn', '#f85149': 'bad', '#58a6ff': 'info' };
+    function updateStatus(id, txt, col) {
+      const e = document.getElementById(id); if (!e) return;
+      e.textContent = txt;
+      const card = document.getElementById('statusbar');
+      if (id === 'v-dir') {
+        if (col) e.dataset.tone = STATUS_TONE[col.toLowerCase()] || 'warn';
+        if (card) card.dataset.dir = /▲|상승/.test(txt) ? 'up' : /▼|하강|낙하/.test(txt) ? 'down' : '';
+      } else if (id === 'v-spd') {
+        const v = parseFloat(txt) || 0, fill = document.getElementById('st-bar-fill');
+        if (fill) fill.style.width = Math.min(100, v / (targetSpeed * 1.3) * 100).toFixed(1) + '%';
+        if (card) card.toggleAttribute('data-over', v > targetSpeed + 0.5);
+      }
+    }
 
     function openDoors(cb) {
       if (DoorBypass.mode !== 'off') return;
@@ -260,6 +376,7 @@ function updateManualCameraNear() {
     }
 
     function insStart(dir) {
+      if (!PitLadder.secured) { updateStatus('v-dir', '피트 사다리 펼침 — 운행 차단', '#f85149'); return; }
       if (!insMode || estop || overspeedActive || insDir === dir) return;
       if (DoorBypass.mode !== 'off' && !DoorBypass.canInspect()) return;
       // 도어가 열려 있으면 먼저 닫고, 그때까지 버튼을 계속 누르고 있는 경우에만 출발
@@ -302,12 +419,9 @@ function updateManualCameraNear() {
       insHold = 0;
       insStop();
 
-      const up = document.getElementById('btn-ins-up');
-      const dn = document.getElementById('btn-ins-dn');
-      if (up) up.disabled = !on;
-      if (dn) dn.disabled = !on;
-      document.getElementById('btn-ins')?.classList.toggle('mode-on', on);
-      document.getElementById('btn-aut')?.classList.toggle('mode-on', !on);
+      // 고장·점검 시트와 승장문 점검 패널의 운전 모드·▲▼ 가 같은 상태를 보인다.
+      document.querySelectorAll('[data-ins-dir]').forEach(b => { b.disabled = !on; });
+      document.querySelectorAll('[data-ins]').forEach(b => b.classList.toggle('mode-on', (b.dataset.ins === 'on') === on));
 
       if (on) {
         // 운전 중 점검 전환 → 자동 운전 즉시 중단 (그 자리에 정지)
@@ -323,7 +437,7 @@ function updateManualCameraNear() {
         let off = Infinity;
         FLOOR_Y.forEach(fy => { off = Math.min(off, Math.abs(carGrp.position.y - (fy + S.CAR_H / 2))); });
         updateStatus('v-dir', '자동운전 (AUT)', '#3fb950');
-        if (off > 0.01 && !estop && !overspeedActive) {
+        if (off > 0.01 && !estop && !overspeedActive && PitLadder.secured) {
           rescueToNearestFloor('자동 복귀 (착상)', false);
         } else {
           curFloor = insNearestFloor();
@@ -353,7 +467,7 @@ function updateManualCameraNear() {
     function ovsStage(text){
       let el=document.getElementById('ovs-stage');
       if(!el){el=document.createElement('div');el.id='ovs-stage';el.setAttribute('role','status');
-        el.style.cssText='position:fixed;left:50%;bottom:22px;transform:translateX(-50%);max-width:70vw;padding:12px 20px;background:#142230ed;color:#eef5fa;border:1px solid #66859b;border-radius:9px;font:14px sans-serif;z-index:30;pointer-events:none;text-align:center';document.body.appendChild(el);}
+        el.style.cssText='position:fixed;left:50%;bottom:var(--caption-bottom,22px);transform:translateX(-50%);max-width:70vw;padding:12px 20px;background:#142230ed;color:#eef5fa;border:1px solid #66859b;border-radius:9px;font:14px sans-serif;z-index:30;pointer-events:none;text-align:center';document.body.appendChild(el);}
       el.hidden=false;el.textContent='OVS · 느린 동작  |  '+text;
       updateStatus('v-dir',text,'#f0883e');
     }
@@ -418,6 +532,7 @@ function updateManualCameraNear() {
     }
 
     function startOverspeedFault(btn) {
+      if (!PitLadder.secured) { updateStatus('v-dir', '피트 사다리 펼침 — 운행 차단', '#f85149'); return; }
       const gov = mrGrp.userData.governor;
       if (insMode) { updateStatus('v-dir', '점검운전 중 — 자동 시연 불가 (AUT 전환)', '#f0883e'); return; }
       if (!gov?.ready || !carGrp.userData.safetyGear || moving || doorOpen || estop || gsap.isTweening(carDoorL.position)) return;
@@ -568,6 +683,7 @@ function updateManualCameraNear() {
     // 구출 운전 — 최근접 층까지 서행 이동 후 도어 개방
     // (점검→자동 복귀 착상에도 재사용: label/openAfter 로 문구·도어 개방 여부 조정)
     function rescueToNearestFloor(label = '구출 운전 (서행)', openAfter = true) {
+      if (!PitLadder.secured) { updateStatus('v-dir', '피트 사다리 펼침 — 운행 차단', '#f85149'); return; }
       if (!DoorBypass.hallSecured()) return;
       if (DoorBypass.mode !== 'off') return;
       const nf = insNearestFloor();
@@ -599,6 +715,7 @@ function updateManualCameraNear() {
     }
 
     function moveElevator(fIdx) {
+      if (!PitLadder.secured) { updateStatus('v-dir', '피트 사다리 펼침 — 운행 차단', '#f85149'); return; }
       if (DoorBypass.mode !== 'off') return;
       if(overspeedActive)return;
       if (insMode) { updateStatus('v-dir', '점검운전 중 — 자동 호출 무효', '#f0883e'); return; }
@@ -672,55 +789,70 @@ function updateManualCameraNear() {
 
     // 독 팝오버 — 한 번에 하나만 열림, 아이콘 재탭·다른 아이콘·접기 버튼으로 닫힘
     function closeAllMenus() {
-      document.querySelectorAll('.dropdown.open').forEach(d => d.classList.remove('open'));
-      document.querySelectorAll('.dock-btn.active').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.sheet.open').forEach(d => d.classList.remove('open'));
+      document.querySelectorAll('[data-menu].active').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-expanded', 'false'); });
     }
 
-    // HUD 드래그 이동 — 상태 디스플레이가 핸들 (마우스·터치 공용)
-    function makeHudDraggable() {
-      const hud = document.getElementById('hud');
-      const handle = document.getElementById('statusbar');
-      let dragging = false, sx = 0, sy = 0, ox = 0, oy = 0;
-      handle.addEventListener('pointerdown', e => {
-        if (e.target.closest('#hud-toggle')) return;
-        dragging = true; sx = e.clientX; sy = e.clientY;
-        ox = hud.offsetLeft; oy = hud.offsetTop;
-        handle.setPointerCapture(e.pointerId);
+    /* select 원본(값·change 이벤트는 기존 코드가 그대로 쓴다)을 한 번에 누르는 세그먼트 버튼으로 보여준다.
+       DoorBypass 처럼 코드가 value 를 직접 바꾸는 경우를 위해 시트를 열 때·누른 뒤 다시 그린다. */
+    function renderSegments() {
+      document.querySelectorAll('.seg[data-for]').forEach(seg => {
+        const select = document.getElementById(seg.dataset.for);
+        if (!select) return;
+        if (!seg.children.length) {
+          [...select.options].forEach(o => {
+            const b = document.createElement('button');
+            b.type = 'button'; b.dataset.value = o.value; b.textContent = o.textContent;
+            b.addEventListener('click', () => {
+              if (select.value === o.value) return;
+              select.value = o.value;
+              select.dispatchEvent(new Event('change', { bubbles: true }));
+              renderSegments();
+            });
+            seg.appendChild(b);
+          });
+          select.addEventListener('change', renderSegments);
+        }
+        [...seg.children].forEach(b => b.setAttribute('aria-pressed', String(b.dataset.value === select.value)));
       });
-      handle.addEventListener('pointermove', e => {
-        if (!dragging) return;
-        const nx = Math.min(Math.max(ox + e.clientX - sx, 4), window.innerWidth - 80);
-        const ny = Math.min(Math.max(oy + e.clientY - sy, 4), window.innerHeight - 48);
-        hud.style.left = nx + 'px'; hud.style.top = ny + 'px';
-      });
-      handle.addEventListener('pointerup', () => { dragging = false; });
-      handle.addEventListener('pointercancel', () => { dragging = false; });
+    }
+
+    // 처음 한 번만 보이는 조작 안내. 캔버스를 만지거나 7초가 지나면 사라진다(설정 시트에 상시 안내).
+    function showControlHint() {
+      const hint = document.getElementById('hint'); if (!hint) return;
+      const touch = matchMedia('(hover: none)').matches;
+      hint.textContent = touch
+        ? '부품을 두 번 탭하면 가까이 · 두 손가락 확대·이동'
+        : '드래그 회전 · 휠 확대 · 우클릭 이동 · 부품 더블클릭하면 가까이';
+      hint.classList.add('show');
+      const hide = () => hint.classList.remove('show');
+      setTimeout(hide, 7000);
+      renderer.domElement.addEventListener('pointerdown', hide, { once: true });
     }
 
     function bindUIEvents() {
-      document.querySelectorAll('.dock-btn[data-menu]').forEach(btn => {
+      // 시트는 레일 버튼 재탭·다른 버튼·✕·Esc 로만 닫힌다 (시연 중 사라짐 방지)
+      document.querySelectorAll('[data-menu]').forEach(btn => {
         btn.addEventListener('click', () => {
           const menu = document.getElementById(btn.dataset.menu);
           const wasOpen = menu.classList.contains('open');
           closeAllMenus();
-          if (!wasOpen) { menu.classList.add('open'); btn.classList.add('active'); }
+          if (!wasOpen) {
+            menu.classList.add('open'); btn.classList.add('active'); btn.setAttribute('aria-expanded', 'true');
+            renderSegments();
+          }
         });
       });
-      // 메뉴는 아이콘 재탭·다른 아이콘 선택·접기 버튼으로만 닫힘 (실행 중 사라짐 방지)
-
-      // 접기/펴기 — 독(아이콘) 숨김, 열린 메뉴도 함께 닫음
-      document.getElementById('hud-toggle').addEventListener('click', () => {
-        closeAllMenus();
-        document.getElementById('hud').classList.toggle('collapsed');
+      document.querySelectorAll('.sheet [data-close]').forEach(b => b.addEventListener('click', closeAllMenus));
+      document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAllMenus(); });
+      renderSegments();
+      showControlHint();
+      // 세로 폰에서는 승장문 점검 패널이 같은 자리(운행바 위)에 뜨므로 고장 시트를 닫아 준다.
+      document.getElementById('hall-toggle')?.addEventListener('click', () => {
+        if (matchMedia('(max-width: 600px)').matches) closeAllMenus();
+        renderSegments();
       });
-      makeHudDraggable();
 
-      document.querySelectorAll('input[name="speed"]').forEach(r => {
-        r.addEventListener('change', e => {
-          targetSpeed = parseInt(e.target.value);
-          updateBuffers();
-        });
-      });
       document.getElementById('speed-select').addEventListener('change', e => {
         targetSpeed = parseInt(e.target.value);
         updateBuffers();
@@ -728,23 +860,34 @@ function updateManualCameraNear() {
 
       document.getElementById('fbtns').addEventListener('click', e => {
         const btn = e.target.closest('.c-btn');
-        if (btn) moveElevator(parseInt(btn.dataset.f));
+        if (!btn) return;
+        moveElevator(parseInt(btn.dataset.f));
+        // 호출 등록 표시 — 도착(또는 정지)하면 꺼진다. 도착층 점등(active)은 moveElevator 가 한다.
+        if (!btn.classList.contains('active') && (moving || gsap.isTweening(carDoorL.position))) {
+          document.querySelectorAll('#fbtns .c-btn.called').forEach(b => b.classList.remove('called'));
+          btn.classList.add('called');
+          const clear = setInterval(() => {
+            if (moving || gsap.isTweening(carDoorL.position)) return;
+            btn.classList.remove('called'); clearInterval(clear);
+          }, 250);
+        }
       });
       document.getElementById('btn-open').addEventListener('click', () => { if (!moving && !estop) openDoors(); });
       document.getElementById('btn-close').addEventListener('click', () => { if (!moving) closeDoors(); });
-      document.getElementById('btn-pax')?.addEventListener('click', e => {
-        const on = togglePassenger();
-        e.currentTarget.classList.toggle('active', on);
+      // 개문발차(UCM) 시연 — 로프브레이크 정상/미작동/미설치 (js/ucm-demo.js)
+      document.getElementById('btn-ucm')?.addEventListener('click', e => {
+        UCMDemo.toggle(e.currentTarget);
+        if (UCMDemo.state.active) closeAllMenus();   // 시연 화면을 가리지 않게
       });
 
       /* ── 점검(수동) 운전 ── AUT/INS 토글 + ▲▼ 홀드 투 런 ── */
-      document.getElementById('btn-aut')?.addEventListener('click', () => setInspectionMode(false));
-      document.getElementById('btn-ins')?.addEventListener('click', () => setInspectionMode(true));
-      document.getElementById('btn-aut')?.classList.add('mode-on'); // 기동 시 자동운전
+      document.querySelectorAll('[data-ins]').forEach(b => {
+        b.addEventListener('click', () => setInspectionMode(b.dataset.ins === 'on'));
+        b.classList.toggle('mode-on', b.dataset.ins === 'off');   // 기동 시 자동운전
+      });
 
-      [['btn-ins-up', 1], ['btn-ins-dn', -1]].forEach(([id, dir]) => {
-        const b = document.getElementById(id);
-        if (!b) return;
+      document.querySelectorAll('[data-ins-dir]').forEach(b => {
+        const dir = Number(b.dataset.insDir);
         b.addEventListener('pointerdown', e => {
           if (b.disabled) return;
           e.preventDefault();
@@ -759,9 +902,17 @@ function updateManualCameraNear() {
       window.addEventListener('blur', insRelease);
       document.addEventListener('visibilitychange', () => { if (document.hidden) insRelease(); });
 
-      document.getElementById('btn-estop').addEventListener('click', e => {
-        if (overspeedActive) { updateStatus('v-dir', '조속기 트립 — 우측 패널에서 복귀', '#f85149'); return; }
+      const estopBtn = document.getElementById('btn-estop');
+      const paintEstop = () => {
+        estopBtn.classList.toggle('armed', estop);
+        estopBtn.setAttribute('aria-pressed', String(estop));
+        estopBtn.setAttribute('aria-label', estop ? '비상정지 해제' : '비상정지');
+        estopBtn.querySelector('span').textContent = estop ? '해제' : '정지';
+      };
+      estopBtn.addEventListener('click', e => {
+        if (overspeedActive) { updateStatus('v-dir', '조속기 트립 — 고장·점검에서 OVS 복귀', '#f85149'); return; }
         estop = !estop;
+        paintEstop();
         if (estop) {
           insHold = 0; insStop();
           gsap.killTweensOf(carGrp.position); gsap.killTweensOf(cwtGrp.position); moving = false;
@@ -769,9 +920,8 @@ function updateManualCameraNear() {
           MACH.motorOff(); MACH.brakeSet();
           currentState = ELEVATOR_STATE.ESTOP;
           updateStatus('v-dir', '■ 비상정지', '#f85149'); updateStatus('v-spd', '0 m/min');
-          e.target.textContent = '▶'; e.target.className = 'c-btn blue';
         } else {
-          e.target.textContent = '■'; e.target.className = 'c-btn red'; updateStatus('v-dir', '정지 대기', '#8b949e');
+          updateStatus('v-dir', '정지 대기', '#8b949e');
           const doorAction=CarDoor.resume();
           currentState=doorAction==='open'?ELEVATOR_STATE.DOOR_OPENING:doorAction==='close'?ELEVATOR_STATE.DOOR_CLOSING:doorOpen?ELEVATOR_STATE.DOOR_OPEN:ELEVATOR_STATE.IDLE;
         }
@@ -779,39 +929,38 @@ function updateManualCameraNear() {
 
       const ovBtn = document.getElementById('btn-overspeed');
       if (ovBtn) ovBtn.addEventListener('click', () => {
-        if (!overspeedActive) startOverspeedFault(ovBtn);
+        if (!overspeedActive) { startOverspeedFault(ovBtn); if (overspeedActive) closeAllMenus(); } // 시연 화면을 가리지 않게
         else if (governorPhase === 'tripped') resetGovernorFault(ovBtn);
       });
-
-      document.getElementById('t-wall')?.addEventListener('change', e => { if (wallGrp) wallGrp.visible = e.target.checked; });
-      document.getElementById('t-rope')?.addEventListener('change', e => { ropeObjs.forEach(r => r.line.visible = e.target.checked); });
-
-      // 전체 운행과 부품 관찰 프리셋. 부품의 표시 상태·운행 상태는 바꾸지 않는다.
-      const midY = Y0 + TOTAL_H * 0.4;
-      const camViews = {
-        'c-mr': () => moveCam(8, Y0 + TOTAL_H + 5, 8, 0, Y0 + TOTAL_H + 0.8, 0),
-        'c-pit': () => moveCam(4, Y0 + 1.6, CAR_CTR_Z - 5, 0, Y0 + 0.8, CAR_CTR_Z),
-        'c-car': () => { const cy = carGrp.position.y; moveCam(0, cy, CAR_FRONT_Z - 0.35, 0, cy - 0.1, CAR_CTR_Z - 0.5, false); },
-        'c-car-top': () => { const cy = carGrp.position.y + S.CAR_H / 2; moveCam(3.5, cy + 2, CAR_CTR_Z - 4, 0, cy, CAR_CTR_Z); },
-        'c-governor': () => { const g = _govWorld(); moveCam(g.x + 1.05, g.y + 0.23, g.z + 0.53, g.x - 0.02, g.y + 0.02, g.z); },
-        'c-traction': () => { const m = _tractionWorld(); moveCam(m.x + 1.55, m.y + 0.75, m.z + 1.45, m.x - 0.18, m.y + 0.05, m.z + 0.12); },
-        'c-shaft': () => moveCam(18, midY, 21, 0, midY, 0, false)
+      // 고장 래치 복귀 버튼 — OVS·UCM 버튼이 RST 를 표시하는 동안만 상태 카드 아래에 띄우고, 누르면 그 버튼을 누른다.
+      const resetPill = document.getElementById('fault-reset');
+      const latchSources = ['btn-overspeed', 'btn-ucm'].map(id => document.getElementById(id)).filter(Boolean);
+      const syncResetPill = () => {
+        const src = latchSources.find(b => b.textContent.trim() === 'RST');
+        resetPill.hidden = !src;
+        document.body.classList.toggle('fault-latched', !!src);   // 승장문 패널을 복귀 버튼 아래로 내린다
+        if (!src) return;
+        resetPill.disabled = src.disabled; resetPill.dataset.src = src.id;
+        resetPill.querySelector('span').textContent = src.id === 'btn-ucm' ? '개문발차 복귀' : '과속 복귀';
       };
-      Object.keys(camViews).forEach(id => {
-        document.getElementById(id).addEventListener('click', () => {
-          if (overspeedActive || !controls.enabled) return; // 자동 시연·복귀 카메라를 보호한다.
-          if (id === 'c-governor' && !govHandles()?.ready) return;
-          controls.minDistance = MANUAL_CAMERA.minDistance;
-          camera.near = MANUAL_CAMERA.near;
-          camera.updateProjectionMatrix();
-          gsap.killTweensOf(camera.position); gsap.killTweensOf(controls.target);
-          camViews[id]();
-          Object.keys(camViews).forEach(key => {
-            const button = document.getElementById(key);
-            button.classList.toggle('active', key === id);
-            button.setAttribute('aria-pressed', String(key === id));
-          });
-        });
+      latchSources.forEach(b => new MutationObserver(syncResetPill).observe(b, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['disabled'] }));
+      resetPill.addEventListener('click', () => document.getElementById(resetPill.dataset.src)?.click());
+
+      document.getElementById('btn-pit-ladder')?.addEventListener('click', () => {
+        if (!PitLadder.toggle()) updateStatus('v-dir', '카를 사다리보다 높이 올려 정지한 후 조작', '#f0883e');
+        else updateStatus('v-dir', PitLadder.deployed ? '사다리 접는 중' : '사다리 펼치는 중 · 운행 차단', '#f0883e');
+      });
+
+
+      // 전체 보기 — 더블클릭으로 가까이 간 화면을 처음 운행 시점으로 되돌린다(부품별 카메라 프리셋은 두지 않는다).
+      const midY = Y0 + TOTAL_H * 0.4;
+      document.getElementById('c-shaft').addEventListener('click', () => {
+        if (overspeedActive || !controls.enabled) return; // 자동 시연·복귀 카메라를 보호한다.
+        controls.minDistance = MANUAL_CAMERA.minDistance;
+        camera.near = MANUAL_CAMERA.near;
+        camera.updateProjectionMatrix();
+        gsap.killTweensOf(camera.position); gsap.killTweensOf(controls.target);
+        moveCam(18, midY, 21, 0, midY, 0, false);
       });
       // 권상기 내부: 기어 케이스 절개 조각을 빼내 웜·휠 이물림과 오일 레벨을 보여준다.
       const cutBtn = document.getElementById('tm-cutaway');
@@ -942,9 +1091,6 @@ function updateManualCameraNear() {
         camera.updateProjectionMatrix();
         gsap.to(camera.position, { x: position.x, y: position.y, z: position.z, duration: 0.75, ease: 'power2.inOut' });
         gsap.to(controls.target, { x: hit.point.x, y: hit.point.y, z: hit.point.z, duration: 0.75, ease: 'power2.inOut', onUpdate: () => controls.update() });
-        document.querySelectorAll('#dd-cam [id^="c-"]:not(#c-background):not(#c-mascot)').forEach(button => {
-          button.classList.remove('active'); button.setAttribute('aria-pressed', 'false');
-        });
       }, true);
       return e => ignored.has(e);
     }

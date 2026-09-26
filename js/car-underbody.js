@@ -74,6 +74,7 @@ const DoorBypass = (() => {
     if(next!=='off')setInspectionMode(true);
     document.getElementById('bypass-mode').value=mode;
     document.getElementById('bypass-status').textContent=mode==='off'?'BYPASS 해제':mode==='hall'?'BYPASS · 승장문':'BYPASS · 카문';
+    if(typeof renderSegments==='function')renderSegments(); // HUD 세그먼트(시트·승장문 패널)도 같은 값을 보인다
     return true;
   }
   function carClosedMonitor(){const d=CarDoor.dimensions();return Math.abs(carDoorL.position.x+d.cx)<.001&&Math.abs(carDoorR.position.x-d.cx)<.001;}

@@ -14,6 +14,8 @@
          종단 착상까지 눌린 채 유지되고, 중간층에서는 풀려 있다 (200~201p 거리표).
      (8) 스위치 취부 암이 모든 레일 브라켓 단과 겹치지 않는다.
      (9) 이동케이블이 조속기 로프·카 레일과 물리적으로 떨어져 있다.
+     (11) S3-B1370형 스위치 GLB: 유리창 속 가동 접점이 동작 플래그와 같이 열리고 닫힌다.
+          카·캠 전 행정(±350mm 오버런 포함)에서 스위치 본체·브라켓·배선과 닿지 않는다.
    사용: node tools/verify_travel_cable.mjs
 */
 import http from 'http';
@@ -48,7 +50,8 @@ server.listen(PORT, async () => {
   page.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
 
   await page.goto(`http://127.0.0.1:${PORT}/index.html?tcam`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(2500);
+  await page.waitForFunction(() => terminalDevices.modelReady, null, { timeout: 90000 });
+  await page.waitForTimeout(1000);
 
   const R = await page.evaluate(() => {
     const out = { const: {}, switches: [], states: [], sw: [] };
@@ -76,6 +79,17 @@ server.listen(PORT, async () => {
     const camBox = new THREE.Box3().setFromObject(terminalDevices.cam.node);
     out.camBox = { min: camBox.min.toArray(), max: camBox.max.toArray(), carY: carGrp.position.y };
     const levers = () => Object.fromEntries(terminalDevices.switches.map(s => [s.name, s.lever.rotation.z]));
+    // 유리창 접점: 가동 접점 Y 와 동작 플래그가 스윕 내내 일치해야 한다.
+    out.contactMismatch = [];
+    const contactCheck = tag => {
+      const flag = { slowdown: elevatorState.slowdownActive, limit: elevatorState.limitActive, final: elevatorState.finalLimitActive };
+      terminalDevices.switches.forEach(s => {
+        const open = Math.abs(s.bridge.position.y + LIMIT_SWITCH_MODEL.bridgeStroke) < 1e-9;
+        const closed = Math.abs(s.bridge.position.y) < 1e-9;
+        if (!(open || closed) || open !== s.contactOpen || open === s.body.userData.contactClosed ||
+            (open && !flag[s.kind])) out.contactMismatch.push(`${tag}:${s.name}`);
+      });
+    };
 
     // 카를 여러 위치로 옮겨 보며 상태를 수집한다 (원위치 복구)
     const y00 = carGrp.position.y, w00 = cwtGrp.position.y;
@@ -109,10 +123,34 @@ server.listen(PORT, async () => {
       .forEach(([base, d, tag]) => {
         move(base + d);
         out.sw.push({ tag, d, slow: elevatorState.slowdownActive, lim: elevatorState.limitActive,
-                      fin: elevatorState.finalLimitActive, lev: levers() });
+                      fin: elevatorState.finalLimitActive, lev: levers(),
+                      open: terminalDevices.switches.filter(s => s.contactOpen).map(s => s.name) });
+        contactCheck(tag);
       });
 
-    move(y00); cwtGrp.position.y = w00; refreshRopes();
+    // 카(캠 포함) 정점을 전 행정으로 쓸어 올려 스위치 고정부 Box3 와의 최소 간극을 잰다.
+    // 레버·롤러는 캠이 누르는 것이 정상이므로 제외한다.
+    move(y00); scene.updateMatrixWorld(true);
+    const moving = new Set(); terminalDevices.switches.forEach(s => s.lever.traverse(o => moving.add(o)));
+    const parts = []; limitGrp.traverse(o => { if (o.isMesh && !moving.has(o)) parts.push([o.name || o.parent?.name || o.geometry.type, new THREE.Box3().setFromObject(o)]); });
+    const dMin = FLOOR_Y[0] + S.CAR_H / 2 - 0.35 - carGrp.position.y, dMax = FLOOR_Y[FLOORS - 1] + S.CAR_H / 2 + 0.35 - carGrp.position.y;
+    const v = new THREE.Vector3(); let sweep = { d: Infinity }, clipSweep = { d: Infinity };
+    carGrp.traverse(o => {
+      if (!o.isMesh || o.isInstancedMesh) return;
+      const bb = new THREE.Box3().setFromObject(o); if (bb.min.x > -1.15) return;
+      const a = o.geometry.attributes.position;
+      for (let i = 0; i < a.count; i++) {
+        v.fromBufferAttribute(a, i).applyMatrix4(o.matrixWorld);
+        if (v.x > -1.15) continue;
+        for (const [n, b] of parts) {
+          if (v.y + dMax < b.min.y || v.y + dMin > b.max.y) continue;
+          const dx = Math.max(b.min.x - v.x, 0, v.x - b.max.x), dz = Math.max(b.min.z - v.z, 0, v.z - b.max.z);
+          const d = Math.hypot(dx, dz), hit = { d, part: n, car: o.name || o.parent?.name };
+          if (n === 'terminalRailClip') { if (d < clipSweep.d) clipSweep = hit; } else if (d < sweep.d) sweep = hit;
+        }
+      }
+    });
+    out.carSweep = sweep; out.clipSweep = clipSweep;
 
     // 리본 메시 실측 바운딩 박스
     const bb = new THREE.Box3().setFromObject(travelCable.ribbon);
@@ -272,25 +310,37 @@ server.listen(PORT, async () => {
      Math.abs(R.ribbonBox.max[0] - (C.TC_CAR_X + C.TC_T / 2)) < 1e-6,
      `X ∈ [${mm(R.ribbonBox.min[0])}, ${mm(R.ribbonBox.max[0])}]`);
 
+  // (11) S3-B1370형 스위치
+  ok('(11) 유리창 가동 접점 = 동작 플래그 (스윕 전 구간)', R.contactMismatch.length === 0, R.contactMismatch.join(' ') || '일치');
+  ok('(11) 하부 파이널 완전 동작: DFL·DLS 접점 개로, 착상면: 감속만 개로',
+     S_['하부 파이널 완전 동작'].open.includes('DFL') && S_['하부 파이널 완전 동작'].open.includes('DLS') &&
+     S_['최하층 착상면'].open.join() === 'DSD', JSON.stringify([S_['하부 파이널 완전 동작'].open, S_['최하층 착상면'].open]));
+  ok('(11) 카·캠 전 행정 ↔ 스위치 본체·브라켓·배선 간극 > 3mm', R.carSweep.d > 0.003, JSON.stringify(R.carSweep));
+  // 레일 클립 조는 세이프티기어 쐐기와 겹치는 기존 모델 한계(문서 기록) — 판정하지 않고 값만 남긴다.
+  console.log('INFO  (11) 레일 클립 ↔ 카 최소 간극(기존 한계): ' + JSON.stringify(R.clipSweep));
+
   ok('(0) 콘솔·페이지 에러 없음', errs.length === 0, errs.slice(0, 3).join(' | ') || '없음');
 
   // 스크린샷
   const mr = await page.evaluate(() => {
-    const pit = scene.getObjectByName('pitSwitchBox'), top = scene.getObjectByName('topLightSwitchBox');
+    const pit = scene.getObjectByName('pitLightSwitchBox'), top = scene.getObjectByName('topLightSwitchBox');
+    const stop = scene.getObjectByName('pitStopOutletBox');
+    const stopBox = new THREE.Box3().setFromObject(stop.children[0]);
     return { pitOffset: pit.position.y-FLOOR_Y[0], topOffset: top.position.y-FLOOR_Y[FLOORS-1],
       aligned: pit.position.x===top.position.x && pit.position.z===top.position.z,
-      stop: !!pit.getObjectByName('pitEstopButton') && !top.getObjectByName('pitEstopButton'),
+      stop: !!stop.getObjectByName('pitEstopButton') && !scene.getObjectByName('topLightSwitchBox').getObjectByName('pitEstopButton'),
+      stopTop: stopBox.max.y-FLOOR_Y[0],
       lights: shaftCableGrp.children.filter(o=>o.userData.type==='shaft-led').length,
       left: TC_X<0, color: travelCable.ribbon.material.color.clone().convertLinearToSRGB().getHex()===TC_COLOR };
   });
-  ok('(10) 상하 박스 승강장 +1m, 동일 벽면 위치, 하부만 ESTOP', Math.abs(mr.pitOffset-1)<1e-9 && Math.abs(mr.topOffset-1)<1e-9 && mr.aligned && mr.stop, JSON.stringify(mr));
+  ok('(10) 조명 스위치 최상·최하층 +1m 동일 위치, 피트 정지 박스 상단 +0.4m 이내', Math.abs(mr.pitOffset-1)<1e-9 && Math.abs(mr.topOffset-1)<1e-9 && mr.aligned && mr.stop && mr.stopTop<=0.40, JSON.stringify(mr));
   ok('(10) 피트·각 층 LED 및 좌측 회색 이동케이블', mr.lights===C.FLOORS+1 && mr.left && mr.color, JSON.stringify(mr));
   for (const view of ['pit','top','lights']) {
     await page.evaluate(view=>{
       const dy=FLOOR_Y[2]+S.CAR_H/2-carGrp.position.y;
       carGrp.position.y+=dy; cwtGrp.position.y-=dy; refreshRopes();
-      const y=view==='top'?TOP_LIGHT_SWITCH_Y:view==='pit'?PIT_REMOTE_Y:6;
-      const z=view==='lights'?SHAFT_LIGHT_Z:SHAFT_SWITCH_Z;
+      const y=view==='top'?TOP_LIGHT_SWITCH_Y:view==='pit'?PIT_LIGHT_SWITCH_Y:6;
+      const z=view==='lights'?SHAFT_LIGHT_Z:LIGHT_SWITCH_Z;
       controls.enableDamping=false;
       camera.position.set(view==='lights'?6:-0.8,y+0.1,z);
       controls.target.set(-S.SHAFT_W/2,y,z); controls.update();
@@ -302,7 +352,8 @@ server.listen(PORT, async () => {
                  ['flscam=2', 'fls-top'], ['sldcam', 'sld-bottom']];
   for (const [q, name] of (process.argv.includes('--mr-only') ? [] : shots)) {
     await page.goto(`http://127.0.0.1:${PORT}/index.html?${q}`, { waitUntil: 'networkidle' });
-    await page.waitForTimeout(2200);
+    await page.waitForFunction(() => terminalDevices.modelReady, null, { timeout: 90000 });
+    await page.waitForTimeout(1500);
     await page.screenshot({ path: path.join(ROOT, `.shot-${name}.png`) });
   }
 

@@ -133,7 +133,7 @@ try {
  const touch=await touchContext.newPage();touch.on('pageerror',e=>errors.push(e.message));
  await touch.goto(process.env.SIMULATOR_URL||`http://127.0.0.1:${server.address().port}/index.html`,{waitUntil:'networkidle'});
  await touch.waitForFunction(()=>CarDoor.state?.ready&&getComputedStyle(document.getElementById('loading')).opacity==='0');
- await touch.tap('[data-menu="dd-op"]');await touch.tap('#btn-open');
+ await touch.tap('#btn-open'); // 운행바는 항상 보인다
  await touch.waitForFunction(()=>currentState===ELEVATOR_STATE.DOOR_OPEN);await touch.evaluate(()=>clearTimeout(autoTimer));
  await touch.screenshot({path:path.join(out,'touch-open.png')});await touch.tap('#btn-close');
  await touch.waitForFunction(()=>!doorOpen&&CarDoor.secured());await touchContext.close();

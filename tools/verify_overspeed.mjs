@@ -19,7 +19,7 @@ try{
  await page.evaluate(keepShadows=>{renderer.setPixelRatio(0.8);renderer.shadowMap.enabled=keepShadows;gsap.ticker.lagSmoothing(0);},process.argv.includes('--shadows'));
  console.log('OVS models loaded');
  if(process.argv.includes('--detail-view')){
-  await page.click('[data-menu="dd-cam"]');await page.click('#c-governor');
+  await page.evaluate(()=>{const g=_govWorld();moveCam(g.x+1.05,g.y+0.23,g.z+0.53,g.x-0.02,g.y+0.02,g.z);}); // 카메라 프리셋 메뉴는 제거됨 — 같은 조속기 시점
   await page.waitForFunction(()=>gsap.getTweensOf(camera.position).length===0&&gsap.getTweensOf(controls.target).length===0);
  }
  const linkage=await page.evaluate(()=>{
@@ -59,6 +59,7 @@ try{
  });
  await page.click('[data-menu="dd-inst"]');
  await page.click('#btn-overspeed');
+ assert.equal(await page.evaluate(()=>document.querySelector('.sheet.open')),null,'fault sheet closes while the demo runs');
  console.log('OVS clicked');
  await page.waitForFunction(()=>ovsDemo.stage==='stopped'&&!document.getElementById('btn-overspeed').disabled);
  const data=await page.evaluate(()=>{
@@ -80,7 +81,7 @@ try{
  for(const [name,png] of Object.entries(data.frames))fs.writeFileSync(path.join(out,name+'.png'),Buffer.from(png,'base64'));
  delete data.frames;
  await page.screenshot({path:path.join(out,'stopped.png')});
- await page.click('#btn-overspeed');
+ await page.click('#fault-reset'); // 고장 래치 복귀 버튼(RST)
  await page.waitForFunction(()=>governorPhase==='rest'&&!overspeedActive);
  const reset=await page.evaluate(()=>({p:carGrp.userData.safetyGear.shaft.rotation.x,contact:govHandles().switchLever.userData.contactClosed,
   stage:ovsDemo.stage,ropeLocked:govHandles().ropeLocked,safetyContact:carGrp.getObjectByName('safetyLimitSwitch').userData.contactClosed,
