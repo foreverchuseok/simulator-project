@@ -300,7 +300,8 @@ for _ in range(60):
 CATCH_GRIP=(_lo+_hi)/2
 
 BASE_L    = -0.175
-SW_X, SW_Y, SW_Z = -0.139, 0.220, 0.050
+STRIKE_Z = 0.034  # 진자 네모 타격 뭉치와 스위치 암의 공통 앞뒤 평면
+SW_X, SW_Y, SW_Z = -0.145, 0.220, STRIKE_Z
 SW_W, SW_H, SW_D = 0.032, 0.106, 0.028
 SW_TILT   = math.radians(15)
 SW_CASE_W, SW_CASE_H, SW_CASE_D = 0.024, 0.102, 0.018
@@ -445,7 +446,7 @@ def SWP(x, y):
 
 ACT_DIR   = (math.cos(SW_TILT), -math.sin(SW_TILT))
 ACT_NRM   = (-ACT_DIR[1], ACT_DIR[0])
-ACT_TIP   = (-0.0930, 0.2180)
+ACT_TIP   = (-0.0990, 0.2180)
 ACT_HT    = 0.005
 ACT_HR    = 0.0035
 ACT_THK   = 0.0035
@@ -455,6 +456,25 @@ _ACT_FACE = SWP(SW_X + SW_W / 2 - 0.001, SW_Y)
 ACT_LEN   = ((_ACT_AXT[0] - _ACT_FACE[0]) * ACT_DIR[0] + (_ACT_AXT[1] - _ACT_FACE[1]) * ACT_DIR[1])
 ACT_ROOT  = (_ACT_AXT[0] - ACT_DIR[0] * ACT_LEN, _ACT_AXT[1] - ACT_DIR[1] * ACT_LEN)
 PLG_BASE  = (ACT_ROOT[0], ACT_ROOT[1], SW_Z)
+ACT_ROLLER = (_ACT_AXT[0] - ACT_DIR[0] * 0.003, _ACT_AXT[1] - ACT_DIR[1] * 0.003)
+ACT_ROLLER_R, ACT_ROLLER_OFFSET, ACT_ROLLER_T = 0.004, 0.014, 0.006
+ACT_ROLLER_BACK_OFFSET = 0.003  # 휠쪽 원형 끝은 노란 림 전면보다 앞에 둔다.
+ACT_INITIAL_ROT = -0.08
+CATCH_CONTACT = LEVP(LEV_L - 0.011, -0.015)
+CATCH_CONTACT_R = 0.002
+
+def switch_contact_angle(catch_angle):
+    """캐치 좌단 접촉면과 가로축 앞쪽 롤러가 접하는 스위치 회전각."""
+    c, s = math.cos(catch_angle), math.sin(catch_angle)
+    x, y = CATCH_CONTACT[0]-CATCH_PIV[0], CATCH_CONTACT[1]-CATCH_PIV[1]
+    ux, uy = CATCH_PIV[0]+x*c-y*s-ACT_ROOT[0], CATCH_PIV[1]+x*s+y*c-ACT_ROOT[1]
+    vx, vy = ACT_ROLLER[0]-ACT_ROOT[0], ACT_ROLLER[1]-ACT_ROOT[1]
+    radius = ACT_ROLLER_R + CATCH_CONTACT_R
+    cosine = (ux*ux+uy*uy+vx*vx+vy*vy-radius*radius)/(2*math.hypot(ux,uy)*math.hypot(vx,vy))
+    if abs(cosine)>1: return ACT_INITIAL_ROT
+    return min(ACT_INITIAL_ROT, math.atan2(uy,ux)-math.acos(cosine)-math.atan2(vy,vx))
+
+ACT_LATCH_ROT = min(switch_contact_angle(CATCH_RELEASE*i/1000) for i in range(1001))
 
 # =============================================================================
 #  4-1. BaseFrame — 베이스·중앙 사각 마운트판 (★볼트 단 1개만)·뒷면 투명 커버 & 나비너트
@@ -504,7 +524,7 @@ def build_base():
     # ── 과속스위치 본체 ──
     p.append(soften_edges(add_box((SW_CASE_W, SW_CASE_D, SW_CASE_H),T(SW_X,SW_Y,SW_Z),MAT_DARK,rot=SW_ROT),.0015))
     # Thin folded cover: the wheel-facing edge stops before the actuator root.
-    # Keep the old ACT_ROOT/ACT_TIP and cable outlet as mounting datums.
+    # Derive the case and cable outlet from the shared switch mounting datums.
     sw_bot=SW_Y-SW_H/2;sw_top=SW_Y+SW_H/2
     shell=[SWP(SW_X-.021,sw_bot),SWP(SW_X+.006,sw_bot),
            SWP(SW_X+.010,sw_top-.007),SWP(SW_X-.004,sw_top+.006),SWP(SW_X-.021,sw_top+.006)]
@@ -716,7 +736,7 @@ def build_pendulum(name, pivot_ang, release_tab=False, tie_cx=0.0, spr_cx=0.0):
     # ── 과속스위치 릴리즈 탭 (PendA 전용 실사 체결 볼트 뭉치 — 실사 120651, 120647) ───────
     #   실사 구조: 진자 원통 추 외경에 탭 구멍 → 하단 육각 너트(빨간 페인트 씰) → 나사산 스터드 → 상단 정사각형 네모 머리 볼트
     if release_tab:
-        ztab = Z_PEND_F - PEND_TAB_T / 2   # 0.034
+        ztab = STRIKE_Z
         rl = math.hypot(dx, dy - GWY)
         ux, uy = dx / rl, (dy - GWY) / rl
         ang = math.atan2(uy, ux)
@@ -830,9 +850,12 @@ def build_catch():
          (LEV_L-.004,.001),(LEV_L-.004,-.012),(LEV_L-.002,-.015),
          (LEV_L+.003,-.015),(LEV_L+.006,-.008),(LEV_L+.010,-.005),
          (LEV_L+.018,-.005)]
+    tip=[(x-.006,y) for x,y in tip]
     plate=tip+[(-.060,-.006),(-.025,-.010),(.018,-.011),(.065,-.013),(LEV_R,-.014),(LEV_R,.015)]
     p.append(add_plate([A(q[0],q[1]) for q in plate],.008,MAT_STEEL,
                        loc=(0,-Z_LEVER,0),bevel_w=.0010,name='catchPlate'))
+    # 좌단 하향 접촉면. 가로축 앞쪽 원형 끝과 같은 Z 층에서 맞닿는다.
+    p.append(add_cyl(CATCH_CONTACT_R,.008,T(*CATCH_CONTACT,Z_LEVER),MAT_STEEL,rot=AX,verts=24))
 
     # ★쇄기 푸시 탭 삭제 (1637531.png 빨강) — 쇄기가 11시로 옮겨가 진자 뭉치가
     #   직접 치므로 레버에서 내려오던 이 발은 더 이상 아무 것도 누르지 않는다.
@@ -954,10 +977,12 @@ def build_plunger():
            (tipAx[0] - nx * ACT_HT, tipAx[1] - ny * ACT_HT),
            (R[0] - nx * ACT_HR, R[1] - ny * ACT_HR)]
     p.append(add_plate(arm, ACT_THK, MAT_STEEL, loc=(0, -SW_Z, 0), bevel_w=0.0006, name="actArm"))
-    hx, hy = tipAx[0] - ux * 0.003, tipAx[1] - uy * 0.003
-    p.append(add_cyl(0.0024, ACT_THK + 0.020, T(hx, hy, SW_Z), MAT_CHROME, rot=AX, verts=14))
-    for zc in (SW_Z - ACT_THK / 2 - 0.0085, SW_Z + ACT_THK / 2 + 0.0085):
-        p.append(add_cyl(0.0040, 0.004, T(hx, hy, zc), MAT_CHROME, rot=AX, verts=14))
+    hx, hy = ACT_ROLLER
+    rear_z=SW_Z-ACT_THK/2-ACT_ROLLER_BACK_OFFSET
+    front_z=SW_Z+ACT_THK/2+ACT_ROLLER_OFFSET
+    p.append(add_cyl(0.0024,front_z-rear_z,T(hx,hy,(front_z+rear_z)/2),MAT_CHROME,rot=AX,verts=14))
+    for zc,thickness in ((rear_z,.004),(front_z,ACT_ROLLER_T)):
+        p.append(add_cyl(ACT_ROLLER_R,thickness,T(hx,hy,zc),MAT_CHROME,rot=AX,verts=24))
     return join_group(p, "Plunger", origin=T(*PLG_BASE))
 
 # =============================================================================
@@ -981,7 +1006,11 @@ _ty=_pp[1]+_dx*math.sin(TRIP_PENDULUM)+_dy*math.cos(TRIP_PENDULUM)-GWY
 SWITCH_HIT_PHASE=math.atan2(ACT_TIP[1]-GWY,ACT_TIP[0])-math.atan2(_ty,_tx)
 bpy.data.objects['BaseFrame']['mechanism']={
     'pendulum':TRIP_PENDULUM,'pawl':TRIP_PAWL,'releaseArm':CATCH_RELEASE,
-    'gripArm':CATCH_GRIP,'switchRot':-0.70,'toothStep':_STEP,'drag':0.12,
+    'gripArm':CATCH_GRIP,'switchRot':ACT_LATCH_ROT,'toothStep':_STEP,'drag':0.12,
+    'switchInitialRot':ACT_INITIAL_ROT,'switchPivot':list(PLG_BASE),
+    'switchRoller':[*ACT_ROLLER,SW_Z+ACT_THK/2+ACT_ROLLER_OFFSET],
+    'switchRollerRadius':ACT_ROLLER_R,'switchRollerThickness':ACT_ROLLER_T,
+    'catchContact':[*CATCH_CONTACT,Z_LEVER],'catchContactRadius':CATCH_CONTACT_R,
     'padPoint':[SHOE_X,SHOE_Y0+0.002,0.0],
     'ropeFaceX':0.100+ROPE_RADIUS_LOCAL,'switchHitPhase':SWITCH_HIT_PHASE,
     'switchCableExit':[*SWP(SW_X, SW_Y-SW_H/2), SW_Z],

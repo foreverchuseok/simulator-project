@@ -2057,6 +2057,7 @@
       refreshTerminalDevices();
       refreshLevelingSensors();
       refreshCarSafetyLinkage();
+      if(typeof refreshOVSRopeBreak==='function')refreshOVSRopeBreak();
     }
 
     /* 카 상부 크로스헤드 연동부는 하부 안전기 샤프트 각도 하나만 읽어 따라간다.
@@ -2131,6 +2132,18 @@
 
     function govHandles() { return (mrGrp && mrGrp.userData && mrGrp.userData.governor) || null; }
 
+    // 캐치 좌단 ↔ 스위치 가로축의 원형 끝. Blender가 내보낸 접촉점/반경만 사용한다.
+    function governorSwitchContactAngle(gov, angle) {
+      const m=gov.mechanism, pivot=gov.topArm.position;
+      const x=m.catchContact[0]-pivot.x,y=m.catchContact[1]-pivot.y,c=Math.cos(angle),s=Math.sin(angle);
+      const ux=pivot.x+x*c-y*s-m.switchPivot[0],uy=pivot.y+x*s+y*c-m.switchPivot[1];
+      const vx=m.switchRoller[0]-m.switchPivot[0],vy=m.switchRoller[1]-m.switchPivot[1];
+      const radius=m.switchRollerRadius+m.catchContactRadius;
+      const cosine=(ux*ux+uy*uy+vx*vx+vy*vy-radius*radius)/(2*Math.hypot(ux,uy)*Math.hypot(vx,vy));
+      if(Math.abs(cosine)>1)return m.switchInitialRot;
+      return Math.min(m.switchInitialRot,Math.atan2(uy,ux)-Math.acos(cosine)-Math.atan2(vy,vx));
+    }
+
     /* 과속 트립 — 2단계 (16:10 육성 지시: "떡판이 로프를 홈에 눌러 잡아준다")
        ① 진자 원심 개방과 휠 관성 주행을 시작
        ② 낙하: 쇄기 물림 + 캐치 암(+CCW) + 스위치 플런저 타격 = 같은 시각
@@ -2170,7 +2183,11 @@
         gov.spring.scale.y=1-0.05*release-0.035*grip;
         // Hinged actuator rotates around its real pin; do not translate the pivot.
         const snap=unit(hitTime,hitTime+0.18,t);
-        gov.switchLever.rotation.z=pose.switchRot*(1-Math.pow(1-snap,3));
+        const initialStrike=gov.mechanism.switchInitialRot*(1-Math.pow(1-snap,3));
+        // 진자가 먼저 짧게 타격하고, 내려오는 캐치 브라켓이 가로축 원형 끝을 눌러 추가 회전시킨다.
+        // 복귀 전까지 래치를 유지한다. 타임라인 seek도 같은 자세를 내도록 시간에서 직접 계산한다.
+        const catchPush=t<2.8?0:t<=3.25?governorSwitchContactAngle(gov,pose.topArm*release):pose.switchRot;
+        gov.switchLever.rotation.z=Math.min(initialStrike,catchPush);
         gov.switchLever.position.x=g.plungerX0;
         gov.switchLever.userData.contactClosed=t<hitTime+0.05;
         gov.ropeLocked=t>=4.6;

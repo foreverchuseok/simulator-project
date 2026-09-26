@@ -90,6 +90,13 @@ function updateManualCameraNear() {
       function ropeBrakeBang() { const c = ac(), t = c.currentTime; thump(c, t, 48, 0.32, 0.5); clack(c, t, 340, 0.08, 0.35); clack(c, t + 0.015, 1400, 0.05, 0.18); hiss(c, t + 0.02, 0.35, 0.05, 2500); }
       // 승객이 에이프런에 부딪히는 가벼운 "쿵"
       function bump() { const c = ac(), t = c.currentTime; thump(c, t, 110, 0.12, 0.18); clack(c, t, 260, 0.05, 0.1); }
+      function overspeedImpact(kind) {
+        const c=ac(),t=c.currentTime;
+        if(kind==='break'){clack(c,t,1700,.12,.22);thump(c,t,100,.18,.13);}
+        if(kind==='pawl'){clack(c,t,1900,.07,.24);thump(c,t,640,.20,.09);}
+        if(kind==='grip'){clack(c,t,460,.09,.17);thump(c,t,95,.17,.14);}
+        if(kind==='rail'){thump(c,t,52,.36,.28);clack(c,t,850,.11,.23);hiss(c,t+.025,.38,.06,2100);}
+      }
 
       function clack(c, t, freq, dur, amp) {
         const src = c.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
@@ -157,7 +164,7 @@ function updateManualCameraNear() {
         });
       }
       function effect(play) { return { currentTime: 0, play() { try { play(); return Promise.resolve(); } catch (e) { return Promise.reject(e); } } }; }
-      return { resume, motorOn, motorOff, setDrive, brakeRelease, brakeSet, duck, ropeBrakeBang, bump,
+      return { resume, motorOn, motorOff, setDrive, brakeRelease, brakeSet, duck, ropeBrakeBang, bump, overspeedImpact,
         doorOpen: effect(() => door(false)), doorClose: effect(() => door(true)), chime: effect(chime) };
     })();
 
@@ -463,16 +470,17 @@ function updateManualCameraNear() {
        governorReset() → 최근접 층 구출 운전
     ───────────────────────────────────────────────────────────── */
     let overspeedActive = false;
-    const ovsDemo={stage:'rest',inset:null,trip:null,stop:null,fallTick:null,hidden:[],insetHidden:[],camera:null};
+    const ovsDemo={stage:'rest',shot:null,trip:null,stop:null,fallTick:null,hidden:[],broken:false,breakProgress:0};
     function ovsStage(text){
       let el=document.getElementById('ovs-stage');
       if(!el){el=document.createElement('div');el.id='ovs-stage';el.setAttribute('role','status');
-        el.style.cssText='position:fixed;left:50%;bottom:var(--caption-bottom,22px);transform:translateX(-50%);max-width:70vw;padding:12px 20px;background:#142230ed;color:#eef5fa;border:1px solid #66859b;border-radius:9px;font:14px sans-serif;z-index:30;pointer-events:none;text-align:center';document.body.appendChild(el);}
+        el.style.cssText='position:fixed;left:50%;bottom:var(--caption-bottom,22px);transform:translateX(-50%);width:max-content;max-width:calc(100vw - 32px);box-sizing:border-box;padding:12px 16px;background:#142230ed;color:#eef5fa;border:1px solid #66859b;border-radius:9px;font:14px sans-serif;line-height:1.5;word-break:keep-all;z-index:30;pointer-events:none;text-align:center';document.body.appendChild(el);}
       el.hidden=false;el.textContent='OVS · 느린 동작  |  '+text;
       updateStatus('v-dir',text,'#f0883e');
     }
     function setOVSCutaway(enabled){
       if(!enabled){ovsDemo.hidden.forEach(([o,v])=>o.visible=v);ovsDemo.hidden=[];return;}
+      if(ovsDemo.hidden.length)return;
       const keep=new Set(['carSafetyGear','carSafetyLinkage','CarGuideShoe_L_Lower','CarGuideShoe_R_Lower']);
       carGrp.traverse(o=>{
         if(!o.isMesh&&!o.isLine)return;
@@ -480,23 +488,68 @@ function updateManualCameraNear() {
         if(!retained){ovsDemo.hidden.push([o,o.visible]);o.visible=false;}
       });
     }
-    function renderOverspeedInset(){
-      if(!ovsDemo.inset||!ovsDemo.camera)return;
-      const c=ovsDemo.camera,w=Math.min(350,innerWidth*0.32),h=w*0.72;
-      const target=ovsDemo.target,offset=ovsDemo.offset;
-      if(ovsDemo.inset==='governor'){
-        governorWheelGrp.getWorldPosition(target);offset.set(0.64,0.09,0.31);
-      }else{
-        target.set(1.24,-S.CAR_H/2-0.16,0.04);carGrp.localToWorld(target);offset.set(-0.40,-0.22,-0.42);
+    // 주로프 파단은 카측 5본만 교체한다. 조속기 로프/클램프에는 손대지 않는다.
+    function prepareOVSRopeBreak(){
+      if(!ovsDemo.ropePieces){
+        ovsDemo.ropeGroup=new THREE.Group();ovsDemo.ropeGroup.name='OVSMainRopeBreak';scene.add(ovsDemo.ropeGroup);
+        ovsDemo.ropePieces=ropeObjs.map(r=>Array.from({length:4},()=>{
+          const m=makeRopeDrop(r.ropeR,getWireRopeMat());ovsDemo.ropeGroup.add(m);return m;
+        }));
       }
-      c.position.copy(target).add(offset);c.lookAt(target);c.aspect=w/h;c.updateProjectionMatrix();
-      // Inset is an explicit section view; restore visibility immediately after drawing.
-      if(ovsDemo.inset==='safety')ovsDemo.insetHidden.forEach(([o])=>{o.userData.ovsInsetVisible=o.visible;o.visible=false;});
-      renderer.setScissorTest(true);renderer.setScissor(18,100,w,h);renderer.setViewport(18,100,w,h);
-      const shadowUpdate=renderer.shadowMap.autoUpdate;renderer.shadowMap.autoUpdate=false;
-      renderer.clearDepth();renderer.render(scene,c);renderer.shadowMap.autoUpdate=shadowUpdate;
-      renderer.setScissorTest(false);renderer.setViewport(0,0,innerWidth,innerHeight);
-      if(ovsDemo.inset==='safety')ovsDemo.insetHidden.forEach(([o])=>o.visible=o.userData.ovsInsetVisible);
+      ovsDemo.ropeGroup.visible=false;ovsDemo.breakProgress=0;
+      ovsDemo.breakY=carGrp.position.y+S.CAR_H/2+CAR_ROPE_END_DY+1.05;
+      ovsDemo.ropeVisibility=ropeObjs.map(r=>r.carDrop.visible);
+    }
+    function refreshOVSRopeBreak(){
+      if(!ovsDemo.broken)return;
+      const cy=carGrp.position.y+S.CAR_H/2+CAR_ROPE_END_DY,p=ovsDemo.breakProgress;
+      const shape=wireRopeShape;
+      ropeObjs.forEach((r,i)=>{
+        const parts=ovsDemo.ropePieces[i],z=CAR_CTR_Z+r.hz;
+        const bend=(i-2)*.045*p,whip=Math.sin(p*Math.PI)*.20;
+        const a=[r.rx,shape.carTopY,shape.carTopZ],b=[r.hx,ovsDemo.breakY+.35,z];
+        const c=[r.hx+bend,ovsDemo.breakY+.10+.18*p,z+whip];
+        const d=[r.hx-bend,cy+1.05-.40*p,z-whip-.06*p],e=[r.hx,cy+.48,z],f=[r.hx,cy,z];
+        [[a,b],[b,c],[d,e],[e,f]].forEach(([top,bot],j)=>setRopeDrop(parts[j],...top,...bot,0,-Math.hypot(top[0]-bot[0],top[1]-bot[1],top[2]-bot[2])/WIRE_ROPE_UV_LEN));
+      });
+    }
+    function restoreOVSRopes(){
+      ovsDemo.breakTween?.kill();ovsDemo.broken=false;
+      if(ovsDemo.ropeGroup)ovsDemo.ropeGroup.visible=false;
+      ropeObjs.forEach((r,i)=>{if(ovsDemo.ropeVisibility)r.carDrop.visible=ovsDemo.ropeVisibility[i];});
+    }
+    // 카메라를 한 장면씩 사용한다. 세로 화면에서도 기구가 잘리지 않게 거리를 보정한다.
+    function ovsCamera(shot,duration=1,onDone){
+      ovsDemo.shot=shot;gsap.killTweensOf(camera.position);gsap.killTweensOf(controls.target);
+      const d=_deviceWorld(),g=_govWorld(),target=new THREE.Vector3(),offset=new THREE.Vector3();
+      if(shot==='shaft'){target.set(0,carGrp.position.y+.9,CAR_CTR_Z);offset.set(8.2,1.1,4.8);}
+      if(shot==='governor'){target.copy(g).add(new THREE.Vector3(-.02,.02,0));offset.set(.70,.15,.35);}
+      if(shot==='linkage'){target.copy(d).add(new THREE.Vector3(-.45,.08,0));offset.set(-.15,.80,-2.55);}
+      if(shot==='safety'){target.copy(d);offset.set(-.42,-.24,-.52);}
+      if(shot==='linkage'&&camera.aspect<.8){target.copy(d).add(new THREE.Vector3(.08,.06,0));offset.set(-.10,.40,-1.25);}
+      offset.multiplyScalar(Math.max(1,(shot==='shaft'?.68:.95)/camera.aspect));
+      _camTo(target.x+offset.x,target.y+offset.y,target.z+offset.z,target.x,target.y,target.z,duration,'power2.inOut',onDone);
+    }
+    // 불꽃은 레일 마찰 위치에만 짧게 표시한다. 버퍼를 재사용하며 프레임 안에서 생성하지 않는다.
+    function ovsRailImpact(){
+      MACH.overspeedImpact('rail');
+      if(!ovsDemo.sparks){
+        const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(new Float32Array(32*6),3).setUsage(THREE.DynamicDrawUsage));
+        const material=new THREE.LineBasicMaterial({color:0xffbc4b,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending});
+        ovsDemo.sparks=new THREE.LineSegments(geometry,material);ovsDemo.sparks.frustumCulled=false;scene.add(ovsDemo.sparks);
+      }
+      const sparks=ovsDemo.sparks,origin=_deviceWorld(),base=camera.position.clone(),state={t:0};
+      sparks.visible=true;sparks.position.copy(origin);
+      ovsDemo.impact?.kill();
+      ovsDemo.impact=gsap.to(state,{t:1,duration:.55,ease:'none',onUpdate:()=>{
+        const t=state.t,positions=sparks.geometry.attributes.position;
+        for(let i=0;i<32;i++){
+          const a=i*2.39996,speed=.12+(i%7)*.025,tail=Math.max(0,t-.12);
+          for(let j=0;j<2;j++){const u=j?t:tail;positions.setXYZ(i*2+j,Math.cos(a)*speed*u,Math.sin(a)*speed*u-.20*u*u,Math.sin(i*4.7)*speed*u);}
+        }
+        positions.needsUpdate=true;sparks.material.opacity=1-t;
+        const shake=.014*(1-t)*(1-t);camera.position.copy(base);camera.position.x+=Math.sin(t*97)*shake;camera.position.y+=Math.sin(t*123)*shake;
+      },onComplete:()=>{sparks.visible=false;camera.position.copy(base);}});
     }
 
     /* ── 카메라 연출 헬퍼 (조속기 → 디바이스 추종) ──────────────────
@@ -550,26 +603,19 @@ function updateManualCameraNear() {
       currentState = ELEVATOR_STATE.MOVING;
       updateStatus('v-dir', '▼▼ 돌하 (과속 낙하)', '#f85149');
       btn.disabled = true;
-      MACH.resume(); MACH.brakeRelease(); MACH.motorOn();
+      MACH.resume(); MACH.motorOff();
 
-      // 카메라: 조속기 정면 3/4 사선 클로즈업으로 부드럽게 이동 (쐐기 물림·스위치 타격·캐치슈 파지 관람)
+      // 먼저 카와 주로프가 함께 보이는 승강로 측면. 이 시점에는 아직 파단하지 않는다.
       _saveCam();
-      ovsDemo.stage='runaway';ovsDemo.inset='safety';
-      ovsDemo.camera ||= new THREE.PerspectiveCamera(42,1,0.002,100);
-      ovsDemo.target ||= new THREE.Vector3();ovsDemo.offset ||= new THREE.Vector3();ovsDemo.insetHidden=[];
-      scene.traverse(o=>{if(!o.isMesh&&!o.isLine)return;let p=o,keep=false;
-        while(p){if(['carSafetyGear','carSafetyLinkage','T_Rail_13K'].includes(p.name))keep=true;p=p.parent;}
-        if(!keep)ovsDemo.insetHidden.push([o]);});
-      ovsStage('낙하 속도가 증가합니다. 왼쪽 아래는 안전기 작동 단면입니다.');
-      const gv = _govWorld();
-      _camTo(gv.x + 0.70, gv.y + 0.15, gv.z + 0.35, gv.x - 0.02, gv.y + 0.02, gv.z, 1.2);
+      ovsDemo.stage='preparing';prepareOVSRopeBreak();
+      ovsStage('① 승강로 측면 · 주로프와 카를 확인합니다.');
 
       // 폭주 낙하 — 완만한 가속 물리 적분(gsap.ticker). 정격 50%로 하강 시작 →
       // 약 1.3~1.5개 층 미끄러지며 가속 → 정격 130%(트립 임계) 도달 시 조속기 슬로우 작동.
       const vTrip = targetSpeed * 1.3;        // 트립 임계 (m/min)
       const vTripMs = vTrip / 60;             // m/s
       const yFloor1 = ty;                     // 최하층 카 정위치 Y
-      let v = (targetSpeed * 0.5) / 60;       // 초기 하강 속도 (정격 50%, m/s)
+      let v = (targetSpeed * 0.5) / 60;       // 관찰용 느린 낙하. 실제 중력 가속 시간과 다르다.
       const ACCEL = 0.14;                     // 폭주 가속도 (m/s²)
       let tripped = false;
       const fallTick = (time, deltaMs) => {
@@ -580,11 +626,12 @@ function updateManualCameraNear() {
         spinSheaves(deltaY);
         cwtGrp.position.y -= deltaY;
         refreshRopes(); refreshGovernorRope();
+        // 낙하를 따라가되 파단된 상단 로프도 시야에 남긴다.
+        camera.position.y+=deltaY*.6;controls.target.y+=deltaY*.6;
         let curF = 1;
         for (let i = FLOORS - 1; i >= 0; i--) { if (carGrp.position.y >= FLOOR_Y[i]) { curF = i + 1; break; } }
         syncAllIndicators(curF, '↓');
         const vmm = v * 60; // m/min
-        MACH.setDrive(Math.min(vmm / vTrip, 1));
         updateStatus('v-spd', Math.round(vmm) + ' m/min', '#f85149');
         // 진자 원심 개방 — 정격 90%부터 속도 비례로 벌어짐 (트립 최대각의 70%까지)
         const open = Math.min(Math.max((vmm - targetSpeed * 0.9) / (vTrip - targetSpeed * 0.9), 0), 1)
@@ -597,34 +644,48 @@ function updateManualCameraNear() {
           tripped = true; gsap.ticker.remove(fallTick);ovsDemo.fallTick=null; onGovernorOverspeed(spinDir, btn);
         }
       };
-      gsap.ticker.add(fallTick);
-      ovsDemo.fallTick=fallTick;
+      ovsCamera('shaft',1.25,()=>{
+        ovsDemo.stage='rope-break';ovsDemo.broken=true;ovsDemo.ropeGroup.visible=true;
+        ropeObjs.forEach(r=>r.carDrop.visible=false);refreshOVSRopeBreak();
+        MACH.overspeedImpact('break');ovsStage('① 주로프 파단 · 조속기 로프는 연결된 상태입니다.');
+        ovsDemo.breakTween=gsap.to(ovsDemo,{breakProgress:1,duration:.55,ease:'power2.out',onUpdate:refreshOVSRopeBreak});
+        ovsDemo.pending=gsap.delayedCall(.65,()=>{
+          ovsDemo.stage='runaway';ovsStage('② 카 자유낙하 · 연결된 조속기 로프가 휠을 돌립니다.');
+          gsap.ticker.add(fallTick);ovsDemo.fallTick=fallTick;
+        });
+      });
     }
 
     function onGovernorOverspeed(spinDir, btn) {
       moving=true;
+      ovsDemo.stage='machine-room';ovsStage('③ 기계실 · 조속기 작동을 확대합니다.');
+      ovsCamera('governor',1.15,()=>runGovernorSequence(spinDir,btn));
+    }
+
+    function runGovernorSequence(spinDir,btn){
       // Electrical cut-off is visible first; mechanical motion continues in slow time.
       let previousWheel=govHandles().wheel.rotation.z;
       ovsDemo.trip=governorTrip(spinDir,()=>{
         estop=true;moving=false;currentState=ELEVATOR_STATE.ESTOP;
-        ovsStage('로프 고정 → 카의 상대 하강이 링크를 당깁니다.');
-        ovsDemo.inset='governor';setOVSCutaway(true);
-        const d=_deviceWorld();
-        _camTo(d.x-0.42,d.y-0.24,d.z-0.52,d.x,d.y,d.z,1.25);
-        engageDeviceStop(spinDir,btn,{duration:4.0,onComplete:()=>{
-          ovsStage('제동 완료 · 네 쐐기가 레일을 파지했습니다. RST로 복귀합니다.');
-          ovsDemo.stage='stopped';
-          // Keep the arrested mechanism visible for inspection until RST.
-          controls.enabled=true;
-        }});
+        ovsDemo.stage='rope-locked';MACH.overspeedImpact('grip');
+        ovsStage('④ 캐치슈가 뒤쪽 조속기 로프를 꽉 잡았습니다.');
+        ovsDemo.pending=gsap.delayedCall(.85,()=>{
+          setOVSCutaway(true);ovsDemo.stage='linkage-view';
+          ovsStage('⑤ 고정된 로프 → 카의 하강이 링크를 당깁니다.');
+          ovsCamera('linkage',1.15,()=>engageDeviceStop(spinDir,btn,{onComplete:()=>{
+            ovsStage('⑥ 비상정지 완료 · 네 쐐기가 레일을 파지했습니다. RST로 시연을 복귀합니다.');
+            ovsDemo.stage='stopped';controls.enabled=true;
+          }}));
+        });
       },{
         onStage:stage=>{
           ovsDemo.stage=stage;
           const captions={centrifugal:'과속 감지 · 원심 진자가 벌어집니다.',
             electrical:'과속 스위치 타격 · 접점이 열리고 레버가 떨어집니다.',
-            pawl:'멈춤쇠가 톱니에 걸려 캐치 레버를 해제합니다.',
+            pawl:'쐐기가 톱니에 꽉 걸려 캐치 레버를 작동시킵니다.',
             'rope-grip':'캐치슈가 조속기 로프를 눌러 고정합니다.'};
           ovsStage(captions[stage]);
+          if(stage==='pawl')MACH.overspeedImpact('pawl');
           if(stage==='electrical'){MACH.motorOff();estop=true;currentState=ELEVATOR_STATE.ESTOP;}
         },
         onUpdate:()=>{
@@ -642,8 +703,8 @@ function updateManualCameraNear() {
       if(!sg||!linkage)return null;
       const startY=carGrp.position.y,stroke=linkage.clampLift;
       const drive={distance:0};let previousY=startY;
-      const tween=gsap.to(drive,{distance:stroke,duration:options.duration||0.85,ease:'power2.out',
-        onUpdate:()=>{
+      let impacted=false;
+      const apply=()=>{
           const distance=Math.max(0,Math.min(stroke,drive.distance));
           carGrp.position.y=startY-distance;
           const deltaY=carGrp.position.y-previousY;previousY=carGrp.position.y;cwtGrp.position.y-=deltaY;
@@ -652,23 +713,29 @@ function updateManualCameraNear() {
           const p=(Math.asin(-Math.sin(half)+2*Math.sin(half)*ratio)+half)/(2*half);
           sg.shaft.rotation.x=SG_TRIP_ROT*p;
           refreshRopes();refreshGovernorRope();
-          if(overspeedActive&&p>0.12&&ovsDemo.stage!=='wedges'){
-            ovsDemo.stage='wedges';ovsStage('안전 스위치 해제 → 링크·인상 핀 → 쐐기 상승 → 레일 파지');
-          }
-        },
-        onComplete:()=>{
+          if(p>.90&&!impacted){impacted=true;ovsRailImpact();}
+      };
+      const tween=gsap.timeline({onComplete:()=>{
           MACH.brakeSet();updateStatus('v-spd','0 m/min','#f0883e');
           btn.disabled=false;btn.textContent='RST';options.onComplete?.();
-        }
-      });
+      }});
+      ovsDemo.stage='linkage';
+      tween.to(drive,{distance:stroke*.32,duration:1.45,ease:'power1.in',onUpdate:apply});
+      tween.call(()=>{ovsDemo.stage='safety-view';ovsStage('⑥ 인상 핀이 쐐기를 올립니다. 레일 파지 순간을 봅니다.');ovsCamera('safety',.95);});
+      tween.to({}, {duration:1.05});
+      tween.call(()=>{ovsDemo.stage='wedges';});
+      tween.to(drive,{distance:stroke,duration:.85,ease:'power2.in',onUpdate:apply});
+      tween.to({}, {duration:.60});
       ovsDemo.stop=tween;return tween;
     }
 
     function resetGovernorFault(btn) {
       btn.disabled = true;
-      ovsDemo.inset=null;ovsDemo.stage='resetting';setOVSCutaway(false);
+      ovsDemo.stage='resetting';ovsDemo.shot=null;setOVSCutaway(false);
       if(ovsDemo.fallTick){gsap.ticker.remove(ovsDemo.fallTick);ovsDemo.fallTick=null;}
-      ovsDemo.trip?.kill();ovsDemo.stop?.kill();
+      ovsDemo.trip?.kill();ovsDemo.stop?.kill();ovsDemo.pending?.kill();ovsDemo.impact?.kill();
+      if(ovsDemo.sparks)ovsDemo.sparks.visible=false;
+      restoreOVSRopes();
       const caption=document.getElementById('ovs-stage');if(caption)caption.hidden=true;
       _restoreCam(1.0); // 디바이스 클로즈업 중 즉시 복귀 눌러도 카메라 원위치
       updateStatus('v-dir', '조속기 복귀 중…', '#f0883e');
@@ -789,8 +856,98 @@ function updateManualCameraNear() {
 
     // 독 팝오버 — 한 번에 하나만 열림, 아이콘 재탭·다른 아이콘·접기 버튼으로 닫힘
     function closeAllMenus() {
+      portraitHUD?.close();
       document.querySelectorAll('.sheet.open').forEach(d => d.classList.remove('open'));
       document.querySelectorAll('[data-menu].active').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-expanded', 'false'); });
+    }
+
+    // 세로 폰은 기존 컨트롤 자체를 옮긴다. ID/이벤트/고장 복귀 상태를 복제하지 않는다.
+    let portraitHUD = null;
+    function bindPortraitHUD() {
+      const media = matchMedia('(max-width: 600px) and (orientation: portrait)');
+      const hud = document.getElementById('hud'), dock = document.getElementById('mobile-tools');
+      const detail = document.getElementById('mobile-detail'), content = document.getElementById('mobile-detail-content');
+      const visibility = document.getElementById('mobile-visibility');
+      const menuButton = document.querySelector('[data-menu="dd-inst"]');
+      const slots = new Map();
+      const remember = node => {
+        if (!slots.has(node)) { const marker = document.createComment('portrait-control-home'); node.before(marker); slots.set(node, marker); }
+        return node;
+      };
+      const actions = ['btn-overspeed', 'btn-ucm', 'hall-toggle', 'btn-pit-ladder'].map(id => remember(document.getElementById(id)));
+      const panels = {
+        mode: remember(document.querySelector('#dd-inst .mode-row')),
+        brake: remember(document.getElementById('ucm-brake').closest('.field')),
+        bypass: remember(document.getElementById('bypass-mode').closest('.field'))
+      };
+      const labels = new Map();
+      const shortLabel = (node, text) => { if (!labels.has(node)) labels.set(node, node.textContent); node.textContent = text; };
+      const restore = node => slots.get(node).after(node);
+      const closeDetail = () => {
+        Object.values(panels).forEach(restore);
+        detail.hidden = true;
+        dock.querySelectorAll('[data-mobile-panel]').forEach(b => b.setAttribute('aria-expanded', 'false'));
+        // 점검 버튼을 누른 상태에서 패널을 닫거나 회전해도 운전을 지속하지 않는다.
+        if (typeof insHold !== 'undefined' && insHold) { insHold = 0; insStop(); }
+      };
+      const close = () => { closeDetail(); dock.hidden = true; };
+      const sync = () => {
+        closeAllMenus();
+        hud.classList.remove('tools-hidden');
+        document.body.classList.remove('portrait-tools-hidden');
+        visibility.setAttribute('aria-pressed', 'false');
+        visibility.setAttribute('aria-label', '도구 숨기기'); visibility.title = '도구 숨기기';
+        document.getElementById('mobile-eye-slash').style.display = '';
+        if (media.matches) {
+          menuButton.setAttribute('aria-controls', 'mobile-tools');
+          const brakeButton = dock.querySelector('[data-mobile-panel="brake"]');
+          actions.slice(0, 2).forEach(node => dock.insertBefore(node, brakeButton));
+          actions.slice(2).forEach(node => dock.insertBefore(node, dock.querySelector('[data-mobile-panel="bypass"]')));
+          shortLabel(actions[2], 'KEY'); shortLabel(actions[3], 'LAD');
+          for (const [id, text] of [['btn-aut','AUT'],['btn-ins','INS']]) shortLabel(document.getElementById(id),text);
+          for (const [id, values] of [['ucm-brake',['ON','FAIL','NONE']],['bypass-mode',['OFF','HALL','CAR']]]) {
+            document.querySelectorAll(`.seg[data-for="${id}"] button`).forEach((node,i) => shortLabel(node,values[i]));
+          }
+          shortLabel(document.querySelector('#btn-estop span'), estop ? 'RESET' : 'STOP');
+        } else {
+          menuButton.setAttribute('aria-controls', 'dd-inst');
+          actions.forEach(restore);
+          // AUT/INS의 small 마크업까지 원래 그대로 복원한다.
+          labels.forEach((text,node) => { node.textContent = text; }); labels.clear();
+          document.getElementById('btn-aut').innerHTML = '<small>AUT</small>자동';
+          document.getElementById('btn-ins').innerHTML = '<small>INS</small>점검';
+          document.querySelector('#btn-estop span').textContent = estop ? '해제' : '정지';
+        }
+      };
+      dock.querySelectorAll('[data-mobile-panel]').forEach(button => button.addEventListener('click', () => {
+        const wasOpen = button.getAttribute('aria-expanded') === 'true';
+        closeDetail();
+        if (wasOpen) return;
+        content.appendChild(panels[button.dataset.mobilePanel]);
+        document.getElementById('mobile-detail-title').textContent = button.textContent;
+        detail.hidden = false; button.setAttribute('aria-expanded','true'); renderSegments();
+      }));
+      document.getElementById('mobile-detail-close').addEventListener('click', closeDetail);
+      visibility.addEventListener('click', () => {
+        const hide = !hud.classList.contains('tools-hidden'); closeAllMenus();
+        document.getElementById('hall-dismiss')?.click();
+        hud.classList.toggle('tools-hidden',hide); visibility.setAttribute('aria-pressed',String(hide));
+        document.body.classList.toggle('portrait-tools-hidden',hide);
+        visibility.setAttribute('aria-label',hide ? '도구 보이기' : '도구 숨기기'); visibility.title = visibility.getAttribute('aria-label');
+        document.getElementById('mobile-eye-slash').style.display = hide ? 'none' : '';
+      });
+      actions.forEach(node => { if (!node.hasAttribute('aria-label')) node.setAttribute('aria-label',node.title); });
+      new MutationObserver(() => {
+        const ladder = actions[3];
+        ladder.setAttribute('aria-label', ladder.title);
+        if (media.matches && ladder.textContent !== 'LAD') ladder.textContent = 'LAD';
+      }).observe(actions[3], { childList: true, attributes: true, attributeFilter: ['title'] });
+      media.addEventListener('change',sync);
+      const api = { close, isPortrait: () => media.matches, toggle: () => {
+        const wasOpen = !dock.hidden; closeAllMenus();
+        if (!wasOpen) { dock.hidden = false; menuButton.classList.add('active'); menuButton.setAttribute('aria-expanded','true'); renderSegments(); }
+      }};
+      portraitHUD = api; sync(); return api;
     }
 
     /* select 원본(값·change 이벤트는 기존 코드가 그대로 쓴다)을 한 번에 누르는 세그먼트 버튼으로 보여준다.
@@ -834,6 +991,8 @@ function updateManualCameraNear() {
       // 시트는 레일 버튼 재탭·다른 버튼·✕·Esc 로만 닫힌다 (시연 중 사라짐 방지)
       document.querySelectorAll('[data-menu]').forEach(btn => {
         btn.addEventListener('click', () => {
+          if (portraitHUD?.isPortrait()) document.getElementById('hall-dismiss')?.click();
+          if (btn.dataset.menu === 'dd-inst' && portraitHUD?.isPortrait()) { portraitHUD.toggle(); return; }
           const menu = document.getElementById(btn.dataset.menu);
           const wasOpen = menu.classList.contains('open');
           closeAllMenus();
@@ -846,6 +1005,7 @@ function updateManualCameraNear() {
       document.querySelectorAll('.sheet [data-close]').forEach(b => b.addEventListener('click', closeAllMenus));
       document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAllMenus(); });
       renderSegments();
+      bindPortraitHUD();
       showControlHint();
       // 세로 폰에서는 승장문 점검 패널이 같은 자리(운행바 위)에 뜨므로 고장 시트를 닫아 준다.
       document.getElementById('hall-toggle')?.addEventListener('click', () => {
@@ -907,7 +1067,7 @@ function updateManualCameraNear() {
         estopBtn.classList.toggle('armed', estop);
         estopBtn.setAttribute('aria-pressed', String(estop));
         estopBtn.setAttribute('aria-label', estop ? '비상정지 해제' : '비상정지');
-        estopBtn.querySelector('span').textContent = estop ? '해제' : '정지';
+        estopBtn.querySelector('span').textContent = portraitHUD?.isPortrait() ? (estop ? 'RESET' : 'STOP') : (estop ? '해제' : '정지');
       };
       estopBtn.addEventListener('click', e => {
         if (overspeedActive) { updateStatus('v-dir', '조속기 트립 — 고장·점검에서 OVS 복귀', '#f85149'); return; }
@@ -953,14 +1113,14 @@ function updateManualCameraNear() {
 
 
       // 전체 보기 — 더블클릭으로 가까이 간 화면을 처음 운행 시점으로 되돌린다(부품별 카메라 프리셋은 두지 않는다).
-      const midY = Y0 + TOTAL_H * 0.4;
       document.getElementById('c-shaft').addEventListener('click', () => {
         if (overspeedActive || !controls.enabled) return; // 자동 시연·복귀 카메라를 보호한다.
         controls.minDistance = MANUAL_CAMERA.minDistance;
         camera.near = MANUAL_CAMERA.near;
         camera.updateProjectionMatrix();
         gsap.killTweensOf(camera.position); gsap.killTweensOf(controls.target);
-        moveCam(18, midY, 21, 0, midY, 0, false);
+        const home = overviewCameraPose();
+        moveCam(...home.position, ...home.target, false);
       });
       // 권상기 내부: 기어 케이스 절개 조각을 빼내 웜·휠 이물림과 오일 레벨을 보여준다.
       const cutBtn = document.getElementById('tm-cutaway');
@@ -1093,6 +1253,19 @@ function updateManualCameraNear() {
         gsap.to(controls.target, { x: hit.point.x, y: hit.point.y, z: hit.point.z, duration: 0.75, ease: 'power2.inOut', onUpdate: () => controls.update() });
       }, true);
       return e => ignored.has(e);
+    }
+
+    function overviewCameraPose() {
+      if (!matchMedia('(max-width: 600px) and (orientation: portrait)').matches) {
+        const y = Y0 + TOTAL_H * 0.4;
+        return { position: [18, y, 21], target: [0, y, 0] };
+      }
+      // 기계실 지붕과 피트를 상태 카드 아래의 관찰 공간 안에 함께 담는다.
+      const height = TOTAL_H + S.MR_H + 0.6;
+      const y = Y0 + height * 0.5;
+      const distance = Math.max(Math.hypot(18, 21), height / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 0.68));
+      const scale = distance / Math.hypot(18, 21);
+      return { position: [18 * scale, y, 21 * scale], target: [0, y, 0] };
     }
 
     function moveCam(cx, cy, cz, tx, ty, tz, fitWidth = true) {

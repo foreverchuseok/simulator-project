@@ -802,6 +802,56 @@
       :root { --rb-btn: 42px; }
     }
 
+    /* 세로 폰: 중앙은 관찰, 양옆은 조작. 기존 버튼을 옮겨 동일한 상태/이벤트를 쓴다. */
+    .portrait-only { display: none; }
+    @media (max-width: 600px) and (orientation: portrait) {
+      :root { --rb-btn: 44px; --edge: max(10px, env(safe-area-inset-left)); --edge-r: max(10px, env(safe-area-inset-right)); --edge-b: max(10px, env(safe-area-inset-bottom)); --caption-bottom: calc(var(--edge-b) + 60px); }
+      .portrait-only { display: flex; }
+      #statusbar { right: var(--edge-r); height: 56px; padding: 8px 12px; background: rgba(13,20,33,.9); }
+      #statusbar .st-meta { flex: 1; flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; }
+      #v-dir { min-width: 0; max-width: none; flex: 1; font-size: 11px; padding: 5px 7px; }
+      .st-bar { display: none; }
+      #v-spd { font-size: 11px; }
+      #rail { top: calc(var(--edge-t) + 64px); gap: 6px; }
+      .rail-btn { width: 44px; height: 44px; border-radius: 14px; }
+      .runbar { left: auto; right: var(--edge-r); bottom: var(--edge-b); transform: none; flex-direction: column; gap: 6px; padding: 6px; border-radius: 20px; background: rgba(13,20,33,.88); }
+      #fbtns { flex-direction: column-reverse; gap: 6px; order: 0; }
+      #fbtns .c-btn { border-radius: 14px; background: #1c2b40; }
+      #btn-open { order: 1; } #btn-close { order: 2; } #btn-estop { order: 3; border-radius: 14px; margin-top: 4px; }
+      .runbar .rb-sep { display: none; }
+      #btn-estop span { font-size: 8px; }
+      #mobile-tools { position: absolute; left: var(--edge); bottom: calc(var(--edge-b) + 54px); width: 58px; padding: 6px; flex-direction: column; gap: 6px; border-radius: 20px; background: rgba(13,20,33,.9); max-height: calc(100dvh - var(--edge-t) - var(--edge-b) - 182px); overflow-y: auto; scrollbar-width: none; }
+      #mobile-tools[hidden], #mobile-detail[hidden] { display: none; }
+      #mobile-tools button, #mobile-visibility { flex: none; width: 44px; height: 44px; min-width: 44px; min-height: 44px; padding: 0; margin: 0; border: 1px solid var(--ui-line); border-radius: 13px; background: #243248; color: #e2e8f0; font-size: 11px; font-weight: 800; letter-spacing: .03em; }
+      #mobile-tools button.red { background: #a92936; color: white; }
+      #mobile-tools button.amber { background: #b8750c; color: white; }
+      #mobile-tools button.active, #mobile-tools button[aria-expanded="true"] { background: #2563eb; color: white; }
+      #mobile-tools button[aria-pressed="true"] { background: #b8750c; color: white; }
+      #mobile-tools button:disabled { opacity: .45; }
+      #mobile-detail { position: absolute; left: calc(var(--edge) + 66px); right: calc(var(--edge-r) + 66px); bottom: calc(var(--edge-b) + 54px); display: block; padding: 10px; border-radius: 18px; max-height: calc(100dvh - var(--edge-t) - var(--edge-b) - 182px); overflow-y: auto; background: #111e30; }
+      #mobile-detail .sheet-head { margin: 0 0 8px; gap: 2px; }
+      #mobile-detail h3 { font-size: 12px; letter-spacing: .05em; }
+      #mobile-detail .sheet-close { flex: none; }
+      #mobile-detail .mode-row { display: flex; flex-direction: column; gap: 8px; }
+      #mobile-detail .seg { flex-direction: column; }
+      #mobile-detail .mode-row .seg { flex-direction: row; }
+      #mobile-detail .seg button { min-height: 44px; min-width: 44px; }
+      #mobile-detail .field-label { display: none; }
+      #mobile-visibility { position: absolute; left: var(--edge); bottom: var(--edge-b); justify-content: center; align-items: center; background: #142238; }
+      #mobile-visibility svg { width: 21px; height: 21px; }
+      #hud.tools-hidden > :not(#mobile-visibility):not(#statusbar):not(#fault-reset) { visibility: hidden !important; pointer-events: none !important; }
+      #hud.tools-hidden #statusbar { opacity: .8; }
+      .portrait-tools-hidden #pit-ladder-action { visibility: hidden !important; }
+      #fault-reset { top: calc(var(--edge-t) + 64px); height: 44px; max-width: calc(100vw - 178px); padding: 0 9px; font-size: 11px; gap: 4px; }
+      #fault-reset small { display: none; }
+      .sheet { left: var(--edge); right: calc(var(--edge-r) + 66px); top: calc(var(--edge-t) + 118px); bottom: auto; width: auto; max-height: calc(100dvh - var(--edge-t) - var(--edge-b) - 180px); border-radius: 18px; }
+      .sheet::before { display: none; }
+      #dd-view .toggles { grid-template-columns: 1fr; }
+      #dd-view .toggle { flex-direction: row; justify-content: space-between; min-height: 48px; padding: 8px 10px; }
+      #hall-panel, .fault-latched #hall-panel { left: var(--edge); right: calc(var(--edge-r) + 66px); top: calc(var(--edge-t) + 118px); bottom: auto; width: auto; max-height: calc(100dvh - var(--edge-t) - var(--edge-b) - 180px); }
+      .ui-hint { top: calc(var(--edge-t) + 118px); max-width: calc(100vw - 150px); white-space: normal; text-align: center; font-size: 11px; }
+    }
+
     /* 개문발차(UCM) 시연 중에는 근접 사다리 버튼을 숨긴다 (js/ucm-demo.js) */
     .ucm-active #pit-ladder-action { visibility: hidden !important; }
   </style>
@@ -954,6 +1004,18 @@
         </button>
       </div>
 
+      <nav id="mobile-tools" class="portrait-only glass" aria-label="고장·점검 단축 도구" hidden>
+        <button data-mobile-panel="mode" aria-label="운전 모드" aria-expanded="false">MODE</button>
+        <button data-mobile-panel="brake" aria-label="로프브레이크 상태" aria-expanded="false">BRK</button>
+        <button data-mobile-panel="bypass" aria-label="접점 바이패스" aria-expanded="false">BYP</button>
+      </nav>
+      <section id="mobile-detail" class="portrait-only glass" aria-label="점검 설정" hidden>
+        <div class="sheet-head"><h3 id="mobile-detail-title"></h3><button class="sheet-close" id="mobile-detail-close" aria-label="설정 접기">✕</button></div>
+        <div id="mobile-detail-content"></div>
+      </section>
+      <button id="mobile-visibility" class="portrait-only glass" aria-label="도구 숨기기" aria-pressed="false" title="도구 숨기기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path id="mobile-eye-slash" d="M3 3l18 18"/></svg>
+      </button>
     </div><!-- /#hud -->
 
     <div id="loading">
@@ -1360,6 +1422,9 @@
       controls = new THREE.OrbitControls(camera, renderer.domElement);
       controls.enableDamping = true; controls.dampingFactor = 0.07;
       controls.target.set(0, Y0 + TOTAL_H * 0.4, 0);
+      const homePose = overviewCameraPose();
+      camera.position.fromArray(homePose.position);
+      controls.target.fromArray(homePose.target);
       controls.maxPolarAngle = Math.PI / 2 + 0.10; // 지평선 살짝 아래까지만 (지면 관통 방지)
       controls.minDistance = MANUAL_CAMERA.minDistance;
       controls.maxDistance = 90;
@@ -1496,7 +1561,6 @@
       if (camera.position.y < Y0 + 0.35) camera.position.y = Y0 + 0.35;
       PitLadder.update();
       renderer.render(scene, camera);
-      if(typeof renderOverspeedInset==='function')renderOverspeedInset();
     }
 
     init();

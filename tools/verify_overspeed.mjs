@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import {chromium} from 'playwright';
-const root=process.cwd(),out=path.join(root,'.shot-ovs');fs.mkdirSync(out,{recursive:true});
+const root=process.cwd(),out=path.join(root,process.argv.includes('--mobile')?'.shot-ovs-mobile':'.shot-ovs');fs.mkdirSync(out,{recursive:true});
 const server=http.createServer((req,res)=>{
  const f=path.resolve(root,'.'+decodeURIComponent(new URL(req.url,'http://localhost').pathname));
  if(!f.startsWith(root+path.sep)||!fs.existsSync(f)||!fs.statSync(f).isFile()){res.writeHead(404).end();return;}
@@ -11,7 +11,7 @@ const server=http.createServer((req,res)=>{
 });
 await new Promise(r=>server.listen(0,'127.0.0.1',r));let browser,page;const errors=[];
 try{
- browser=await chromium.launch({args:['--enable-gpu']});page=await browser.newPage({viewport:{width:1280,height:850}});page.setDefaultTimeout(90000);
+ browser=await chromium.launch({args:['--enable-gpu']});page=await browser.newPage(process.argv.includes('--mobile')?{viewport:{width:390,height:844},isMobile:true,hasTouch:true}:{viewport:{width:1280,height:850}});page.setDefaultTimeout(90000);
  page.on('pageerror',e=>{errors.push(e.message);console.error('PAGE ERROR',e.message);});
  page.on('requestfailed',r=>console.error('REQUEST FAILED',r.url(),r.failure()?.errorText));
  await page.goto(`http://127.0.0.1:${server.address().port}/index.html`,{waitUntil:'networkidle'});
@@ -40,25 +40,34 @@ try{
  assert.equal(linkage.faces,4);assert.ok(linkage.maxPinY<1e-7);assert.ok(linkage.minSlotClearance>0.001);
  console.log('Pin/fork sweep passed',linkage);
  await page.evaluate(()=>{
+  const btn=document.getElementById('btn-overspeed');startOverspeedFault(btn);
+  if(overspeedActive)throw new Error('OVS must refuse floors below 3');
   const dy=FLOOR_Y[2]+S.CAR_H/2-carGrp.position.y;carGrp.position.y+=dy;cwtGrp.position.y-=dy;curFloor=2;refreshRopes();
   window.ovsSamples=[];window.ovsFrames={};window.ovsLastStage='';
+  window.ovsSounds=[];const sound=MACH.overspeedImpact;MACH.overspeedImpact=kind=>{ovsSounds.push({kind,stage:ovsDemo.stage,shot:ovsDemo.shot});sound(kind);};
   window.ovsProbe=()=>{
    const g=govHandles(),sg=carGrp.userData.safetyGear;
-   ovsSamples.push({stage:ovsDemo.stage,y:carGrp.position.y,cwt:cwtGrp.position.y,wheel:g.wheel.rotation.z,
+   ovsSamples.push({stage:ovsDemo.stage,shot:ovsDemo.shot,broken:ovsDemo.broken,
+     mainVisible:ropeObjs.every(r=>r.carDrop.visible),governorRopes:govRopeSegs.every(r=>r.visible),sparks:!!ovsDemo.sparks?.visible,scissor:renderer.getScissorTest(),
+     y:carGrp.position.y,cwt:cwtGrp.position.y,wheel:g.wheel.rotation.z,
      ratchet:g.ratchet.rotation.z,clampY:carGrp.position.y+carGrp.userData.govClamp.y,
      p:sg.shaft.rotation.x/SG_TRIP_ROT,ropeLocked:g.ropeLocked||false,
      contact:g.switchLever.userData.contactClosed,safetyContact:carGrp.getObjectByName('safetyLimitSwitch').userData.contactClosed});
+   if(ovsDemo.sparks?.visible&&!window.ovsSparkFrame){window.ovsSparkFrame=true;setTimeout(()=>{
+     renderer.render(scene,camera);ovsFrames.impact=renderer.domElement.toDataURL('image/png').split(',')[1];
+   },120);}
    if(ovsDemo.stage!==ovsLastStage){
      const stage=ovsDemo.stage;ovsLastStage=stage;
      requestAnimationFrame(()=>{
-      renderer.render(scene,camera);renderOverspeedInset();
+      renderer.render(scene,camera);
       ovsFrames[stage]=renderer.domElement.toDataURL('image/png').split(',')[1];
      });
    }
   };gsap.ticker.add(ovsProbe);
  });
- await page.click('[data-menu="dd-inst"]');
- await page.click('#btn-overspeed');
+ const press=selector=>process.argv.includes('--mobile')?page.tap(selector):page.click(selector);
+ await press('[data-menu="dd-inst"]');
+ await press('#btn-overspeed');
  assert.equal(await page.evaluate(()=>document.querySelector('.sheet.open')),null,'fault sheet closes while the demo runs');
  console.log('OVS clicked');
  await page.waitForFunction(()=>ovsDemo.stage==='stopped'&&!document.getElementById('btn-overspeed').disabled);
@@ -66,10 +75,17 @@ try{
   gsap.ticker.remove(ovsProbe);
   const gov=govHandles(),m=gov.mechanism;
   const point=new THREE.Vector3(...m.padPoint).sub(gov.topArm.position).applyAxisAngle(new THREE.Vector3(0,0,1),gov.topArm.rotation.z).add(gov.topArm.position);
-  return {samples:ovsSamples,frames:ovsFrames,padGap:point.x-m.ropeFaceX,phase:governorPhase,hidden:ovsDemo.hidden.length};
+  return {samples:ovsSamples,frames:ovsFrames,sounds:ovsSounds,padGap:point.x-m.ropeFaceX,phase:governorPhase,hidden:ovsDemo.hidden.length};
  });
  const stages=[...new Set(data.samples.map(s=>s.stage))];
- for(const stage of ['runaway','centrifugal','electrical','pawl','rope-grip','wedges'])assert.ok(stages.includes(stage),stages.join(','));
+ const expected=['preparing','rope-break','runaway','machine-room','centrifugal','electrical','pawl','rope-grip','rope-locked','linkage-view','linkage','safety-view','wedges'];
+ assert.deepEqual(stages.filter(s=>expected.includes(s)),expected);
+ assert.ok(data.samples.every(s=>!s.scissor),'No split-screen rendering');
+ assert.ok(data.samples.every(s=>s.governorRopes),'Governor rope remains connected and visible');
+ assert.ok(data.samples.filter(s=>s.stage==='runaway').every(s=>s.shot==='shaft'&&s.broken&&!s.mainVisible),'Fall is visible from shaft with broken main ropes');
+ assert.ok(data.samples.filter(s=>s.stage==='centrifugal'||s.stage==='rope-grip').every(s=>s.shot==='governor'),'Mechanism gets its own shot');
+ assert.ok(data.samples.some(s=>s.shot==='safety'&&s.sparks&&s.p>.9),'Sparks coincide with rail grip');
+ assert.deepEqual(data.sounds.map(s=>s.kind),['break','pawl','grip','rail']);
  const coupled=data.samples.filter(s=>s.ropeLocked&&s.p>0&&s.p<1);
  assert.ok(coupled.length>8,'Moving linkage samples');
  const clamp0=coupled[0].clampY,wheel0=coupled[0].wheel;
@@ -81,12 +97,13 @@ try{
  for(const [name,png] of Object.entries(data.frames))fs.writeFileSync(path.join(out,name+'.png'),Buffer.from(png,'base64'));
  delete data.frames;
  await page.screenshot({path:path.join(out,'stopped.png')});
- await page.click('#fault-reset'); // 고장 래치 복귀 버튼(RST)
+ await press('#fault-reset'); // 고장 래치 복귀 버튼(RST)
  await page.waitForFunction(()=>governorPhase==='rest'&&!overspeedActive);
  const reset=await page.evaluate(()=>({p:carGrp.userData.safetyGear.shaft.rotation.x,contact:govHandles().switchLever.userData.contactClosed,
   stage:ovsDemo.stage,ropeLocked:govHandles().ropeLocked,safetyContact:carGrp.getObjectByName('safetyLimitSwitch').userData.contactClosed,
-  hidden:ovsDemo.hidden.length,inset:ovsDemo.inset,caption:document.getElementById('ovs-stage').hidden}));
- assert.ok(Math.abs(reset.p)<1e-8,'Safety shaft returns to zero');assert.equal(reset.contact,true);assert.equal(reset.hidden,0);assert.equal(reset.inset,null);assert.equal(reset.caption,true);
+  hidden:ovsDemo.hidden.length,shot:ovsDemo.shot,broken:ovsDemo.broken,ropes:ropeObjs.every(r=>r.carDrop.visible),sparks:ovsDemo.sparks.visible,caption:document.getElementById('ovs-stage').hidden}));
+ assert.ok(Math.abs(reset.p)<1e-8,'Safety shaft returns to zero');assert.equal(reset.contact,true);assert.equal(reset.hidden,0);assert.equal(reset.shot,null);assert.equal(reset.caption,true);
+ assert.equal(reset.broken,false);assert.equal(reset.ropes,true);assert.equal(reset.sparks,false);
  assert.equal(reset.stage,'rest');assert.equal(reset.ropeLocked,false);assert.equal(reset.safetyContact,true);
  await page.waitForFunction(()=>!moving&&currentState===ELEVATOR_STATE.DOOR_OPEN);
  const rescue=await page.evaluate(()=>({floor:curFloor,error:Math.abs(carGrp.position.y-FLOOR_Y[curFloor]-S.CAR_H/2),controls:controls.enabled}));
