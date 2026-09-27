@@ -1,6 +1,8 @@
 /* 부품설계 205–219p: 설치 완료 상태. 치수 원본 S, 카 로컬 좌표.
    후면/우측은 사용자의 투시용 변경: 중앙 개구 면적 80%의 사각 유리.
    제작/인증 도면이 아닌 시뮬레이터 형상이며 임시 받침목·양중구는 제외한다. */
+// OPB 층표시 — syncAllIndicators()가 승장 인디케이터와 같은 층·방향으로 갱신한다.
+const CarFloorDisplay={draw:null,last:'',set(floor,dir=''){const k=floor+'|'+dir;if(!this.draw||k===this.last)return;this.last=k;this.draw(String(floor),dir);}};
 function buildCarPanels(parent) {
   const W=S.CAR_W, D=S.CAR_D, H=S.CAR_H;
   const root=new THREE.Group(); root.name='carPanelAssembly'; parent.add(root);
@@ -26,7 +28,7 @@ function buildCarPanels(parent) {
     for(let i=0;i<3;i++) {
       const panel=new THREE.Group(); panel.name=`carPanel_${firstNumber+i}`; group.add(panel);
       const a=-length/2+i*length/3, b=a+length/3, cx=(a+b)/2;
-      if(!glazed) box('opaqueSkin',b-a-0.002,height,0.004,steel,cx,mid,0,panel);
+      if(!glazed) box('opaqueSkin',b-a-0.002,height,0.004,CarTerrace.getMaterials().wall,cx,mid,0,panel);
       else {
         for(const y of [bottom+band/2,top-band/2]) box('windowBorder',b-a-0.002,band,0.004,steel,cx,y,0,panel);
         if(i===0||i===2) box('windowBorder',edge,winH,0.004,steel,(i===0?-1:1)*(length-edge)/2,mid,0,panel);
@@ -65,7 +67,7 @@ function buildCarPanels(parent) {
   const runningFace=CarDoor.dimensions().doorZ-CarDoor.spec.panelT/2;
   const returnDepth=runningFace-0.005-innerFace;
   box('entranceHeaderSoffit',S.DOOR_W,0.003,returnDepth,steel,0,bottom+S.DOOR_H-finishLip,innerFace+returnDepth/2);
-  box('carFloorFinish',rearWidth-0.04,finish,sideLength-0.02,M.floor(),0,floorY+finish/2,sideMid);
+  box('carFloorFinish',rearWidth-0.04,finish,sideLength-0.02,CarTerrace.getMaterials().floor,0,floorY+finish/2,sideMid);
   // 실 상면은 4T 바닥과 동일 높이. 두 홈은 실을 분할해 실제 음각으로 만든다.
   const sill=new THREE.Group(); sill.name='carSill'; root.add(sill);
   const sillFront=HALL_SILL_SHAFT_Z-SILL_GAP-CAR_CTR_Z;
@@ -147,6 +149,7 @@ function buildCarPanels(parent) {
     for(const z of [-0.035,0.115]) createCylinder(0.006,0.006,0.02,steel,sign*(sideX+0.015),H/2+0.018,z,roof);
   }
   root.userData={reference:'부품설계.pdf 205–219',glazedSides:['rear','right'],windowAreaRatio:0.8,sideOuterX:sideX+0.004,floorY:bottom};
+  CarTerrace.mount(parent,{sideX,rearZ,frontZ,top,bottom});
   buildCarControls(parent,{floorY:bottom,frontZ,sideX});
 }
 
@@ -184,7 +187,17 @@ function buildCarControls(parent,{floorY,frontZ,sideX}) {
   box('opbRecessedHousing',0.266,1.82,0.018,dark,0,0,-0.008,opb);
   box('opbStainlessFace',0.25,1.80,0.006,metal,0,0,0.004,opb);
   box('opbBlackDisplay',0.205,0.46,0.005,dark,0,0.60,0.010,opb);
-  label('4',0.070,0.12,0,0.66,0.014,opb,'#d9edff','#10161c').name='opbFloorDisplay';
+  const floorDisplay=label('',0.070,0.12,0,0.66,0.014,opb,'#d9edff','#10161c');floorDisplay.name='opbFloorDisplay';
+  CarFloorDisplay.draw=(floor,dir)=>{
+    const map=floorDisplay.material.map,c=map.image,ctx=c.getContext('2d');
+    ctx.fillStyle='#10161c';ctx.fillRect(0,0,c.width,c.height);
+    ctx.fillStyle='#d9edff';ctx.textAlign='center';ctx.textBaseline='middle';
+    if(dir){ctx.font='bold 62px Arial';ctx.fillText(dir==='↑'?'▲':'▼',c.width/2,42);}
+    ctx.font=`bold ${Math.min(dir?150:200,c.width/(Math.max(1,floor.length)*0.66))}px Arial`;
+    ctx.fillText(floor,c.width/2,dir?168:128);
+    map.needsUpdate=true;
+  };
+  CarFloorDisplay.last='';CarFloorDisplay.set(curFloor+1);
   label('Kolesa',0.112,0.027,0,0.77,0.014,opb).name='opbCompanyName';
   for(let i=0;i<4;i++)box('opbSpeakerSlot',0.034,0.002,0.001,metal,0,0.52-i*0.008,0.014,opb);
   function button(name,text,x,y,alarm=false) {

@@ -84,12 +84,14 @@ function buildRopeBrakeOnBed(parent, spec) {
 
 function buildMachineRoomDucts(parent, spec, brake) {
   const {floorY,frontZ,panelX,panelZ,governorX,governorZ,traction}=spec;
+  // 제어반 받침(베이스) 앞면 30mm 안쪽에서 덕트가 나온다. 세로 간선 leftX 는 앞면 +135mm.
+  const panelFrontX=spec.panelFrontX??panelX+.225;
   const root=new THREE.Group();root.name='MachineRoomSafetyWiring';parent.add(root);
   const metal=M.paint(0x8f969a), lid=M.ss(0xaab0b3), cable=M.paint(0x25282c);
-  const height=.022,width=.140, brakeX=.86,govX=governorX+.220,leftX=panelX+.36;
+  const height=.022,width=.140, brakeX=.86,govX=governorX+.220,leftX=panelFrontX+.135;
   const brakeWireZ=brake.root.userData.bridgeZ[0];
   const paths=[ [[leftX,panelZ],[leftX,frontZ],[govX,frontZ],[govX,governorZ+.10]],
-    [[brakeX,frontZ],[brakeX,brakeWireZ]], [[panelX+.20,panelZ],[leftX,panelZ]] ];
+    [[brakeX,frontZ],[brakeX,brakeWireZ]], [[panelFrontX-.03,panelZ],[leftX,panelZ]] ];
   // Traction machine branch: cabinet -> along the -X side of the machine bed (outside the beam pads).
   if(traction)paths.push([[leftX,panelZ],[leftX,traction.zA],[traction.x,traction.zA],[traction.x,traction.zB]]);
   // Low trapezoid cross-section: sloped shoulders rather than a tall box.

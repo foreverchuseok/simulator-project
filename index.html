@@ -46,7 +46,7 @@
     /* ==========================================================================
        HUD (2026-09-26 재설계)
        ▪ 좌상단 상태 카드: 층·방향·상태 칩·속도 막대
-       ▪ 우상단 레일: 고장·점검 / 설정 / 전체 보기 (카메라 프리셋 메뉴 없음 — 부품은 더블클릭으로 접근)
+       ▪ 우상단 레일: 고장·점검 / 설정 / 전체 보기, 그 아래 카 정면 (부품은 더블클릭으로 접근)
        ▪ 하단 운행바: 도어·층·비상정지 — 조작반처럼 항상 보인다
        ▪ 시트: 데스크톱은 우측 패널, 세로 폰은 운행바 위 바텀시트, 가로 폰은 우측 패널
        ========================================================================== */
@@ -262,8 +262,10 @@
       top: var(--edge-t);
       right: var(--edge-r);
       display: flex;
+      align-items: flex-start;
       gap: 8px;
     }
+    .rail-col { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
 
     .rail-btn {
       height: 46px;
@@ -705,6 +707,7 @@
     .part-action:disabled { opacity:.5; cursor:progress; }
     .part-action:focus-visible { outline:2px solid #9fddff; outline-offset:3px; }
     .part-action[hidden], #rope-brake-panel[hidden] { display:none; }
+    .part-icons-hidden .part-action, .part-icons-hidden #part-actions, .part-icons-hidden #hall-panel { display:none !important; }
     #emergency-guide-panel[hidden] { display:none; }
     #emergency-guide-panel { position:fixed; z-index:112; width:280px; max-width:calc(100vw - 16px); padding:14px; border-radius:16px; color:var(--ui-text); font-family:var(--ui-font); box-sizing:border-box; }
     #emergency-guide-panel p { font-size:13px; line-height:1.6; margin:10px 0 0; }
@@ -742,7 +745,7 @@
     #hall-panel label { display: block; margin: 10px 2px 4px; font-size: 12px; font-weight: 600; color: #cbd5e1; }
     #hall-panel button, #hall-panel select { min-height: 44px; border: 1px solid var(--ui-line); border-radius: 11px; background: rgba(255, 255, 255, 0.07); color: var(--ui-text); padding: 6px 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
     #hall-panel select option { color: #0f172a; }
-    #hall-panel #hall-key { background: var(--warn); border-color: transparent; color: #111827; }
+    #hall-panel button:disabled { opacity:.42; cursor:not-allowed; }
     #hall-panel .seg button { border: none; background: transparent; min-height: 44px; padding: 0; }
     #hall-panel .seg button[aria-pressed="true"], #hall-panel .seg button.mode-on { background: #f1f5f9; color: #0f172a; }
     #hall-panel .hold button { background: rgba(255, 255, 255, 0.05); }
@@ -750,7 +753,6 @@
     #hall-panel .hall-row { display: flex; gap: 6px; margin: 8px 0; align-items: center; }
     #hall-panel .hall-row > * { flex: 1; min-width: 0; }
     #hall-panel .hall-row:first-child > strong { flex: 2; }
-    #hall-opening { width: 100%; min-height: 44px; accent-color: var(--warn); }
     #hall-message { display: block; margin: 8px 2px; color: #fde68a; }
     #hall-panel p { margin: 4px 2px 0; font-size: 11.5px; line-height: 1.5; color: var(--ui-sub); }
     @media (max-width: 600px) {
@@ -910,11 +912,23 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="9" cy="7" r="2.4" fill="currentColor"/><circle cx="15" cy="17" r="2.4" fill="currentColor"/></svg>
           <span>설정</span>
         </button>
-        <button class="rail-btn glass" id="c-shaft" title="전체 보기 — 확대한 화면을 처음 시점으로" aria-label="전체 보기">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
-          <span>전체 보기</span>
-        </button>
+        <div class="rail-col">
+          <button class="rail-btn glass" id="c-shaft" data-menu="dd-overview" aria-expanded="false" aria-controls="dd-overview" title="전체 보기·아이콘 표시" aria-label="전체 보기">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+            <span>전체 보기</span>
+          </button>
+          <button class="rail-btn glass" id="c-cabin" title="카 정면 — 탑승 시점으로 카를 따라갑니다. 다시 누르면 해제" aria-label="카 정면" aria-pressed="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="1.5"/><path d="M12 16.5v-4.2"/><path d="M9.2 14.6 12 11.8l2.8 2.8"/></svg>
+            <span>카 정면</span>
+          </button>
+        </div>
       </nav>
+
+      <div class="sheet glass" id="dd-overview" role="dialog" aria-label="전체 보기">
+        <div class="sheet-head"><h3>전체 보기</h3><button class="sheet-close" data-close aria-label="닫기">✕</button></div>
+        <button id="overview-home" class="act-code" style="width:100%;min-height:44px">처음 시점으로</button>
+        <button id="part-icons-toggle" class="act-code" aria-pressed="true" style="width:100%;min-height:44px;margin-top:8px">부품 아이콘 숨기기</button>
+      </div>
 
       <!-- 시트: 고장·점검 -->
       <div class="sheet glass" id="dd-inst" role="dialog" aria-label="고장·점검">
@@ -934,20 +948,7 @@
         </div>
         <p class="note">점검 모드에서 버튼을 누르는 동안만 서행합니다.</p>
 
-        <h4><span class="l-full">점검 도구</span><span class="l-short">점검</span></h4>
-        <div class="acts">
-          <div class="act">
-            <button class="act-code amber" id="hall-toggle" title="층별 승장문 수동 개방 (삼각키)">문</button>
-            <div class="act-txt"><b><span class="l-full">승장문 점검</span><span class="l-short">삼각키</span></b><span>삼각키로 층별 승장문 개방</span></div>
-          </div>
-        </div>
-        <div class="field">
-          <div class="field-label"><span><span class="l-full">BYPASS (접점 우회)</span><span class="l-short">BYP</span></span><output id="bypass-status" aria-live="polite">BYPASS 해제</output></div>
-          <select id="bypass-mode" class="seg-src" aria-label="바이패스 접점 선택" tabindex="-1">
-            <option value="off">해제</option><option value="hall">승장문</option><option value="car">카문</option>
-          </select>
-          <div class="seg" data-for="bypass-mode"></div>
-        </div>
+
       </div>
 
       <!-- 시트: 설정 -->
@@ -962,7 +963,7 @@
         <h4>보기</h4>
         <div class="toggles">
           <button class="toggle" id="tm-cutaway" aria-pressed="false" title="기어 케이스 절개 — 웜·휠 이물림과 오일 레벨"><span><b><span class="l-full">권상기 내부</span><span class="l-short">권상기</span></b><small>기어 케이스 절개 · 웜·휠 이물림</small></span></button>
-          <button class="toggle" id="c-background" aria-pressed="false" title="저녁 하늘과 주변 조명 전환"><span><b><span class="l-full">주변 풍경</span><span class="l-short">풍경</span></b><small>저녁 하늘·조명</small></span></button>
+          <button class="toggle" id="c-background" aria-pressed="false" title="하늘 돔·구름과 주변 조명 전환"><span><b><span class="l-full">주변 풍경</span><span class="l-short">풍경</span></b><small>하늘·구름·조명</small></span></button>
           <button class="toggle active" id="c-mascot" aria-pressed="true" title="기계실 마스코트 표시/숨김"><span><b>캐릭터</b><small>기계실 마스코트 「승강곰」</small></span></button>
         </div>
         <h4 class="help-title">조작 방법</h4>
@@ -1001,7 +1002,6 @@
 
       <nav id="mobile-tools" class="portrait-only glass" aria-label="고장·점검 단축 도구" hidden>
         <button data-mobile-panel="mode" aria-label="운전 모드" aria-expanded="false">MODE</button>
-        <button data-mobile-panel="bypass" aria-label="접점 바이패스" aria-expanded="false">BYP</button>
       </nav>
       <section id="mobile-detail" class="portrait-only glass" aria-label="점검 설정" hidden>
         <div class="sheet-head"><h3 id="mobile-detail-title"></h3><button class="sheet-close" id="mobile-detail-close" aria-label="설정 접기">✕</button></div>
@@ -1047,33 +1047,38 @@
   </div>
 
   <section id="hall-panel" aria-label="승장문 점검" hidden>
-    <div class="hall-row"><strong>승장문 점검</strong><button id="hall-dismiss" aria-label="점검 패널 접기">접기</button></div>
-    <div class="hall-row"><button id="hall-reset" data-inspection-reset title="모든 층의 문과 점검 상태를 한 번에 원복">점검 전체 리셋</button></div>
-    <label for="hall-floor"><span class="l-full">대상 층</span><span class="l-short">층</span></label><div class="hall-row"><select id="hall-floor"></select><button id="hall-observe">관찰 위치</button></div>
-    <div class="hall-row"><button id="hall-key">삼각키 해제</button></div>
-    <label for="hall-opening"><span class="l-full">승장문 개방량</span><span class="l-short">개방량</span></label><input id="hall-opening" type="range" min="0" max="100" value="0" aria-label="승장문 개방량">
-    <div class="hall-row"><button id="hall-open">완전 열기</button><button id="hall-close">닫기</button></div>
+    <div class="hall-row"><strong id="hall-title">승장문 점검</strong><button id="hall-dismiss" aria-label="점검 패널 접기">접기</button></div>
+    <div class="hall-row"><button id="hall-half">반개방</button><button id="hall-open">완전개방</button></div>
+    <div class="hall-row"><button id="hall-close">발 빼고 닫기</button><button id="hall-observe">관찰 위치</button></div>
     <output id="hall-message" aria-live="polite"></output>
-    <!-- 절차 전체를 이 패널에서 끝낸다: 고장·점검 시트의 BYPASS·운전 모드·▲▼ 와 같은 원본을 공유한다 -->
-    <label><span class="l-full">BYPASS (접점 우회)</span><span class="l-short">BYP</span></label><div class="seg" data-for="bypass-mode"></div>
+    <div class="field">
+      <div class="field-label"><span>BYPASS · 접점 우회</span><output id="bypass-status" aria-live="polite">BYPASS 해제</output></div>
+      <select id="bypass-mode" class="seg-src" aria-label="바이패스 접점 선택" tabindex="-1"><option value="off">해제</option><option value="hall">승장문</option><option value="car">카문</option></select>
+      <div class="seg" data-for="bypass-mode"></div>
+    </div>
     <label><span class="l-full">운전 모드</span><span class="l-short">운전</span></label>
     <div class="mode-row">
       <div class="seg"><button data-ins="off" title="자동운전"><small>AUT</small>자동</button><button data-ins="on" title="점검(수동)운전"><small>INS</small>점검</button></div>
       <div class="hold"><button data-ins-dir="1" title="점검 상승 (누르는 동안 서행)" aria-label="점검 상승" disabled>▲<span class="l-full"> 상승</span></button><button data-ins-dir="-1" title="점검 하강 (누르는 동안 서행)" aria-label="점검 하강" disabled>▼<span class="l-full"> 하강</span></button></div>
     </div>
-    <p>삼각키 해제 → 문 열기 → 승장문 BYPASS → ▲·▼를 누르는 동안 이동.</p>
-    <p>복귀: 닫기 → 재잠금 → BYPASS 해제 → 자동.</p>
+    <div class="hall-row"><button id="hall-reset" data-inspection-reset>점검 전체 리셋</button></div>
   </section>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
   <script src="js/config.js"></script>
+  <script src="js/pit-tensioner.js"></script>
   <script src="js/environment.js"></script>
   <script src="js/machine-room-safety.js"></script>
+  <script src="js/control-panel.js"></script>
+  <script src="js/machine-room-power.js"></script>
+  <script src="js/building-lights.js"></script>
+  <script src="js/emergency-call.js"></script>
   <script src="js/mascot.js"></script>
   <script src="js/hall-interlock.js"></script>
   <script src="js/car-door-transmission.js"></script>
+  <script src="js/car-terrace.js"></script>
   <script src="js/car-door.js"></script>
   <script src="js/car-wiring.js"></script>
   <script src="js/car-underbody.js"></script>
@@ -1082,11 +1087,13 @@
   <script src="js/safety-device.js"></script>
   <script src="js/elevator.js"></script>
   <script src="js/hall-finish.js"></script>
+  <script src="js/hall-retention.js"></script>
   <script src="js/hall-emergency-guide.js"></script>
   <script src="js/pit-ladder.js"></script>
   <script src="js/ucm-demo.js"></script>
   <script src="js/part-actions.js"></script>
   <script src="js/ui.js"></script>
+  <script src="js/hall-inspector.js"></script>
   <script src="js/hall-manual.js"></script>
 
   <script>
@@ -1273,9 +1280,18 @@
        이 Z 띠 안의 벽부 돌출은 벽면에서 ~65mm 이하로 둔다(버섯 버튼은 띠 앞쪽 Z 로 뺀다). */
     const SHAFT_LIGHT_Z = CAR_RAIL_Z - 0.95; // 레일 브라켓 뒤 벽면
     const TC_COLOR = 0x73777c; // 현장 회색 PVC, 재질에서 sRGB→linear 변환
-    /* 기계실 케이블 관통구 X — 제어반 캐비닛(폭 0.3 × scale 1.5) 바깥이라야 인출이 보인다.
-       T 케이블 고정단도 천장을 타고 여기로 모여 제어반으로 들어간다(187p 1항). */
-    const MR_CABLE_HOLE_X = (-(S.SHAFT_W / 2) + 0.15) + 0.15 * 1.5 + 0.14;
+    /* 기계실 좌측벽 배치 (앞 +Z 끝 → 뒤 -Z 끝):
+       ① 제어반(앞쪽, 승강로 간선 HARNESS_Z 인입 위) → ② ARD·차단기함 자리(추후 설치) → ③ 개방 레버·수동 핸들(뒤 끝 SHAFT_BACK_Z).
+       제어반 실제 크기 = CONTROL_PANEL_SPEC 설계치수 × scale[x,y,z]. */
+    const CP_WIDTH = CONTROL_PANEL_SPEC.width * CONTROL_PANEL_SPEC.scale[0];
+    const CP_DEPTH = CONTROL_PANEL_SPEC.depth * CONTROL_PANEL_SPEC.scale[2];
+    const CP_X = -(S.SHAFT_W / 2) + MR_LINING_T + CONTROL_PANEL_SPEC.wallGap + CP_DEPTH / 2;
+    const CP_FRONT_X = CP_X + CP_DEPTH / 2;
+    const CP_Z = HARNESS_Z + 0.03 - CP_WIDTH / 2;              // 간선 인입이 캐비닛 +Z 끝에서 30mm 안쪽
+    /* 기계실 케이블 관통구 X = 바닥 덕트의 세로 간선 중심(CP_FRONT_X + 0.135, machine-room-safety.js leftX).
+       T 케이블·접점선은 HARNESS_Z 에서 덕트 안으로 올라와 덕트를 따라 제어반 받침으로 들어간다(187p 1항). */
+    const MR_CABLE_HOLE_X = CP_FRONT_X + 0.135;
+    const MR_DUCT_Y = Y0 + TOTAL_H + 0.02 + 0.011;             // 기계실 마감 바닥 + 덕트 높이 절반
     const SHAFT_CEIL_Y = Y0 + TOTAL_H - 0.245;  // 승강로 천장 슬래브 하면
     const CEIL_RUN_Y   = SHAFT_CEIL_Y - 0.10;   // 천장 밑 수평 배선 높이
 
@@ -1544,10 +1560,12 @@
       DoorBypass.bind();
       HallManual.bind();
       buildShaftCableHarness(); // 도어 접점 검정 배선 · 조명 · 상하 스위치 박스
+      BuildingLights.build();   // 승강로 등 3로 스위치(피트·상부) + 기계실 일자형 LED 단독 스위치
       buildCounterWeight();     // 후면 균형추
       buildTravelCable();       // 이동케이블(T-Cable) U 곡면 — 카·균형추 위치에서 길이 역산 (16.4)
       buildWireRopes();         // 로프
       buildPitFoundation();     // 피트
+      EmergencyCall.build();    // 비상통화장치 4곳 + 기계실 인터폰 표시등 (js/emergency-call.js)
       PitLadder.build(pitGrp);  // 좌측벽 측면 접이식 피트 사다리 (정지·조명 스위치 옆)
       UCMDemo.build(scene);     // 개문발차 시연 승객 「퉁이」(평소 숨김)
       updateBuffers();          // 동적 완충기
@@ -1571,6 +1589,7 @@
 
     function renderLoop() {
       requestAnimationFrame(renderLoop);
+      syncCabinView();
       HallInterlock.updateAll(hatchDoors);
       DoorBypass.update();
       // 시브 자전은 여기서 시간 기반으로 흉내내지 않는다.
@@ -1581,7 +1600,12 @@
       controls.update();
       if (camera.position.y < Y0 + 0.35) camera.position.y = Y0 + 0.35;
       PartActions.update();
+      HallManual.update();
       PitLadder.update();
+      ControlPanel.update();
+      MachineRoomPower.update();
+      BuildingLights.update();
+      EmergencyCall.update(performance.now() / 1000);
       renderer.render(scene, camera);
     }
 

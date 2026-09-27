@@ -90,7 +90,8 @@ const CarDoor = (() => {
       const g=group(side<0?'carDoorL':'carDoorR',side*d.cx,0,0,carGrp);
       g.userData={cx:side*d.cx,ox:side*d.ox,type:'car-door',side};
       const h=d.top-d.bottom, mid=(d.top+d.bottom)/2;
-      box('carDoorSkin',d.width,h,0.002,skin,0,mid,d.doorZ-spec.panelT/2+0.001,g);
+      const doorSkin=box('carDoorSkin',d.width,h,0.002,skin,0,mid,d.doorZ-spec.panelT/2+0.001,g);
+      CarTerrace.dressDoor(doorSkin,g,side,d);
       const sticker=new THREE.Mesh(new THREE.PlaneGeometry(.13,.13),side>0?getStickerMats().L:getStickerMats().R);
       sticker.name=side>0?'carDoorHandSticker':'carDoorLeanSticker';
       const meetInset=.065+.040;
@@ -387,7 +388,7 @@ const CarDoor = (() => {
     q.gate.userData={type:'car-gate-switch',contactClosed:q.gateClosed};
     q.sensors[0].userData.active=s<.001;q.sensors[1].userData.active=s>=q.d.stroke-.001;
     const candidate=q.coupledFloor>=0?hatchDoors[q.coupledFloor]:null;
-    const h=candidate&&!candidate.manualActive?candidate:null;
+    const h=candidate&&(!candidate.manualActive||candidate.manualCoupled)?candidate:null;
     if(h) {
       h.hook.rotation.z=-h.latch.liftRad*Math.max(unlock,h.keyRatio||0);
       // Only the physical mating floor receives the car's displacement.

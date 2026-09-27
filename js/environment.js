@@ -296,118 +296,93 @@
       const R = _concRnd(20260813);
       const P = CONC_PX;                             // m → px
 
-      // ① 바탕 시멘트色 + 사진 그레인
-      //    ★사진이 밝은 회백색이라 soft-light 알파를 올리면 벽이 하얗게 뜬다. 0.45 고정.
-      a.fillStyle = '#78756e'; a.fillRect(0, 0, W, H);
+      /* 2026-09-27 "우충충하다" → 건축 노출 콘크리트(제물치기 마감) 톤으로 정리.
+         밝은 쿨그레이 바탕, 합판 패널별 미세 톤차, 또렷한 이음선·폼타이 구멍이 주인공이고
+         누수·녹물·곰팡이 같은 얼룩은 거의 지운다. 요철(노멀)로 시멘트 결은 살린다. */
+      // ① 바탕 + 사진 그레인
+      a.fillStyle = '#a4a39f'; a.fillRect(0, 0, W, H);
       h.fillStyle = '#808080'; h.fillRect(0, 0, W, H);
       if (photo) {
-        a.save(); a.globalCompositeOperation = 'soft-light'; a.globalAlpha = 0.45;
+        a.save(); a.globalCompositeOperation = 'soft-light'; a.globalAlpha = 0.30;
         a.drawImage(photo, 0, 0, W, H); a.restore();
-        h.save(); h.globalCompositeOperation = 'soft-light'; h.globalAlpha = 0.55;
+        h.save(); h.globalCompositeOperation = 'soft-light'; h.globalAlpha = 0.60;
         h.drawImage(photo, 0, 0, W, H); h.restore();
       }
+      // 미세 모래 결(밝고 어두운 점 반반) — 알베도는 아주 옅게, 높이맵은 확실히
+      for (let i = 0; i < 9000; i++) {
+        const x = R() * W, y = R() * H, light = R() < 0.5;
+        a.fillStyle = light ? 'rgba(236,236,232,0.10)' : 'rgba(96,96,92,0.08)';
+        a.fillRect(x, y, 1.2, 1.2);
+        h.fillStyle = light ? 'rgba(170,170,170,0.35)' : 'rgba(90,90,90,0.35)';
+        h.fillRect(x, y, 1.2, 1.2);
+      }
 
-      // ②' 거푸집 패널별 색조 편차 — 합판을 돌려 쓰면 판마다 물 먹은 정도가 달라
-      //     사각형 단위로 톤이 갈린다. 실사에서 제일 먼저 눈에 띄는 특징이다.
+      // ② 거푸집 패널별 톤차 — 제물치기 콘크리트의 핵심 인상. 옅고 고르게.
       for (let px = 0; px < W; px += CONC_PANEL_W * P) {
         for (let py = 0; py < H; py += CONC_PANEL_H * P) {
-          const al = 0.03 + R() * 0.06;
-          a.fillStyle = R() < 0.36 ? `rgba(102,97,88,${(al * 0.8).toFixed(3)})`
-                                   : `rgba(214,209,199,${(al * 1.5).toFixed(3)})`;
+          const al = 0.025 + R() * 0.045;
+          a.fillStyle = R() < 0.45 ? `rgba(120,120,116,${al.toFixed(3)})` : `rgba(226,226,222,${(al * 1.3).toFixed(3)})`;
           a.fillRect(px, py, CONC_PANEL_W * P, CONC_PANEL_H * P);
+          // 판 안쪽 가장자리가 살짝 밝게(합판 모서리 흡수 차이)
+          const g = a.createLinearGradient(px, 0, px + CONC_PANEL_W * P, 0);
+          g.addColorStop(0, 'rgba(236,236,232,0.05)'); g.addColorStop(0.5, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(236,236,232,0.05)');
+          a.fillStyle = g; a.fillRect(px, py, CONC_PANEL_W * P, CONC_PANEL_H * P);
         }
       }
 
-      // ② 타설 얼룩 — 크고 옅은 반점으로 색 편차를 만든다
-      for (let i = 0; i < 80; i++) {
-        const x = R() * W, y = R() * H, r = (0.15 + R() * 0.55) * P;
-        const al = 0.04 + R() * 0.07;
+      // ③ 아주 옅고 큰 구름 무늬 — 균일함 속의 자연스러운 편차만
+      for (let i = 0; i < 26; i++) {
+        const x = R() * W, y = R() * H, r = (0.3 + R() * 0.7) * P, al = 0.025 + R() * 0.035;
         const g = a.createRadialGradient(x, y, 0, x, y, r);
-        // ★어두운 반점이 우세하면 벽에 곰팡이 핀 것처럼 보인다. 밝은 쪽을 다수로 둔다.
-        g.addColorStop(0, R() < 0.36 ? `rgba(104,99,90,${al * 0.8})` : `rgba(206,201,192,${al * 1.6})`);
+        g.addColorStop(0, R() < 0.4 ? `rgba(128,128,124,${al})` : `rgba(230,230,226,${al * 1.2})`);
         g.addColorStop(1, 'rgba(0,0,0,0)');
         a.fillStyle = g; a.beginPath(); a.arc(x, y, r, 0, Math.PI * 2); a.fill();
       }
 
-      // ③ 누수·녹물 얼룩 — 세로로 흘러내림. ±W/±H 로 감아 그려 타일 심을 지운다.
-      for (let i = 0; i < 30; i++) {
-        const x = R() * W, y0 = R() * H;
-        const len = (0.4 + R() * 2.4) * P;
-        const wd = (0.01 + R() * 0.055) * P;
-        const rust = R() < 0.20;
-        const al = 0.035 + R() * 0.075;
-        for (const dx of [-W, 0, W]) for (const dy of [-H, 0, H]) {
-          const g = a.createLinearGradient(0, y0 + dy, 0, y0 + dy + len);
-          g.addColorStop(0, 'rgba(0,0,0,0)');
-          g.addColorStop(0.14, rust ? `rgba(138,106,68,${al * 1.1})` : `rgba(98,93,84,${al * 0.85})`);
-          g.addColorStop(1, 'rgba(0,0,0,0)');
-          a.fillStyle = g; a.fillRect(x + dx - wd / 2, y0 + dy, wd, len);
-        }
-      }
-
-      // ④ 곰보(기포 자국) — 잔점. 가까이서 봐야 보이는 거칠기.
-      //    ★수가 많거나 진하면 벽이 깨 뿌린 것처럼 지저분해진다. 수·농도 모두 낮게 두고
-      //      거칠기는 알베도가 아니라 높이맵(요철)이 내도록 맡긴다.
-      for (let i = 0; i < 380; i++) {
-        const x = R() * W, y = R() * H, r = 0.4 + R() * 1.4;
-        a.fillStyle = `rgba(104,99,90,${(0.04 + R() * 0.09).toFixed(3)})`;
+      // ④ 곰보(기포) — 작고 드물게, 요철 위주
+      for (let i = 0; i < 220; i++) {
+        const x = R() * W, y = R() * H, r = 0.5 + R() * 1.2;
+        a.fillStyle = `rgba(110,110,106,${(0.05 + R() * 0.07).toFixed(3)})`;
         a.beginPath(); a.arc(x, y, r, 0, Math.PI * 2); a.fill();
-        h.fillStyle = `rgba(96,96,96,${(0.26 + R() * 0.34).toFixed(3)})`;
+        h.fillStyle = `rgba(80,80,80,${(0.35 + R() * 0.3).toFixed(3)})`;
         h.beginPath(); h.arc(x, y, r, 0, Math.PI * 2); h.fill();
       }
 
-      // ⑤ 타설 이음 — 타일 경계(y=0, y=H)가 회차 경계다. 아래로 물때가 흐른다.
+      // ⑤ 타설 이음 — 가는 선 하나와 아주 옅은 음영만
       const pourLine = (y) => {
-        // 이음 위쪽(먼저 굳은 회차)은 밝게 뜨고 아래쪽은 물때가 흘러 어둡다.
-        const up = a.createLinearGradient(0, y - 0.40 * P, 0, y);
-        up.addColorStop(0, 'rgba(206,201,192,0)');
-        up.addColorStop(1, 'rgba(206,201,192,0.20)');
-        a.fillStyle = up; a.fillRect(0, y - 0.40 * P, W, 0.40 * P);
-        const g = a.createLinearGradient(0, y - 6, 0, y + 0.55 * P);
-        g.addColorStop(0, 'rgba(134,128,118,0.26)');
-        g.addColorStop(0.06, 'rgba(86,81,73,0.38)');
-        g.addColorStop(1, 'rgba(100,95,86,0)');
-        a.fillStyle = g; a.fillRect(0, y - 6, W, 0.55 * P + 6);
-        a.fillStyle = 'rgba(68,64,57,0.52)'; a.fillRect(0, y - 1, W, 2);
-        h.fillStyle = 'rgba(96,96,96,0.85)'; h.fillRect(0, y - 1, W, 2);
+        const g = a.createLinearGradient(0, y, 0, y + 0.25 * P);
+        g.addColorStop(0, 'rgba(110,110,106,0.10)'); g.addColorStop(1, 'rgba(110,110,106,0)');
+        a.fillStyle = g; a.fillRect(0, y, W, 0.25 * P);
+        a.fillStyle = 'rgba(92,92,88,0.40)'; a.fillRect(0, y - 1, W, 2);
+        h.fillStyle = 'rgba(96,96,96,0.9)'; h.fillRect(0, y - 1, W, 2);
       };
       pourLine(0); pourLine(H);
 
-      // ⑥ 거푸집 합판 이음선 — 어두운 실선 + 바로 옆 밝은 립(그라우트 누출)
-      const seam = (x, y, w, hh) => {
-        a.fillStyle = 'rgba(84,79,71,0.34)'; a.fillRect(x, y, w, hh);
-        h.fillStyle = 'rgba(104,104,104,0.85)'; h.fillRect(x, y, w, hh);
+      // ⑥ 합판 이음선 — 또렷한 가는 홈 + 양옆 밝은 모서리(각 선 살아 있게)
+      const seam = (x, y, w, hh, vertical) => {
+        a.fillStyle = 'rgba(96,96,92,0.42)'; a.fillRect(x, y, w, hh);
+        a.fillStyle = 'rgba(236,236,232,0.22)';
+        if (vertical) { a.fillRect(x - 2, y, 1.5, hh); a.fillRect(x + w + 0.5, y, 1.5, hh); }
+        else { a.fillRect(x, y - 2, w, 1.5); a.fillRect(x, y + hh + 0.5, w, 1.5); }
+        h.fillStyle = 'rgba(92,92,92,0.95)'; h.fillRect(x, y, w, hh);
       };
-      const lip = (x, y, w, hh) => { a.fillStyle = 'rgba(198,193,184,0.16)'; a.fillRect(x, y, w, hh); };
-      for (let px = 0; px <= W; px += CONC_PANEL_W * P) {          // 세로 이음
-        seam(px - 1, 0, 2, H); lip(px + 1, 0, 2, H);
-      }
-      for (let py = CONC_PANEL_H * P; py < H; py += CONC_PANEL_H * P) {  // 가로 이음
-        seam(0, py - 1, W, 2); lip(0, py + 1, W, 2);
-      }
+      for (let px = 0; px <= W; px += CONC_PANEL_W * P) seam(px - 1, 0, 2, H, true);
+      for (let py = CONC_PANEL_H * P; py < H; py += CONC_PANEL_H * P) seam(0, py - 1, W, 2, false);
 
-      // ⑦ 폼타이 콘 구멍 — 패널 1/4 지점 격자(0.6 × 0.9m). 이음선과 겹치지 않는다.
-      const holeR = 0.011 * P;                                     // Ø22mm
+      // ⑦ 폼타이 구멍 — 모르타르로 메운 원형 캡(오목) + 둘레 밝은 테. 물때 없음.
+      const holeR = 0.013 * P;                                    // Ø26mm
       for (let cx = 0.3 * P; cx < W; cx += 0.6 * P) {
         for (let cy = 0.45 * P; cy < H; cy += 0.9 * P) {
-          const g = a.createRadialGradient(cx, cy - holeR * 0.25, holeR * 0.15, cx, cy, holeR);
-          g.addColorStop(0, 'rgba(56,52,46,0.88)');
-          g.addColorStop(0.62, 'rgba(84,79,71,0.75)');
-          g.addColorStop(1, 'rgba(130,125,116,0.18)');
+          const g = a.createRadialGradient(cx, cy - holeR * 0.3, holeR * 0.1, cx, cy, holeR);
+          g.addColorStop(0, 'rgba(118,118,114,0.55)');
+          g.addColorStop(0.75, 'rgba(92,92,88,0.62)');
+          g.addColorStop(1, 'rgba(92,92,88,0)');
           a.fillStyle = g; a.beginPath(); a.arc(cx, cy, holeR, 0, Math.PI * 2); a.fill();
-          // 빛이 위에서 들어오므로 구멍 하단 테두리가 밝다
-          a.strokeStyle = 'rgba(214,209,199,0.34)'; a.lineWidth = 1.6;
-          a.beginPath(); a.arc(cx, cy + 0.6, holeR * 0.94, 0.15 * Math.PI, 0.85 * Math.PI); a.stroke();
-          // 구멍에서 흘러내린 물때 — ★짧고 넓게. 길고 가늘면 긁힌 자국처럼 보인다.
-          const dl = (0.06 + R() * 0.20) * P;
-          const dg = a.createLinearGradient(0, cy, 0, cy + dl);
-          dg.addColorStop(0, R() < 0.18 ? 'rgba(126,96,62,0.19)' : 'rgba(94,89,80,0.17)');
-          dg.addColorStop(1, 'rgba(94,89,80,0)');
-          a.fillStyle = dg; a.fillRect(cx - holeR * 0.85, cy, holeR * 1.7, dl);
-          // 높이맵 — 실제로 파인 구멍
+          a.strokeStyle = 'rgba(236,236,232,0.28)'; a.lineWidth = 1.4;
+          a.beginPath(); a.arc(cx, cy + 0.5, holeR * 1.02, 0.1 * Math.PI, 0.9 * Math.PI); a.stroke();
           const hg = h.createRadialGradient(cx, cy, 0, cx, cy, holeR);
-          hg.addColorStop(0, 'rgba(44,44,44,1)');
-          hg.addColorStop(0.70, 'rgba(70,70,70,0.9)');
+          hg.addColorStop(0, 'rgba(70,70,70,1)');
+          hg.addColorStop(0.8, 'rgba(60,60,60,0.9)');
           hg.addColorStop(1, 'rgba(128,128,128,0)');
           h.fillStyle = hg; h.beginPath(); h.arc(cx, cy, holeR, 0, Math.PI * 2); h.fill();
         }
@@ -450,7 +425,7 @@
       nrm.repeat.set(e.u, e.v); nrm.anisotropy = 8;
       e.mat.map = tex;
       e.mat.normalMap = nrm;
-      e.mat.normalScale = new THREE.Vector2(0.9, 0.9);
+      e.mat.normalScale = new THREE.Vector2(0.7, 0.7);
       e.mat.color.setHex(0xffffff);
       e.mat.needsUpdate = true;
     }
@@ -473,7 +448,7 @@
 
     function shaftConcMat(u, v) {
       const mat = new THREE.MeshStandardMaterial({
-        color: 0x8d8981, roughness: 0.97, metalness: 0.0
+        color: 0xa4a39f, roughness: 0.9, metalness: 0.0
       });
       const e = { mat, u: Math.max(u, 0.01), v: Math.max(v, 0.01) };
       if (_concSrc) _applyConc(e);
@@ -1036,8 +1011,8 @@
       parent.add(grp);
     }
 
-    const BG_SKY = 0x222b49;       // 저녁 하늘
-    const BG_HORIZON = 0x98969c;   // 저녁 안개
+    const BG_SKY = 0x4db4ee;       // 맑은 하늘
+    const BG_HORIZON = 0xd4f1fb;   // 수평선 옅은 하늘색
     const BG_GROUND = 'rgba(74,69,63,1)';
     const BG_FOG_D = 0.0050;       // 지형 가장자리가 horizon 색에 녹아드는 안개 밀도
 
@@ -1050,20 +1025,38 @@
       return new THREE.CanvasTexture(cvs);
     }
 
+    // 아랫면이 평평한 동글동글 구름(캔버스에 한 번만 그린다). asp = 세로/가로 반경 비.
+    function paintCartoonCloud(ctx, cx, cy, r, asp) {
+      const puffs = [[-1.25, .15, .62], [-.55, -.25, .9], [.25, -.45, 1.0], [1.0, -.1, .78], [1.6, .2, .52], [.2, .2, .85]];
+      const draw = (dy, color) => {
+        ctx.fillStyle = color;
+        for (const [dx, py, pr] of puffs) {
+          ctx.beginPath(); ctx.ellipse(cx + dx * r, cy + (py * r + dy) * asp, pr * r, pr * r * asp, 0, 0, Math.PI * 2); ctx.fill();
+        }
+      };
+      ctx.save();
+      ctx.beginPath(); ctx.rect(0, 0, ctx.canvas.width, cy + 0.42 * r * asp); ctx.clip(); // 평평한 밑면
+      draw(0.16 * r, 'rgba(214,236,250,0.95)');  // 아랫단 연한 그늘
+      draw(0, 'rgba(255,255,255,0.97)');
+      ctx.restore();
+    }
+
     function applyStylizedSky() {
       // 화면 고정 background 대신 하늘 돔 — 저각도에서도 지평선 아래가 horizon 색으로 이어짐
-      const skyTex = createBgGradientTexture(4, 256, (ctx, w, h) => {
+      const skyTex = createBgGradientTexture(2048, 512, (ctx, w, h) => {
         const g = ctx.createLinearGradient(0, 0, 0, h);
-        // 캔버스 위=천정, 0.5=수평선, 아래=지평선 아래 하늘.
-        // 청보라 천정에서 따뜻한 저녁 지평선으로 이어진다.
-        g.addColorStop(0.00, '#344358');
-        g.addColorStop(0.35, '#69798d');
-        g.addColorStop(0.47, '#a7a3ac');
-        g.addColorStop(0.52, '#c4aaa2'); // 수평선 밝은 띠
-        g.addColorStop(0.64, '#98969c');
-        g.addColorStop(1.00, '#98969c');
+        // 캔버스 위=천정, 0.5=수평선, 아래=지평선 아래(바다에 가려짐).
+        g.addColorStop(0.00, '#35a6ec');
+        g.addColorStop(0.30, '#63c0f3');
+        g.addColorStop(0.45, '#aee2f9');
+        g.addColorStop(0.51, '#d4f1fb'); // 수평선 = 안개색
+        g.addColorStop(1.00, '#d4f1fb');
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, w, h);
+        // 동글동글한 만화 구름 — 구면 매핑이라 세로 반경을 절반으로 그린다(이음매 u=0/1 은 비운다).
+        [[0.05, 0.41, 9], [0.14, 0.35, 7], [0.24, 0.42, 11], [0.34, 0.37, 8], [0.44, 0.43, 10], [0.55, 0.36, 12],
+         [0.65, 0.42, 8], [0.75, 0.38, 11], [0.85, 0.43, 8], [0.94, 0.36, 7]]
+          .forEach(([x, y, r]) => paintCartoonCloud(ctx, x * w, y * h, r * w / 1024, 0.5));
       });
       skyTex.magFilter = THREE.LinearFilter;
       skyTex.minFilter = THREE.LinearFilter;
@@ -1851,10 +1844,11 @@
       if (!outdoorPresentation) return;
       const p = outdoorPresentation;
       p.detailed = Boolean(enabled);
-      // 전시 광장과 조경은 공통 배경이며 토글은 하늘·조명만 전환한다.
+      // 잔디 섬과 조경은 공통 배경이며 토글은 하늘·조명만 전환한다.
       if (p.landscape) p.landscape.visible = false;
       if (p.buildings) p.buildings.visible = false;
-      p.sky.visible = p.detailed;
+      // 하늘 돔은 두 모드 공통(toneMapped:false) — 화면 고정 텍스처는 ACES 에 구름이 잿빛으로 바랜다. 바다·잔디가 수평선 아래를 덮는다.
+      p.sky.visible = true;
       scene.background = p.detailed ? p.background : p.simpleBackground;
       scene.fog = p.detailed ? p.fog : p.simpleFog;
       renderer.toneMappingExposure = p.detailed ? p.exposure : p.simpleExposure;
@@ -1870,7 +1864,7 @@
        넓은 지면 대신 승강로 + 보도블록 광장 footprint 만 남긴 사각 지반을 세운다.
        상면은 기존 외부 지면과 같은 Y0-0.03 레벨이라 보도블록·계단·램프 높이는 그대로다.
        옆면은 수직 절벽으로 곧게 내려가다 아래쪽에서 안개에 녹는다. */
-    const BUILD_GROUND_SCENERY = false; // 이전 풀밭·개울·도심 배경은 생성하지 않는다.
+    const BUILD_GROUND_SCENERY = false; // 옛 실사풍 풀밭·개울·도심 배경(코드 보존). 현재 배경은 buildMeadowIsland.
     const PLINTH_MARGIN = 4.0;          // 보도블록·승강로 바깥으로 남는 흙·잔디 테두리 폭
     const PLAZA_BACK_MARGIN = 2.5;      // 승강로 뒤편으로 깔리는 보도블록 폭
     const PLAZA_FRONT_MARGIN = 3.0;     // 경사로 발치 앞 보도블록 여유
@@ -1970,47 +1964,244 @@
       return geo;
     }
 
-    // 정적 저녁 배경: 텍스처는 초기 한 번 생성하며 추가 광원/그림자 패스는 없다.
-    function buildDuskPlaza(parent) {
-      const surface = createBgGradientTexture(256, 256, (ctx, w, h) => {
-        ctx.fillStyle = '#a0a3a8'; ctx.fillRect(0, 0, w, h);
-        for (let i = 0; i < 1600; i++) {
-          const x = vertHash(i, 2, 3, 41) * w, y = vertHash(i, 5, 7, 42) * h;
-          ctx.fillStyle = i % 2 ? 'rgba(255,255,255,0.035)' : 'rgba(30,35,45,0.035)';
-          ctx.fillRect(x, y, 1, 1);
-        }
-      });
-      surface.encoding = THREE.sRGBEncoding;
-      surface.wrapS = surface.wrapT = THREE.RepeatWrapping; surface.repeat.set(36, 36);
-      const groundMat = M.conc(0x454d5b); groundMat.map = surface;
-      const floor = new THREE.Mesh(new THREE.CircleGeometry(180, 96), groundMat);
-      floor.name = 'duskPlazaGround'; floor.rotation.x = -Math.PI/2; floor.position.y = Y0 - 0.03;
-      floor.receiveShadow = true; floor.userData = { type: 'outdoor-ground' }; parent.add(floor);
+    /* ── 동물의숲풍 섬 배경 (2026-09-27) ──────────────────────────────
+       저녁 배경 반려 → 밝은 잔디 섬 · 모래사장 · 바다 · 뒤편 언덕(절벽 단) · 꽃 · 덤불 · 앉아 있는 동물. 나무는 반려(시선 분산).
+       ▪ 전부 outdoorGround 소속이라 더블탭 포커스·검증 도구의 배경 제외 목록이 그대로 적용된다.
+       ▪ 장식은 정점 컬러로 병합해 몇 번의 draw call 로 끝낸다. 그림자 캐스트·광원·매 프레임 갱신 없음.
+       ▪ 키 큰 장식은 두지 않는다. 언덕은 기본 시점(+X+Z 약 49°) 반대편 먼 곳이라 승강로를 가리지 않는다.
+       ▪ 동물은 특정 게임 캐릭터가 아닌 일반 동물(고양이·토끼·곰·강아지·오리)을 둥글게 만든 것이다. */
+    const MEADOW_R = 60;                  // 잔디 섬 반경
+    const MEADOW_HILL = { a0: 190, a1: 292, r0: 36, r1: 57, h: 2.2 }; // 뒤편 언덕 단(방위°, 반경 m, 높이 m)
+    const MEADOW_POND = { x: -15, z: 13, r: 3.2 };
+    const MEADOW_ENV = 0.35;              // 흰 스튜디오 환경맵이 파스텔 색을 바래게 해서 낮춘다
+    const MEADOW_COL = {
+      grass: '#5aae3f', grassLight: '#74c455',
+      sand: '#f3e3b3', sea: '#46c3dc', cliff: '#b99d78',
+      eye: '#2a2320', blush: '#ff9fae'
+    };
+    const MEADOW_ANIMALS = {
+      cat:    { main: '#f4a95c', belly: '#fff2dd', inner: '#f7b5b5', nose: '#e0707a' },
+      rabbit: { main: '#f7f0e8', belly: '#ffffff', inner: '#f9b8c8', nose: '#e58a9a' },
+      bear:   { main: '#a8744a', belly: '#ecd0a8', inner: '#ecd0a8', nose: '#3b2a22' },
+      dog:    { main: '#ecd3a3', belly: '#fff6e6', inner: '#9c6b45', nose: '#3b2a22' },
+      duck:   { main: '#ffd94f', belly: '#ffe98f', beak: '#ff9a3c', paw: '#ff9a3c' }
+    };
 
-      const concrete=M.conc(0x454b53), cap=M.conc(0x5a6068), dark=M.paint(0x293137), amber=M.emit(0xe2b888,0.25);
-      const box=(w,h,d,mat,x,y,z)=>{const o=createBox(w,h,d,mat,x,y,z,parent);o.castShadow=false;o.receiveShadow=false;return o;};
-      // Low boundary walls leave open space around the exhibit.
-      for(const [x,z,w] of [[-31,-27,22],[25,-35,24],[-42,12,12]]) {
-        box(w,.8,.42,concrete,x,Y0+.4,z);
-        box(w+.12,.08,.55,cap,x,Y0+.84,z);
+    const _mPos = new THREE.Vector3(), _mScl = new THREE.Vector3(), _mQ = new THREE.Quaternion(), _mE = new THREE.Euler();
+    function meadowTRS(x, y, z, sx = 1, sy = sx, sz = sx, rx = 0, ry = 0, rz = 0) {
+      return new THREE.Matrix4().compose(_mPos.set(x, y, z), _mQ.setFromEuler(_mE.set(rx, ry, rz)), _mScl.set(sx, sy, sz));
+    }
+
+    // 정점 컬러 병합 버킷 — 부품을 행렬째 더하고 마지막에 메시 하나로 만든다.
+    function meadowBatch() {
+      const pos = [], nor = [], col = [], c = new THREE.Color();
+      return {
+        add(geo, color, matrix) {
+          const g = (geo.index ? geo.toNonIndexed() : geo.clone()).applyMatrix4(matrix);
+          const p = g.attributes.position.array, n = g.attributes.normal.array;
+          c.set(color).convertSRGBToLinear(); // 정점 컬러는 선형으로 읽힌다 — 16진 디자인 색 그대로 보이게
+          for (let i = 0; i < p.length; i += 3) {
+            pos.push(p[i], p[i + 1], p[i + 2]); nor.push(n[i], n[i + 1], n[i + 2]); col.push(c.r, c.g, c.b);
+          }
+          g.dispose();
+        },
+        mesh(material, name) {
+          const geo = new THREE.BufferGeometry();
+          geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+          geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+          geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+          geo.computeBoundingSphere();
+          const m = new THREE.Mesh(geo, material);
+          m.name = name; m.castShadow = false; m.receiveShadow = false;
+          m.userData = { type: 'outdoor-meadow' };
+          return m;
+        }
+      };
+    }
+
+    function meadowGrassCanvas() {
+      const cvs = document.createElement('canvas'); cvs.width = cvs.height = 256;
+      const ctx = cvs.getContext('2d');
+      ctx.fillStyle = MEADOW_COL.grass; ctx.fillRect(0, 0, 256, 256);
+      // 동글동글한 잔디 얼룩 + 작은 V자 풀잎 무늬
+      for (let i = 0; i < 26; i++) {
+        ctx.fillStyle = i % 2 ? 'rgba(116,196,85,0.40)' : 'rgba(72,150,50,0.30)';
+        ctx.beginPath();
+        ctx.arc(vertHash(i, 1, 2, 61) * 256, vertHash(i, 3, 4, 62) * 256, 10 + vertHash(i, 5, 6, 63) * 22, 0, Math.PI * 2);
+        ctx.fill();
       }
-      // A few distant trees, shared geometry and two instanced draw calls.
-      const trees=[[-39,-32,4.5],[-29,-34,5.2],[-21,-39,4.0],[20,-42,4.4],[31,-43,5.0],[41,-34,4.3],[-47,7,4.5]];
-      const leaves = new THREE.InstancedMesh(new THREE.SphereGeometry(1,12,10),M.conc(0x1e302d),trees.length*3);
-      const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(.09,.16,1,8),M.conc(0x34332f),trees.length);
-      const dummy = new THREE.Object3D();
-      trees.forEach(([x,z,h],i)=>{
-        dummy.position.set(x,Y0+h*.3,z);dummy.scale.set(1,h*.6,1);dummy.updateMatrix();trunks.setMatrixAt(i,dummy.matrix);
-        [[0,.73,0,.32,.29],[.18,.64,.06,.24,.22],[-.18,.62,-.05,.23,.20]].forEach(([dx,dy,dz,sx,sy],j)=>{
-          dummy.position.set(x+dx*h,Y0+dy*h,z+dz*h);dummy.scale.set(h*sx,h*sy,h*sx*.85);dummy.updateMatrix();leaves.setMatrixAt(i*3+j,dummy.matrix);
-        });
+      ctx.strokeStyle = MEADOW_COL.grassLight; ctx.lineWidth = 2.2; ctx.lineCap = 'round';
+      for (let i = 0; i < 70; i++) {
+        const x = vertHash(i, 7, 8, 64) * 256, y = vertHash(i, 9, 10, 65) * 256, s = 3 + vertHash(i, 11, 12, 66) * 3;
+        ctx.beginPath(); ctx.moveTo(x - s, y - s); ctx.lineTo(x, y + s * 0.6); ctx.lineTo(x + s, y - s); ctx.stroke();
+      }
+      return cvs;
+    }
+    function meadowGrassTexture(canvas, repeat) {
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.encoding = THREE.sRGBEncoding; tex.anisotropy = 4;
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(repeat, repeat);
+      return tex;
+    }
+
+    // 앉아 있는 치비 동물 — 로컬 +Z 가 얼굴. s=1 이면 귀 포함 약 1.1m.
+    function addMeadowAnimal(batch, shadows, geo, kind, x, z, s, look, baseY = Y0 - 0.03) {
+      const P = MEADOW_ANIMALS[kind];
+      const base = meadowTRS(x, baseY, z, s, s, s, 0, Math.atan2(look[0] - x, look[1] - z), 0);
+      const part = (g, c, px, py, pz, sx, sy = sx, sz = sx, rx = 0, ry = 0, rz = 0) =>
+        batch.add(g, c, base.clone().multiply(meadowTRS(px, py, pz, sx, sy, sz, rx, ry, rz)));
+      const { sph, lo, cone } = geo;
+      part(sph, P.main, 0, .30, 0, .26, .30, .24);                 // 몸통
+      part(sph, P.belly, 0, .28, .13, .18, .21, .12);              // 배
+      for (const k of [-1, 1]) {
+        part(sph, P.main, k * .17, .10, .05, .11, .09, .15);        // 앉은 뒷다리
+        part(lo, P.paw || P.belly, k * .12, .045, .21, .075, .05, .10); // 발
+        part(sph, P.main, k * .15, .30, .19, .06, .11, .07, -.5, 0, k * .2); // 앞발
+      }
+      part(sph, P.main, 0, .78, .02, .30, .27, .27);               // 머리
+      if (P.beak) part(sph, P.beak, 0, .715, .29, .11, .035, .10);
+      else {
+        part(sph, P.belly, 0, .71, .25, .12, .075, .07);           // 주둥이
+        part(lo, P.nose, 0, .745, .315, .03, .022, .02);
+      }
+      for (const k of [-1, 1]) {
+        part(lo, MEADOW_COL.eye, k * .11, .815, .258, .034, .05, .02);
+        part(lo, '#ffffff', k * .10, .835, .276, .011);
+        part(lo, MEADOW_COL.blush, k * .185, .725, .222, .05, .028, .014, 0, k * .62, 0);
+        if (kind === 'cat') {
+          part(cone, P.main, k * .16, 1.03, 0, .085, .15, .07, 0, 0, -k * .3);
+          part(cone, P.inner, k * .158, 1.02, .035, .05, .10, .03, 0, 0, -k * .3);
+        } else if (kind === 'rabbit') {
+          part(sph, P.main, k * .09, 1.17, -.01, .06, .21, .04, 0, 0, -k * .15);
+          part(sph, P.inner, k * .092, 1.16, .022, .035, .16, .015, 0, 0, -k * .15);
+        } else if (kind === 'bear') {
+          part(sph, P.main, k * .2, .99, 0, .085, .085, .05);
+          part(sph, P.inner, k * .2, .985, .032, .05, .05, .02);
+        } else if (kind === 'dog') {
+          part(sph, P.inner, k * .27, .76, 0, .07, .17, .06, 0, 0, k * .25);
+        } else if (kind === 'duck') {
+          part(sph, P.main, k * .25, .32, -.02, .06, .16, .13, 0, 0, k * .3); // 날개
+        }
+      }
+      if (kind === 'cat') part(sph, P.main, .16, .07, -.2, .05, .05, .17, 0, .8, 0);
+      if (kind === 'rabbit') part(sph, '#ffffff', 0, .14, -.24, .075);
+      if (kind === 'bear') part(sph, P.main, 0, .12, -.24, .06);
+      if (kind === 'dog') part(sph, P.main, 0, .22, -.26, .05, .05, .14, -.9);
+      if (kind === 'duck') part(sph, P.main, 0, 1.06, -.02, .03, .07, .03, -.3);
+      shadows.add(geo.disc, '#000000', meadowTRS(x, baseY + 0.006, z, .38 * s, 1, .34 * s));
+    }
+
+    function buildMeadowIsland(parent, plaza) {
+      const g = new THREE.Group(); g.name = 'meadowIsland'; parent.add(g);
+      const topY = Y0 - 0.03;
+      const grassCanvas = meadowGrassCanvas();
+
+      // 1) 잔디 섬 — 상면은 피트 기초보다 30mm 아래(기존 계약)
+      const ground = new THREE.Mesh(new THREE.CircleGeometry(MEADOW_R, 96),
+        new THREE.MeshStandardMaterial({ map: meadowGrassTexture(grassCanvas, MEADOW_R / 2.5), roughness: 1, metalness: 0, envMapIntensity: MEADOW_ENV }));
+      ground.name = 'meadowGround'; ground.rotation.x = -Math.PI / 2; ground.position.y = topY;
+      ground.receiveShadow = true; ground.userData = { type: 'outdoor-ground' }; g.add(ground);
+
+      // 2) 모래사장 → 바다
+      const beachProfile = [[MEADOW_R - 0.1, 0], [MEADOW_R + 2, -0.06], [MEADOW_R + 6, -0.30], [MEADOW_R + 9, -0.62]]
+        .map(([r, y]) => new THREE.Vector2(r, y));
+      const beach = new THREE.Mesh(new THREE.LatheGeometry(beachProfile, 96),
+        new THREE.MeshStandardMaterial({ color: new THREE.Color(MEADOW_COL.sand).convertSRGBToLinear(), roughness: 1, metalness: 0, envMapIntensity: MEADOW_ENV, side: THREE.DoubleSide }));
+      beach.name = 'meadowBeach'; beach.position.y = topY; g.add(beach);
+      const sea = new THREE.Mesh(new THREE.CircleGeometry(190, 64),
+        new THREE.MeshStandardMaterial({ color: MEADOW_COL.sea, roughness: 0.35, metalness: 0, envMapIntensity: MEADOW_ENV }));
+      sea.name = 'meadowSea'; sea.rotation.x = -Math.PI / 2; sea.position.y = topY - 0.42; g.add(sea);
+      const foam = new THREE.Mesh(new THREE.RingGeometry(MEADOW_R + 6.4, MEADOW_R + 7.6, 96),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, depthWrite: false }));
+      foam.name = 'meadowFoam'; foam.rotation.x = -Math.PI / 2; foam.position.y = topY - 0.40; g.add(foam);
+
+      // 3) 뒤편 언덕 단 — 둥근 모서리 절벽. 기본 시점 반대편이라 승강로를 가리지 않는다.
+      const H = MEADOW_HILL, hillShape = new THREE.Shape(), pts = [];
+      const polar = (a, r) => new THREE.Vector2(Math.cos(a * Math.PI / 180) * r, -Math.sin(a * Math.PI / 180) * r); // shape y = -Z
+      for (let i = 0; i <= 24; i++) { const a = H.a0 + (H.a1 - H.a0) * i / 24; pts.push(polar(a, H.r1 + (vertHash(i, 2, 3, 71) - 0.5) * 3)); }
+      for (let i = 24; i >= 0; i--) { const a = H.a0 + 4 + (H.a1 - H.a0 - 8) * i / 24; pts.push(polar(a, H.r0 + (vertHash(i, 4, 5, 72) - 0.5) * 4)); }
+      hillShape.setFromPoints(pts);
+      const cliffTex = createBgGradientTexture(4, 64, (ctx, w, h) => {
+        ctx.fillStyle = MEADOW_COL.cliff; ctx.fillRect(0, 0, w, h);
+        for (let y = 6; y < h; y += 16) { ctx.fillStyle = 'rgba(120,92,60,0.35)'; ctx.fillRect(0, y, w, 3); }
       });
-      leaves.name='duskPlazaTrees';trunks.name='duskPlazaTrunks';parent.add(leaves,trunks);
-      // Small warm path lights, without continuous runway-like strips.
-      for(const x of [-8,8]) for(const z of [0,8,16]) {
-        box(.12,.42,.12,dark,x,Y0+.21,z);
-        box(.13,.045,.13,amber,x,Y0+.40,z);
+      cliffTex.encoding = THREE.sRGBEncoding; cliffTex.wrapS = cliffTex.wrapT = THREE.RepeatWrapping; cliffTex.repeat.set(1, 1 / 2.4);
+      const hill = new THREE.Mesh(
+        new THREE.ExtrudeGeometry(hillShape, { depth: H.h, bevelEnabled: true, bevelThickness: 0.35, bevelSize: 0.45, bevelSegments: 3, curveSegments: 4 }),
+        [new THREE.MeshStandardMaterial({ map: meadowGrassTexture(grassCanvas, 1 / 2.5), roughness: 1, metalness: 0, envMapIntensity: MEADOW_ENV }),
+         new THREE.MeshStandardMaterial({ map: cliffTex, roughness: 1, metalness: 0, envMapIntensity: MEADOW_ENV })]);
+      hill.name = 'meadowHill'; hill.rotation.x = -Math.PI / 2; hill.position.y = topY - 0.35; g.add(hill);
+      const polarOf = (x, z) => [(Math.atan2(z, x) * 180 / Math.PI + 360) % 360, Math.hypot(x, z)];
+      const nearHill = (x, z) => { const [a, r] = polarOf(x, z); return a > H.a0 - 6 && a < H.a1 + 6 && r > H.r0 - 5 && r < H.r1 + 4; };
+
+      // 4) 연못
+      const pond = new THREE.Mesh(new THREE.CircleGeometry(MEADOW_POND.r, 40),
+        new THREE.MeshStandardMaterial({ color: 0x62d3ea, roughness: 0.25, metalness: 0, envMapIntensity: MEADOW_ENV }));
+      pond.name = 'meadowPond'; pond.rotation.x = -Math.PI / 2; pond.position.set(MEADOW_POND.x, topY + 0.012, MEADOW_POND.z); g.add(pond);
+
+      const geo = {
+        sph: new THREE.SphereGeometry(1, 16, 10), lo: new THREE.SphereGeometry(1, 8, 6),
+        petal: new THREE.SphereGeometry(1, 6, 4), cyl: new THREE.CylinderGeometry(1, 1, 1, 10),
+        cone: new THREE.ConeGeometry(1, 1, 14), disc: new THREE.CircleGeometry(1, 20).rotateX(-Math.PI / 2),
+        ring: new THREE.RingGeometry(1, 1.16, 40).rotateX(-Math.PI / 2)
+      };
+      const deco = meadowBatch(), shadows = meadowBatch();
+      deco.add(geo.ring, '#efe2b8', meadowTRS(MEADOW_POND.x, topY + 0.014, MEADOW_POND.z, MEADOW_POND.r, 1, MEADOW_POND.r));
+      [[-1.2, .8, .42], [.9, -1.1, .36], [1.4, 1.0, .3]].forEach(([dx, dz, r]) =>
+        deco.add(geo.cyl, '#5fbf5a', meadowTRS(MEADOW_POND.x + dx, topY + 0.02, MEADOW_POND.z + dz, r, .01, r)));
+
+      // 5) 나무는 두지 않는다(2026-09-27 사용자 지시: 시선이 나무로 쏠림). 꽃·덤불·동물만 남긴다.
+      const inPlaza = (x, z, pad) => x > plaza.x0 - pad && x < plaza.x1 + pad && z > plaza.z0 - pad && z < plaza.z1 + pad;
+      const nearPond = (x, z, pad) => Math.hypot(x - MEADOW_POND.x, z - MEADOW_POND.z) < MEADOW_POND.r + pad;
+
+      // 6) 꽃 — 광장 테두리와 잔디밭에 무리 지어 핀다(무릎 아래 높이라 시야를 가리지 않는다).
+      const flowerCols = ['#ff5b6e', '#ff9ccf', '#ffd84a', '#ffffff', '#ff9a3c', '#b48cff'];
+      const clusters = [];
+      for (let i = 0; clusters.length < 30 && i < 400; i++) {
+        const a = vertHash(i, 5, 1, 91) * Math.PI * 2, r = 8 + vertHash(i, 6, 2, 92) * 26;
+        const x = Math.cos(a) * r, z = Math.sin(a) * r;
+        if (inPlaza(x, z, 1.2) || nearPond(x, z, 1) || nearHill(x, z)) continue;
+        clusters.push([x, z, flowerCols[i % flowerCols.length]]);
       }
+      for (const [cx, cz, colr] of clusters) for (let k = 0; k < 7; k++) {
+        const x = cx + (vertHash(cx, k, cz, 93) - 0.5) * 2.2, z = cz + (vertHash(cz, k, cx, 94) - 0.5) * 2.2;
+        const s = 1.5 + vertHash(x, z, k, 95) * .5, y = topY + .2 * s;
+        deco.add(geo.cyl, '#3f8f34', meadowTRS(x, topY + .1 * s, z, .015, .2 * s, .015));
+        for (const d of [-1, 1]) deco.add(geo.petal, '#4fa83c', meadowTRS(x + d * .05 * s, topY + .03 * s, z, .06 * s, .018 * s, .03 * s, 0, 0, d * .5));
+        for (let p = 0; p < 5; p++) {  // 살짝 위로 젖힌 동그란 꽃잎 5장
+          const pa = p * Math.PI * 2 / 5 + k;
+          deco.add(geo.petal, colr, meadowTRS(x + Math.cos(pa) * .052 * s, y + .008 * s, z + Math.sin(pa) * .052 * s,
+            .042 * s, .026 * s, .036 * s, 0, -pa, .45));
+        }
+        deco.add(geo.lo, colr === '#ffd84a' ? '#ff9a3c' : '#ffd84a', meadowTRS(x, y + .018 * s, z, .026 * s, .022 * s, .026 * s));
+      }
+
+      // 7) 광장 옆 낮은 둥근 덤불(무릎 높이)
+      [[plaza.x0 - 1.1, plaza.z0 + 1.5], [plaza.x0 - 1.1, plaza.z1 - 1.5], [plaza.x1 + 1.1, plaza.z0 + 1.5],
+       [plaza.x0 - 1.1, (plaza.z0 + plaza.z1) / 2]].forEach(([x, z], i) => {
+        deco.add(geo.sph, '#58b64a', meadowTRS(x, topY + .28, z, .62, .45, .55));
+        for (let k = 0; k < 6; k++) {
+          const a = k * 1.05 + i;
+          deco.add(geo.lo, i % 2 ? '#ffffff' : '#ff9ccf', meadowTRS(x + Math.cos(a) * .45, topY + .42 + (k % 2) * .12, z + Math.sin(a) * .4, .07));
+        }
+        shadows.add(geo.disc, '#000000', meadowTRS(x, topY + 0.006, z, .7, 1, .62));
+      });
+
+      // 8) 앉아 있는 동물들 — 승강로 입구(계단)를 바라본다.
+      const look = [0, (plaza.z0 + plaza.z1) / 2];
+      addMeadowAnimal(deco, shadows, geo, 'cat', plaza.x0 - 1.4, 5.2, 1, look);
+      addMeadowAnimal(deco, shadows, geo, 'dog', plaza.x0 - 1.6, 7.6, 1.05, look);
+      addMeadowAnimal(deco, shadows, geo, 'rabbit', plaza.x1 + 1.4, 3.0, .95, look);
+      addMeadowAnimal(deco, shadows, geo, 'bear', plaza.x1 + 1.5, 9.4, 1.1, look);
+      addMeadowAnimal(deco, shadows, geo, 'duck', plaza.x0 - 1.2, plaza.z1 + 1.4, .95, look);
+      addMeadowAnimal(deco, shadows, geo, 'duck', plaza.x0 - 0.3, plaza.z1 + 1.9, .55, look);
+      addMeadowAnimal(deco, shadows, geo, 'rabbit', MEADOW_POND.x + 3.9, MEADOW_POND.z - 1.2, .9, [MEADOW_POND.x, MEADOW_POND.z]);
+
+      g.add(deco.mesh(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0, envMapIntensity: MEADOW_ENV }), 'meadowDecor'));
+      g.add(shadows.mesh(new THREE.MeshBasicMaterial({ color: 0x2c5a26, transparent: true, opacity: 0.22,
+        depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }), 'meadowBlobShadows'));
+      Object.values(geo).forEach(x => x.dispose());
+      return ground;
     }
 
     function buildSkyIsland(parent, cover, topY) {
@@ -2054,19 +2245,17 @@
       shaftHole.moveTo(-wallOut, -shaftBackOutZ); shaftHole.lineTo(-wallOut, -approach.lobbyBackZ);
       shaftHole.lineTo(wallOut, -approach.lobbyBackZ); shaftHole.lineTo(wallOut, -shaftBackOutZ);
       plazaShape.holes.push(shaftHole);
-      // 반복 보도블록 무늬 대신 이음매 없는 무광 연구기지 바닥.
+      // 캡 UV = 미터 좌표이므로 2m 타일 반복 0.5 (makePaverMaterial(1,1)) — 따뜻한 벽돌 산책로
       const plaza = new THREE.Mesh(new THREE.ExtrudeGeometry(plazaShape, { depth: 0.03, bevelEnabled: false }),
-        M.conc(0x596371));
+        makePaverMaterial(1, 1));
       plaza.name = 'plazaPaver';
       plaza.rotation.x = -Math.PI / 2; // shape (x, y) → 월드 (x, -z), 압출 +Y
       plaza.position.y = Y0 + 0.025;   // 상면 Y0+0.055 (기존 보도블록 상면 유지)
       plaza.receiveShadow = true;
       g.add(plaza);
 
-      // 피트 기초·계단·램프의 기존 높이를 유지한다.
-      buildDuskPlaza(g);
-
-      // 전시 광장은 저녁 하늘과 낮은 조경으로 주 피사체 주변을 비운다.
+      // 동물의숲풍 잔디 섬. 피트 기초·계단·램프의 기존 높이를 유지한다.
+      buildMeadowIsland(g, { x0: -paverW / 2, x1: paverW / 2, z0: paverZ0, z1: paverZ1 });
 
       parent.add(g);
     }
@@ -2098,22 +2287,12 @@
       }
 
       scene.add(bgGrp);
-      const floor = scene.getObjectByName('duskPlazaGround'); // 피트 바닥보다 30mm 아래
-      const studioHorizon = '#98969c';
-      const studioBackground = createBgGradientTexture(4, 512, (ctx, w, h) => {
-        const gradient = ctx.createLinearGradient(0, 0, 0, h);
-        gradient.addColorStop(0, '#65758b');
-        gradient.addColorStop(0.28, '#969aab');
-        gradient.addColorStop(0.49, '#c4aaa2');
-        gradient.addColorStop(0.63, '#aaa0a2');
-        gradient.addColorStop(1, studioHorizon);
-        ctx.fillStyle = gradient; ctx.fillRect(0, 0, w, h);
-      });
-      studioBackground.encoding = THREE.sRGBEncoding;
+      const floor = scene.getObjectByName('meadowGround'); // 피트 바닥보다 30mm 아래
+      const studioHorizon = '#d4f1fb';
       outdoorPresentation = {
         detailed: false, buildings: bgGrp, landscape: scene.getObjectByName('outdoorLandscape'),
         sky: scene.getObjectByName('skyDome'), floor, background: scene.background, fog: scene.fog,
-        simpleBackground: studioBackground, simpleFog: new THREE.FogExp2(studioHorizon, 0.009),
+        simpleBackground: new THREE.Color(studioHorizon), simpleFog: new THREE.FogExp2(studioHorizon, 0.009),
         exposure: renderer.toneMappingExposure, simpleExposure: 0.95,
         lighting: environmentLighting.map((light, i) => ({ light, original: light.intensity, studio: [0.7, 1.8, 0.65, 0.45][i] }))
       };
@@ -2986,13 +3165,13 @@
         }
         return group;
       }
-      // 제어반 하부에서 벽면으로 내려오는 검정 접점선과 조명선.
-      const mrY = Y0 + TOTAL_H + 0.055;
+      // 제어반 받침에서 바닥 덕트를 따라 나와 관통구로 내려가는 검정 접점선과 조명선.
       // 도어 접점 간선은 피트 정지 박스 상면 글랜드로 들어간다(정지 스위치 직렬).
       const stopTopY = PIT_STOP_Y + PIT_STOP_H / 2;
       [HARNESS_Z, SHAFT_LIGHT_Z - 0.40].forEach((z,i) => {
         const bottomY = i ? pitY+0.85 : stopTopY+0.012;
-        wire([[MR_CABLE_HOLE_X-0.16,mrY,HARNESS_Z],[MR_CABLE_HOLE_X,mrY,HARNESS_Z],
+        // 제어반 받침 → 바닥 덕트 속(MR_DUCT_Y)을 따라 HARNESS_Z → 관통구로 하강
+        wire([[CP_FRONT_X-0.05,MR_DUCT_Y,CP_Z],[MR_CABLE_HOLE_X,MR_DUCT_Y,CP_Z],[MR_CABLE_HOLE_X,MR_DUCT_Y,HARNESS_Z],
           [MR_CABLE_HOLE_X,CEIL_RUN_Y,HARNESS_Z],[wireX,CEIL_RUN_Y,HARNESS_Z],
           [wireX,CEIL_RUN_Y,z],[wireX,bottomY,z]],i ? 'lightingRiser' : 'doorContactRiser');
         for(let y=pitY+1; y<CEIL_RUN_Y; y+=1.5) if(y>bottomY)
@@ -3146,10 +3325,31 @@
         const lamp=new THREE.Group(); lamp.name='shaftLED_'+i;
         lamp.userData={type:'shaft-led',level:i-1}; lamp.position.set(wallX+0.055,y,SHAFT_LIGHT_Z); G.add(lamp);
         createBox(0.055,0.055,0.65,M.paint(0xc6cbce),0,0,0,lamp);
-        createBox(0.022,0.038,0.59,M.emit(0xf3f6ff,0.85),0.038,0,0,lamp);
+        createBox(0.022,0.038,0.59,M.emit(0xf3f6ff,0.85),0.038,0,0,lamp).name='shaftLEDDiffuser'; // 점등은 js/building-lights.js 3로 회로
         [-0.32,0.32].forEach(z=>createBox(0.065,0.062,0.022,metal,0,0,z,lamp));
         wire([[wireX,y,SHAFT_LIGHT_Z-0.40],[wireX,y,SHAFT_LIGHT_Z-0.325]],lamp.name+'Wire');
       });
+      /* 피트 점검운전 스위치(STOP·NORMAL/INSPECTION·COMMON·UP·DOWN) — 피트 조명 −Z 끝 아래(사용자 표시 1523351).
+         형상: blender/scripts/pit_inspection_station.py → models/gltf/pit_inspection_station.glb (원점 = 벽면, +Z 앞).
+         케이블은 위 글랜드 → 조명 아래로 −Z → 조명 간선 뒤(벽 쪽 12mm)에 붙어 같은 클립으로 올라가
+         천장 간선 위를 따라 기계실 관통구 → 바닥 덕트 → 제어반(점검 신호는 제어반·이동케이블을 거쳐 카탑 우선회로와 연동). */
+      const PIT_INS = { y: pitY + 0.58, z: SHAFT_LIGHT_Z - 0.205 };
+      const pitIns = new THREE.Group(); pitIns.name = 'pitInspectionStation';
+      pitIns.userData = { type: 'pit-inspection-station' };
+      pitIns.position.set(wallX, PIT_INS.y, PIT_INS.z); pitIns.rotation.y = Math.PI / 2; G.add(pitIns);
+      new THREE.GLTFLoader().load('models/gltf/pit_inspection_station.glb', gltf => {
+        gltf.scene.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+        pitIns.add(gltf.scene); pitIns.userData.ready = true;
+      }, undefined, e => console.error('[pit inspection] GLB load failed', e));
+      {
+        const hideX = wireX - 0.012, riserZ = SHAFT_LIGHT_Z - 0.40, runY = pitY + 0.80, ceilY = CEIL_RUN_Y + 0.012;
+        const exitX = wallX + 0.0206, exitY = PIT_INS.y + 0.135 + 0.025;   // GLB extras.cableExit (H/2 + 0.025)
+        wire([[exitX, exitY, PIT_INS.z], [exitX, runY, PIT_INS.z], [hideX, runY, PIT_INS.z - 0.03], [hideX, runY, riserZ],
+          [hideX, ceilY, riserZ], [hideX, ceilY, HARNESS_Z - 0.012], [MR_CABLE_HOLE_X - 0.012, ceilY, HARNESS_Z - 0.012],
+          [MR_CABLE_HOLE_X - 0.012, MR_DUCT_Y, HARNESS_Z - 0.012], [MR_CABLE_HOLE_X - 0.012, MR_DUCT_Y, CP_Z],
+          [CP_FRONT_X - 0.05, MR_DUCT_Y, CP_Z]], 'pitInspectionCable');
+        createBox(0.018, 0.004, 0.024, metal, hideX, runY + 0.0, PIT_INS.z - 0.10, G);   // 조명 아래 수평 구간 새들 클립
+      }
       scene.add(G);
     }
 
@@ -3278,38 +3478,13 @@
       // ③ 균형추측 주로프 — 기계실 바닥 & 승강로 천장 (Z=CWT)
       addRopeHole(0, mrFloorY, CWT_CENTER_Z, rhW, rhD, floorSillH);
 
-      /* 4. 제어반(Control Panel) 및 덕트 (좌측 벽면에 밀착, 전면부로 이동) */
-      const cpMat = M.paint(0xd1d5db); // 밝은 회색 (본체)
-      const doorMat = M.paint(0x4b5563); // 짙은 쑥색/회색 (문)
-      const baseMat = M.paint(0x374151); // 어두운 회색 (하부 받침대)
-      const topMat = M.paint(0x9ca3af); // 짙은 회색 (상단 환기 박스)
-      
-      // 좌측 벽면(-(S.SHAFT_W/2))에 붙임. 전면부 방향으로 이동(0.8m)
-      const panelX = -(S.SHAFT_W / 2) + 0.15; 
-      const panelZ = 0.8; // 전면부(앞벽 쪽)
-      const panelGrp = new THREE.Group();
-      panelGrp.position.set(panelX, my, panelZ);
-      
-      // 하부 받침대 (Plinth)
-      createBox(0.3, 0.1, 0.6, baseMat, 0, 0.06, 0, panelGrp);
-      // 메인 캐비닛 본체
-      createBox(0.3, 1.3, 0.6, cpMat, 0, 0.76, 0, panelGrp);
-      // 상단 환기 박스
-      createBox(0.25, 0.2, 0.55, topMat, 0, 1.51, 0, panelGrp);
-      // 상단 환기구 슬릿(Slit) 디테일
-      for (let i = 0; i < 4; i++) {
-        createBox(0.01, 0.02, 0.4, M.paint(0x111111), 0.125, 1.45 + i * 0.04, 0, panelGrp);
-      }
-
-      // 양개형 문 (+X 즉 중앙을 바라보게)
-      createBox(0.02, 1.25, 0.28, doorMat, 0.16, 0.76, -0.145, panelGrp); // 좌측 문
-      createBox(0.02, 1.25, 0.28, doorMat, 0.16, 0.76,  0.145, panelGrp); // 우측 문
-      // 손잡이
-      createBox(0.02, 0.1, 0.01, M.paint(0x111111), 0.17, 0.76, -0.02, panelGrp);
-      createBox(0.02, 0.1, 0.01, M.paint(0x111111), 0.17, 0.76,  0.02, panelGrp);
-
-      panelGrp.scale.setScalar(1.5);
-      mrGrp.add(panelGrp);
+      /* 4. 제어반 — SICON-4000형 양문 캐비닛 GLB (js/control-panel.js, 형상 원본 control_panel_sicon.py)
+         좌측 벽 라이닝에 wallGap 만큼 띄워 등을 대고 문은 +X(기계실 안쪽)를 본다.
+         -Z 쪽(레버·핸들까지)은 ARD·차단기함 자리로 비운다. 승강로 간선은 바닥 덕트를 타고 받침으로 들어온다. 왼쪽(+Z) 옆면에 인터폰. */
+      const panelX = CP_X, panelFrontX = CP_FRONT_X, panelZ = CP_Z;   // index.html 좌측벽 배치 계약
+      ControlPanel.build(mrGrp, panelX, my, panelZ, Math.PI / 2);
+      // 분전함(P-ELEV)·ARD·조명 스위치와 회색 사각 덕트 — 제어반 -Z 옆면으로 3상 인입 (js/machine-room-power.js)
+      MachineRoomPower.build(mrGrp, -(S.SHAFT_W / 2) + MR_LINING_T, mrFloorY, CP_Z - CP_WIDTH / 2);
 
       /* ══════════════════════════════════════════════════════════════
          1. 머신 빔 (Machine Beam) + 써포트 빔 (Support Beam)
@@ -3719,126 +3894,58 @@
         });
       }
 
-      /* ⑤ 개방 레버 + ⑥ 수동 핸들 — 제어반 반대편(-Z) 좌측벽, 같은 높이·걸쇠 각각 (PDF 4·6p) */
+      /* ⑤ 개방 레버 + ⑥ 수동 핸들 — 좌측벽 중간(사용자 표시 네모 133311: 보드 줄눈 Z -1.306 앞뒤), 바닥 +1.22m 걸쇠.
+         형상 원본: blender/scripts/machine_room_accessories.py → models/gltf/machine_room_tools.glb (현장 사진 DSC04699).
+         GLB 원점 = 걸쇠 핀 중심, +X = 벽에서 나오는 방향. 레버는 포크 U홈이 핀에 얹히고, 핸들은 허브 구멍이 핀에 낀다.
+         제어반(앞)과 이 사이는 ARD·차단기함 자리. */
       // 걸쇠는 콘크리트가 아니라 흡음보드 라이닝 면에 붙는다 → 보드 두께만큼 안쪽으로.
       const wallInnerX = -(S.SHAFT_W / 2) + MR_LINING_T + 0.01;
-      const hookY = my + 0.92;
-      const hookShiftZ = -0.30;
-      const levHookZ = panelZ - 0.52 + hookShiftZ;
-      const hndHookZ = panelZ - 0.34 + hookShiftZ;
+      // 사용자 표시 네모를 캡처 속 보드 줄눈 4개로 투영 역산: Z -1.02~-1.58(중심 -1.30), 높이 +0.72~1.32m.
+      const hookY = my + 1.22;
+      const hndHookZ = -1.20;
+      const levHookZ = -1.42;
       const hookMat = M.paint(0x333333);
       const hookSteel = M.ss(0x777777);
-      const levMat = M.ss(0xa8b0b8);
-      const hndMat = M.ss(0x9ca3af);
       const pegX = wallInnerX + 0.045;
 
       function addWallHook(hy, hz, udType) {
         createBox(0.012, 0.075, 0.055, hookMat, wallInnerX, hy, hz, mrGrp);
         createBox(0.055, 0.012, 0.012, hookSteel, pegX, hy + 0.018, hz, mrGrp)
           .userData = { type: udType };
+        // 핀 끝 멈춤 와셔 — 걸린 공구가 빠지지 않게
+        createCylinder(0.011, 0.011, 0.003, hookSteel, pegX + 0.029, hy + 0.018, hz, mrGrp).rotation.z = Math.PI / 2;
       }
 
       addWallHook(hookY, levHookZ, 'release-lever-hook');
       addWallHook(hookY, hndHookZ, 'turning-handle-hook');
 
-      // ⑤ Release Lever — 긴 로드 + 끝의 묵직한 U자(포크) 헤드 (PDF 4p ⑥)
-      // 현실 거치: 로드 상단 고리를 수평 걸쇠에 걸어 수직으로 내려오고, 포크 헤드가 맨 아래.
       const relLevGrp = new THREE.Group();
+      relLevGrp.name = 'ReleaseLeverHung';
       relLevGrp.userData = { type: 'release-lever' };
-
-      // 상단 걸이 고리 — 보어 축을 X로 두어 수평 걸쇠에 끼움
-      const relRing = new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.004, 8, 18), levMat);
-      relRing.rotation.y = Math.PI / 2;
-      relRing.position.set(0, 0.006, 0);
-      relLevGrp.add(relRing);
-
-      // 긴 로드 (가늘고 김)
-      const rodH = 0.34;
-      const rodMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, rodH, 12), levMat);
-      rodMesh.position.set(0, -rodH / 2, 0);
-      relLevGrp.add(rodMesh);
-
-      // 로드 → 포크 전환 넥 (테이퍼: 가는 로드에서 굵은 헤드로 벌어짐)
-      const relNeckY = -rodH - 0.026;
-      const relNeck = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.024, 0.052, 14), levMat);
-      relNeck.position.set(0, relNeckY, 0);
-      relLevGrp.add(relNeck);
-
-      // 묵직한 포크 베이스 (납작한 평판 블록 — U자 윗부분 솔리드)
-      const relPlateTh = 0.014;                // 평판 두께(X) — 납작함
-      const relBaseY = relNeckY - 0.034;
-      createBox(relPlateTh, 0.045, 0.046, levMat, 0, relBaseY, 0, relLevGrp);
-
-      // U자 포크 — 두 갈래(Z축으로 벌어짐). 납작한 평철 두 갈래, 끝단 30° 절곡(ㄷ자 갈고리)으로 브레이크에 끼움
-      // 절곡 방향: 벽(-X) 반대편 정면(+X, 체대 쪽)으로 휘어짐
-      const relStraightLen = 0.05;             // 곧게 내려오는 부분 (짧게)
-      const relTipLen = 0.038;                 // 절곡된 끝단
-      const relTineW = 0.016;                  // 갈래 폭(Z)
-      const relBend = Math.PI / 6;             // 30° 휘어짐
-      const relProngTopY = relBaseY - 0.0225;  // 베이스 블록 하단에서 시작
-      const cb = Math.cos(relBend), sb = Math.sin(relBend);
-      [-0.014, 0.014].forEach(dz => {
-        // 직선부 (납작한 평철)
-        createBox(relPlateTh, relStraightLen, relTineW, levMat,
-          0, relProngTopY - relStraightLen / 2, dz, relLevGrp);
-
-        // 절곡 끝단 — 직선부 하단을 피벗으로 정면(+X) 방향 30° 절곡
-        const pivotY = relProngTopY - relStraightLen;
-        const tipSeg = new THREE.Mesh(
-          new THREE.BoxGeometry(relPlateTh, relTipLen, relTineW), levMat);
-        tipSeg.rotation.z = relBend;
-        tipSeg.position.set((relTipLen / 2) * sb, pivotY - (relTipLen / 2) * cb, dz);
-        relLevGrp.add(tipSeg);
-      });
-
       relLevGrp.position.set(pegX, hookY + 0.018, levHookZ);
       mrGrp.add(relLevGrp);
-
-      // ⑥ Turning Handle — 콜라(소켓)를 수평 걸쇠에 끼워 수직으로 걸린 크랭크 핸들 (PDF 4p ⑦)
-      // 현실 거치: 콜라 보어가 수평 걸쇠(+X축)에 끼워지고, 무거운 크랭크 팔은 중력으로 곧장 아래로 늘어짐.
-      // 손잡이(grip)는 팔 끝에서 좌우(Z축)로 뻗어, 벽에 평행하게 레버처럼 보임.
       const turnHndGrp = new THREE.Group();
+      turnHndGrp.name = 'TurningHandleHung';
       turnHndGrp.userData = { type: 'turning-handle' };
-
-      // 콜라(소켓) — 보어 축을 X로 두어 수평 걸쇠에 끼움
-      const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.052, 18), hndMat);
-      collar.rotation.z = Math.PI / 2; // 축을 X 방향으로 (걸쇠 방향)
-      turnHndGrp.add(collar);
-      // 보어 구멍(걸쇠가 들어가는 어두운 안쪽)
-      const bore = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.056, 14), M.paint(0x2a2a2a));
-      bore.rotation.z = Math.PI / 2;
-      turnHndGrp.add(bore);
-
-      // 고정 나사 (콜라 위쪽)
-      const hexBolt = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.016, 6), M.ss(0x555555));
-      hexBolt.position.set(0, 0.030, 0);
-      turnHndGrp.add(hexBolt);
-
-      // 크랭크 팔 — 콜라에서 아래(-Y)로 곧장 늘어짐, 벽과 평행(Y-Z 평면)
-      const thArmLen = 0.26;
-      createBox(0.014, thArmLen, 0.034, hndMat, 0, -thArmLen / 2 - 0.020, 0, turnHndGrp);
-      // 팔-손잡이 연결 허브
-      createCylinder(0.020, 0.020, 0.018, hndMat, 0, -thArmLen - 0.010, 0, turnHndGrp)
-        .rotation.x = Math.PI / 2;
-
-      // 손잡이(grip) — 팔 끝에서 +Z 한쪽만 (중심 기준 왼쪽 제거)
-      const gripLen = 0.10;
-      const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, gripLen, 16), M.paint(0x2a2a2a));
-      grip.rotation.x = Math.PI / 2;
-      grip.position.set(0, -thArmLen - 0.010, gripLen / 2);
-      turnHndGrp.add(grip);
-      createCylinder(0.016, 0.016, 0.012, hndMat, 0, -thArmLen - 0.010, gripLen + 0.006, turnHndGrp)
-        .rotation.x = Math.PI / 2;
-
       turnHndGrp.position.set(pegX, hookY + 0.018, hndHookZ);
       mrGrp.add(turnHndGrp);
+      new THREE.GLTFLoader().load('models/gltf/machine_room_tools.glb', gltf => {
+        const lever = gltf.scene.getObjectByName('ReleaseLever'), handle = gltf.scene.getObjectByName('TurningHandle');
+        for (const [src, dst] of [[lever, relLevGrp], [handle, turnHndGrp]]) {
+          if (!src) continue;
+          src.position.set(0, 0, 0);
+          src.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+          dst.add(src);
+        }
+        relLevGrp.userData.ready = turnHndGrp.userData.ready = true;
+      }, undefined, e => console.error('[machine room tools] GLB load failed', e));
 
       /* 6. 조속기 받침대 (Governor Stand) */
       // 소장님 지시: 카 가이드 레일과 완벽히 수직선상에 오도록 정렬 & 높이는 절반
       const govStandMat = M.paint(0x1c2833); // 하부 빔과 동일한 짙은 남색 철골
       const machineSafetyWiring = buildMachineRoomDucts(mrGrp, {
         floorY: mrFloorY, frontZ: beamFrontEnd + .12,
-        panelX, panelZ, governorX: GOV_TENS_X, governorZ: GOV_TENS_Z,
+        panelX, panelZ, panelFrontX, governorX: GOV_TENS_X, governorZ: GOV_TENS_Z,
         traction: { x: -0.77, zA: tmCenterZ + 0.85, zB: tmCenterZ + 0.25, pedX: TM.baseX[0] - 0.013, bedY: bedTopY }
       }, brakeInstallation);
       const govX = GOV_TENS_X; // 피트 인장추·가이드 브라켓과 동일 축 (레일에서 외측 이격)
@@ -4259,70 +4366,15 @@
       buildPitScreen(pitGrp);
       
       // ─── 조속기 인장추 어셈블리 (Governor Tension Weight Assembly) ───
-      // 조속기 휠 축 = Z축 방향(표현 기준) | X는 조속기와 GOV_TENS_X로 정렬
+      // 회전축 X, 로프 홈은 GOV_TENS_X / GOV_TENS_Z에 정렬.
       const tensGovX = GOV_TENS_X;               // buildMachineRoom govX와 동일 축
       const tensBaseZ = GOV_TENS_Z;                   // 가이드 레일 파묻힘 방지 — Z축으로 카 후면측 이격
       const tensionerY = Y0 + 0.5;               // 피트 바닥 +500mm
 
-      // ── 1. 가이드 레일 고정 브라켓 (인장시브는 tensBaseZ, 구 전면 피벗·플랫 암은 제거)
-      const bracketMat = M.ss(0x4b5563);
+      // 영상형 인장추: 카측 보호덮개, 벽측 개방 시브·스위치, 바닥 배선.
+      buildPitTensioner(pitGrp, tensGovX, tensionerY + 0.30, tensBaseZ);
 
-      // 수직 베이스판 (가이드 레일 웹/플랜지 측면에 체결되는 지지대) — 카 레일 Z 추종
-      createBox(0.04, 0.45, 0.08, bracketMat,
-        S.CAR_BG / 2 - 0.02, tensionerY + 0.15, CAR_CTR_Z + 0.04, pitGrp);
-
-      // ── 2. 인장추 하부 풀리 (Tension Sheave) ──
-      // 조속기와 동일하게 휠 축을 X축으로 맞춤
-      const tensionWheelSpinGrp = new THREE.Group();
-      tensionWheelSpinGrp.position.set(tensGovX, tensionerY + 0.30, tensBaseZ);
-      pitGrp.add(tensionWheelSpinGrp);
-      tensionSheaveGrp = tensionWheelSpinGrp;
-
-      // 금색 솔리드 디스크 시브 (PDF 6p ③) — 림 부근 장공 슬롯이 회전 확인 표식 겸용
-      const tensDisc = createCylinder(0.140, 0.140, 0.035, M.gold(), 0, 0, 0, tensionWheelSpinGrp);
-      tensDisc.rotation.z = Math.PI / 2;
-
-      // 둥근 단면 림 + 외곽 로프 홈
-      const tensRim = new THREE.Mesh(new THREE.TorusGeometry(0.140, 0.012, 10, 40), M.gold());
-      tensRim.rotation.y = Math.PI / 2;
-      tensionWheelSpinGrp.add(tensRim);
-      const tensGroove = new THREE.Mesh(new THREE.TorusGeometry(0.150, 0.005, 8, 40), M.paint(0x222222));
-      tensGroove.rotation.y = Math.PI / 2;
-      tensionWheelSpinGrp.add(tensGroove);
-
-      // 장공 슬롯 (디스크 관통 표현)
-      createBox(0.045, 0.028, 0.065, M.paint(0x1a1508), 0, 0.098, 0, tensionWheelSpinGrp);
-
-      // 허브 + 감청색 축 너트
-      const tensHub = createCylinder(0.026, 0.026, 0.055, M.gold(), 0, 0, 0, tensionWheelSpinGrp);
-      tensHub.rotation.z = Math.PI / 2;
-      const tensNut = createCylinder(0.011, 0.011, 0.062, M.paint(0x223377), 0, 0, 0, tensionWheelSpinGrp);
-      tensNut.rotation.z = Math.PI / 2;
-
-      // 고정축 (허브 뒤 → 전면 피벗 암 연결)
-      const tensAxle = createCylinder(0.011, 0.011, 0.075, M.ss(0xb6bcc4),
-        tensGovX + 0.020, tensionerY + 0.30, tensBaseZ, pitGrp);
-      tensAxle.rotation.z = Math.PI / 2;
-
-      // ── 3. 인장추 본체 (시브 요크 → 적색 클레비스 → 슬래브형 주철 추) ──
-      // 축 요크 스트랩 (시브 양옆에서 하부로)
-      [-0.028, 0.028].forEach(dx => {
-        createBox(0.012, 0.17, 0.05, M.ss(0x7a8290),
-          tensGovX + dx, tensionerY + 0.225, tensBaseZ, pitGrp);
-      });
-      // 적색 클레비스 블록
-      createBox(0.045, 0.075, 0.045, M.paint(0x8a1f1f),
-        tensGovX, tensionerY + 0.135, tensBaseZ, pitGrp);
-      // 슬래브형 인장추 (시브 면과 평행한 판형 주철 추) + 상단 마감판
-      createBox(0.10, 0.34, 0.30, M.paint(0x6e737a),
-        tensGovX, tensionerY - 0.06, tensBaseZ, pitGrp);
-      createBox(0.11, 0.015, 0.31, M.ss(0x555555),
-        tensGovX, tensionerY + 0.115, tensBaseZ, pitGrp);
-
-      // ── 4. 조속기 로프 루프(기계실 조속기 ↔ 카 세이프티 링크 ↔ 피트 인장시브) ──
-      // 조속기 휠·인장시브 모두 회전축이 X방향이므로 로프 두 가닥은 Z = tensBaseZ ± 홈반경에 걸린다.
-      // ★얇은 THREE.Line(옛 과속조절기 선)을 전부 걷어내고 실사 와이어로프 메시로 교체.
-      //   조속기부터 피트 인장추까지 한 굵기로 이어진다 (사용자 지시).
+      // 기존 조속기 로프 루프와 접선·높이 계약을 유지한다.
       const govData = mrGrp.userData || {};
       const govWheelY = govData.govWheelY || (Y0 + TOTAL_H + 0.42);
       // 풀리 홈 반경 = 가닥 Z 오프셋.

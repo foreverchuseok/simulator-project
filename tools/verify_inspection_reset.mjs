@@ -9,8 +9,10 @@ try {
   page.on('pageerror',e=>errors.push(e.message));
   await page.goto(process.env.SIMULATOR_URL||'http://127.0.0.1:5500/index.html',{waitUntil:'networkidle'});
   await page.waitForFunction(()=>CarDoor.state?.ready&&PitLadder.secured&&hatchDoors.every(h=>h.interlock?.ready)&&document.getElementById('loading').classList.contains('hide'));
+  // One floor at a time: the bear holds 2F fully open with its foot, then reset must relock and send it home.
+  await page.evaluate(()=>{HallManual.select(1);HallManual.request(1);});
+  await page.waitForFunction(()=>HallManual.phase==='holding'&&Mascot.inspecting);
   await page.evaluate(()=>{
-   for(const f of [0,1,3]){HallManual.select(f);HallManual.key();HallManual.open(.93);}
    HallManual.select(2);document.getElementById('hall-panel').hidden=false;
    const y=FLOOR_Y[1]+S.CAR_H/2+.35,delta=y-carGrp.position.y;
    carGrp.position.y=y;cwtGrp.position.y-=delta;refreshRopes();refreshGovernorRope();
@@ -19,8 +21,8 @@ try {
   const beforeCamera=await page.evaluate(()=>camera.position.toArray());
   if(mobile)await page.tap('#hall-reset');else await page.click('#hall-reset');
   await page.waitForFunction(()=>!inspectionResetting&&document.getElementById('v-dir').textContent.includes('리셋 완료'),{},{timeout:30000});
-  const state=await page.evaluate(()=>({hall:DoorBypass.hallSecured(),manual:hatchDoors.some(h=>h.manualActive||h.manualOpen||h.keyRatio),car:CarDoor.secured(),ladder:PitLadder.secured,bypass:DoorBypass.mode,insMode,estop,moving,selected:HallManual.selected,floor:curFloor,aligned:CarDoor.alignedFloor(),camera:camera.position.toArray()}));
-  assert.deepEqual({...state,camera:null},{hall:true,manual:false,car:true,ladder:true,bypass:'off',insMode:false,estop:false,moving:false,selected:2,floor:1,aligned:1,camera:null});
+  const state=await page.evaluate(()=>({hall:DoorBypass.hallSecured(),manual:hatchDoors.some(h=>h.manualActive||h.manualOpen||h.keyRatio),inspector:HallManual.active||Mascot.inspecting,car:CarDoor.secured(),ladder:PitLadder.secured,bypass:DoorBypass.mode,insMode,estop,moving,selected:HallManual.selected,floor:curFloor,aligned:CarDoor.alignedFloor(),camera:camera.position.toArray()}));
+  assert.deepEqual({...state,camera:null},{hall:true,manual:false,inspector:false,car:true,ladder:true,bypass:'off',insMode:false,estop:false,moving:false,selected:2,floor:1,aligned:1,camera:null});
   assert.deepEqual(state.camera,beforeCamera);
   await page.screenshot({path:`${out}/${mobile?'mobile':'desktop'}-reset.png`});
   // Repeat reset while inspection drive is held, including emergency stop UI cleanup.

@@ -44,7 +44,7 @@
 - CCTV 시공 사진의 카 하부 인입을 참고해 기존 드럼과 길게 돌출된 레일/카측 새들을 제거했다. 작은 취부판·그립과 꼬리를 짧게 마감한 검정 밴드만 고정 구간에 둔다. 자유 U자 구간에는 돌출물을 두지 않는다.
 - 외피는 회색 PVC를 75×8mm, 모서리가 둥근 편평 단면으로 표현한다. U자 반지름은 120mm다. 치수는 시뮬레이터 재구성 값이며 특정 업체 제품 치수의 복제는 아니다.
 - 카 하부 그립 → 바닥 아래 인입 → 카 외판 옆 → 상부 정션박스 경로로 연결한다. 정션박스는 카 그룹에 종속된다. CCTV 카메라와 전용 영상 케이블은 향후 작업 범위다.
-- 고정단은 행거 위에서 벽면으로 붙어 제어반에 연결된다. `TC_WALL_X`, `TC_SIDE_X`가 벽·카 외판 이격의 원본이다. 임의 스플라인 오버슈트 대신 선분과 짧은 곡선으로 모서리만 둥글게 연결한다.
+- 고정단은 행거 위에서 벽면으로 붙어 천장을 타고 기계실 관통구(`MR_CABLE_HOLE_X`, HARNESS_Z)로 올라간다. 기계실에서는 바닥 덕트 밑에서 끝나며, 제어반 받침까지는 덕트가 덮는다(리본 폭 100mm는 22mm 덕트에 눕지 못함). `TC_WALL_X`, `TC_SIDE_X`가 벽·카 외판 이격의 원본이다. 임의 스플라인 오버슈트 대신 선분과 짧은 곡선으로 모서리만 둥글게 연결한다.
 - Three.js에서 단면과 경로를 직접 생성한다. 가동부는 기존 길이 보존 식으로 정점만 갱신하므로 Blender 정적 메시로 바꾸지 않았다. `travelCableProfile`, `createTravelCableRun`, `addTravelCableGrip`, `addTravelCableBand`가 형상 공통 함수다.
 - 검증: `node tools/verify_travel_cable_shape.mjs`. 전 층·오버런에서 길이와 간극, 외피의 실제 바운딩박스, 정션박스 카 추종, 기존 종단 스위치 6개 보존을 확인한다. `.shot-tc-real-*.png` 중 under/side/hanger는 주변 부품을 숨긴 검증용 절개 시점이다. 이전 `verify_travel_cable.mjs`는 과거 자석식 센서 상수를 참조하므로 현재의 MR 스위치 계약에는 맞지 않는다.
 - 사진 참고: https://dvor24.ru/blog/videonablyudenie-v-lifte/montazh-kamery-v-lifte-po-provodam-poshagovaya-instruktsiya . 사용자 제공 네이버 글은 접근 실패로 직접 확인하지 못했다.

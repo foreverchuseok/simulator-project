@@ -9,6 +9,8 @@
    ───────────────────────────────────────────────────────────── */
 const Mascot = (() => {
   let root = null, parts = null;
+  let inspectionHome=null;
+  const down=new THREE.Vector3(0,-1,0),handPoint=new THREE.Vector3(),direction=new THREE.Vector3();
 
   function build(parent, x, y, z, yaw) {
     const std = (c, r = .6, m = 0) => new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m });
@@ -29,10 +31,12 @@ const Mascot = (() => {
 
     const body = group(root);
     // legs + feet (short and round)
+    const feet=[],legs=[];
     for (const s of [-1, 1]) {
-      ball(body, .075, .075, .075, FUR, s * .085, .07, 0);
-      ball(body, .07, .045, .095, FUR, s * .09, .035, .03);
-      ball(body, .036, .018, .04, FUR_IN, s * .09, .03, .105);            // paw pad
+      legs.push(ball(root, .075, .075, .075, FUR, s * .085, .07, 0));
+      const foot=group(root,s*.09,0,0);foot.name=s<0?'InspectorBlockingFoot':'MascotStandingFoot';feet.push(foot);
+      ball(foot, .07, .045, .095, FUR, 0, .045, .03);
+      ball(foot, .036, .018, .04, FUR_IN, 0, .04, .105);
     }
     // round belly-body + vest
     ball(body, .20, .21, .18, FUR, 0, .27, 0);
@@ -70,8 +74,9 @@ const Mascot = (() => {
     // arms: right one waves, left holds a small wrench
     const arm = s => {
       const sh = group(body, s * .185, .36, 0);
-      ball(sh, .052, .09, .052, FUR, 0, -.07, 0);
+      const upper=ball(sh, .052, .09, .052, FUR, 0, -.07, 0);
       const paw = ball(sh, .048, .048, .048, FUR, 0, -.15, 0);
+      sh.userData.rig={upper,paw};
       return sh;
     };
     const waveArm = arm(-1), holdArm = arm(1);
@@ -83,7 +88,7 @@ const Mascot = (() => {
     wrench.rotation.set(.3, 0, -.25);
     holdArm.rotation.z = .25;
 
-    parts = { body, head, eyes, waveArm, holdArm };
+    parts = { body, head, eyes, waveArm, holdArm,feet,legs,wrench };
     root.traverse(o => { if (o.isMesh) o.castShadow = false; });
     return root;
   }
@@ -91,6 +96,7 @@ const Mascot = (() => {
   // t: seconds. Called from renderLoop; only transforms change.
   function update(t) {
     if (!root || !root.visible) return;
+    if(inspectionHome)return;
     const p = parts;
     p.body.position.y = .012 * Math.abs(Math.sin(t * 2.2));
     p.body.rotation.z = .05 * Math.sin(t * 1.1);
@@ -105,5 +111,32 @@ const Mascot = (() => {
 
   function setVisible(on) { if (root) root.visible = !!on; }
   function isVisible() { return !!(root && root.visible); }
-  return { build, update, setVisible, isVisible, get root() { return root; } };
+  function beginInspection(){
+    if(!root||inspectionHome)return;
+    inspectionHome={position:root.position.clone(),rotation:root.rotation.clone(),visible:root.visible};
+    root.visible=true;parts.body.position.set(0,0,0);parts.body.rotation.set(0,0,0);parts.head.rotation.set(0,0,0);parts.wrench.visible=false;
+  }
+  function inspectionPose(x,y,z,foot,handA,handB){
+    if(!inspectionHome)return;
+    root.position.set(x,y,z);root.rotation.set(0,Math.PI,0);
+    const lean=Math.min(1,foot/.2);parts.body.position.x=.045*lean;parts.body.rotation.z=-.15*lean;
+    root.updateMatrixWorld(true);
+    parts.feet[0].position.z=foot;
+    parts.legs[0].position.z=foot/2;parts.legs[0].scale.z=.075+foot/2;
+    for(const [arm,target] of [[parts.holdArm,handA],[parts.waveArm,handB]]){
+      if(!target){arm.rotation.set(-.25,0,arm===parts.holdArm?.25:-.25);continue;}
+      handPoint.copy(target);parts.body.worldToLocal(handPoint);direction.copy(handPoint).sub(arm.position);
+      const length=direction.length();arm.quaternion.setFromUnitVectors(down,direction.normalize());
+      arm.userData.rig.upper.position.y=-length/2;arm.userData.rig.upper.scale.y=length/2;
+      arm.userData.rig.paw.position.y=-length;
+    }
+  }
+  function endInspection(){
+    if(!inspectionHome)return;
+    root.position.copy(inspectionHome.position);root.rotation.copy(inspectionHome.rotation);root.visible=inspectionHome.visible;
+    parts.body.position.x=0;parts.body.rotation.z=0;parts.feet[0].position.z=0;parts.legs[0].position.z=0;parts.legs[0].scale.z=.075;parts.wrench.visible=true;
+    for(const arm of [parts.waveArm,parts.holdArm]){arm.rotation.set(0,0,0);arm.userData.rig.upper.position.y=-.07;arm.userData.rig.upper.scale.y=.09;arm.userData.rig.paw.position.y=-.15;}
+    inspectionHome=null;
+  }
+  return { build, update, setVisible, isVisible,beginInspection,inspectionPose,endInspection,get inspecting(){return !!inspectionHome;},get rig(){return parts;},get root() { return root; } };
 })();

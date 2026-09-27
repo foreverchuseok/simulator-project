@@ -1,5 +1,13 @@
 # 기계실 로프브레이크·배선
 
+## 제어반 상부 배치 수정 (2026-09-28)
+
+- 사용자 사진 235604·235516 기준: 기존 왼쪽 운전 스위치판을 제거하고 LCD CPU 보드를 왼쪽으로 이동했다. 중앙 전원/I/O 보드는 좌측 릴레이·퓨즈, 우상단 방열판, 노란 필름콘덴서, 파란 부품·하부 전해콘덴서·LED·커넥터로 재구성했다.
+- 오른쪽 새 스위치판: E-STOP·AUTO/EOP·UP/RUN/DOWN, BTB1/2·EPSB1/2·BTS·ATB, 하단 노란 베이스와 검정 손잡이의 NORMAL/LANDING/CAR 바이패스 선택기다. 사진에 따른 외형이며 시뮬레이터의 기존 BYPASS/운행 제어와 새로 연결하지 않았다.
+- 원본 `blender/scripts/control_panel_sicon.py`, 결과 `models/gltf/control_panel.glb`. 배치는 상단 `CPU_X`·`IO_X/IO_W`·`SW_*`에서 관리하며 GLB `upperLayout` extras에 기록한다. 양문 피벗·캐비닛·하부 접촉기 구역은 유지한다.
+- 검증 도구 `tools/verify_control_panel_update.mjs`: 동일 시점 성능 전후, 양문 개폐, 상부 간격, 하부 설명 아이콘과 PC/390px 표시 토글·터치, 정면·사선 화면. 실제 모바일 기기 확인은 별도다.
+- 검증 결과: 위 도구와 `verify_view_modes`, `verify_portrait_hud`(320/360/390/412px·회전·층 이동·비상정지) 통과. PC 확대 시점 중앙값 16.7ms 유지, p95 16.7→16.8ms, 호출 153회 유지. 화면과 수치는 `.shot-control-panel-update/`에 둔다.
+
 ## 형상과 장착 계약
 
 - `js/environment.js`의 `buildMachineRoom()`에서 `js/machine-room-safety.js`를 호출한다. 별도 라이브러리나 운행 상태는 추가하지 않는다.
@@ -19,6 +27,7 @@
 - 덕트는 높이 22mm, 전체 폭 140mm의 경사진 단면이다. 덮개·접속판까지 포함한 최고점은 24mm다. 체대 외측과 전면을 돌아 분기한다.
 - 로프브레이크 선은 측판과 가로 받침을 따라 내려온 뒤 체대 외측에서 바닥 덕트에 진입한다.
 - 조속기 시작점은 `overspeed_governor.py`의 스위치 치수·기울기로 계산한 `BaseFrame.userData.mechanism.switchCableExit`다. GLB 로드 후 조속기 마운트의 회전·1.5배 스케일을 적용한다. JS에 스위치 위치를 따로 복사하지 않는다.
+- 제어반은 `js/control-panel.js`(SICON-4000형 GLB, 축별 scale)이며 좌측벽 앞쪽 `CP_Z`(index.html)에 둔다. 개방 레버·수동 핸들(machine_room_tools.glb)은 벽 중간 Z −1.20·−1.42, 그 사이는 ARD·차단기함 자리다. 덕트는 제어반 받침 앞면(`panelFrontX`) 30mm 안쪽에서 나오고, 세로 간선 X는 `panelFrontX + 0.135`다.
 - 권상기 분기: 제어반 → x=-0.77(체대 -X 바깥, 방진고무 판과 5mm)로 덕트를 뻗는다. 권상기 GLB의 `cableExits`에서 나온 이중브레이크·모터·엔코더 전선관 3가닥이 여기로 들어간다(`attachTractionMachine`, 계약은 [TRACTION-MACHINE.md](TRACTION-MACHINE.md)).
 - 조속기 GLB 형상과 가동 노드는 유지하고 전선 연결점 메타데이터만 추가했다. 원본 수정 후 GLB 재내보내기가 필요하다.
 

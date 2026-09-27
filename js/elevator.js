@@ -5,9 +5,9 @@
     const SG_TRIP_ROT = -0.38;
 
     /* 승장 도어 의장면·홀 호출버튼 GLB 계약 — blender/scripts/hall_door_button.py 가 이 JSON 을 읽는다.
-       panelH 는 buildHatchDoorPanel() 의 dh(행거 플랜지 아래 ~ 실 위 5mm)와 같아야 하며, 로드 시 대조한다.
+       panelH 는 buildHatchDoorPanel() 의 dh(행거 플랜지 아래 ~ bottomGap)와 같아야 하며, 로드 시 대조한다.
        btnCenterY 는 승장 바닥에서 호출버튼 판 중심 높이(편의법 0.8~1.2m 안). */
-    const HALL_FINISH = {"panelW":0.775,"panelH":2.1565,"panelT":0.032,"plateW":0.09,"plateH":0.26,"plateT":0.004,"btnCenterY":1.02};
+    const HALL_FINISH = {"panelW":0.775,"panelH":2.1525,"panelT":0.032,"plateW":0.09,"plateH":0.26,"plateT":0.004,"btnCenterY":1.02,"bottomGap":0.009};
 
     /* ==========================================================================
        주로프 5본 바빗(Babbitt) 소켓 히치 — 카 크로스헤드·균형추 상부 공용
@@ -636,6 +636,7 @@
       // HUD 상태 카드의 층 숫자도 승장 인디케이터와 같이 지나는 층마다 바꾼다(바뀔 때만 DOM 갱신).
       const hudFloor = document.getElementById('v-floor'), label = floorStr + 'F';
       if (hudFloor && hudFloor.textContent !== label) hudFloor.textContent = label;
+      CarFloorDisplay.set(floorStr, dirStr);   // 카 내부 OPB 층표시
       indicators.forEach(ind => {
         const ctx = ind.ctx;
         ctx.fillStyle = '#0a0c0e';
@@ -767,6 +768,8 @@
       const DOOR_MEET_GAP = 0.005;
       const sillH         = 0.022;
       const sillLen       = S.DOOR_W + 0.22;
+      // Both grooves continue into the door pockets for the complete shoe travel.
+      const hallShoeW = 0.045, hallShoeOffset = HALL_FINISH.panelW * 0.30;
       const SILL_GROOVE_W = 0.014;
       const SILL_GROOVE_D = 0.016;
       const DOOR_HALL_Z   = FRONT_WALL_INNER_Z - 0.022;
@@ -792,15 +795,15 @@
         const bodyZ = (hallEdge + shaftEdge) / 2;
 
         const bodyH = sillH - gd;
-        createBox(sillLen, bodyH, bodyD, sillAlum, 0, -gd - bodyH / 2, bodyZ, g);
+        createBox(sillRunLen, bodyH, bodyD, sillAlum, 0, -gd - bodyH / 2, bodyZ, g);
 
         function addGroove(gz) {
-          createBox(sillLen, 0.0025, gw, grooveMat, 0, -gd + 0.00125, gz, g);
+          createBox(sillRunLen, 0.0025, gw, grooveMat, 0, -gd + 0.00125, gz, g);
         }
         function addFlange(z0, z1) {
           const d = z1 - z0;
           if (d < 0.003) return;
-          createBox(sillLen, gd, d, sillAlum, 0, -gd / 2, (z0 + z1) / 2, g);
+          createBox(sillRunLen, gd, d, sillAlum, 0, -gd / 2, (z0 + z1) / 2, g);
         }
 
         const g1h = SILL_GROOVE1_Z + gw / 2, g1s = SILL_GROOVE1_Z - gw / 2;
@@ -945,6 +948,7 @@
          예전 값 S.DOOR_W + 0.40 = 1.90m 는 행정 ±1.145m 보다 좁아, 문을 열면
          행거판과 연동로프 고정단이 레일 밖 허공으로 튀어나갔다. */
       const {cx,ox} = CarDoor.dimensions();
+      const sillRunLen = 2 * (ox + Math.abs(cx-DOOR_MEET_GAP/2-HALL_FINISH.panelW/2) + hallShoeOffset + hallShoeW/2 + 0.020);
       const HP_W = 0.380; // 행거 플레이트 폭 (buildHangerAssembly 베이스판과 동일 원본)
 
       // ── 승장 도어 오퍼레이터 (행거 케이스 + 양단 브라켓 + C레일 속 롤러) ──
@@ -1359,9 +1363,9 @@
         const zShoe = (SILL_Z + SILL_GROOVE1_Z) - g.trackCtrZ;
         const zReinf = (SILL_Z + SILL_GROOVE2_Z) - g.trackCtrZ;
 
-        // 높이: 도어 하단은 실 상면에서 5mm(0.005) 위, 도어 상단은 행거 플랜지 바로 아래
+        // Top stays at the hanger; a 9 mm bottom reveal lets the ordinary shoes be identified.
         const topY = g.caseCY - 0.120 - 0.0035;
-        const botY = 0.005;
+        const botY = HALL_FINISH.bottomGap;
         const dh = topY - botY;
         const yCtr = (topY + botY) / 2;
 
@@ -1396,21 +1400,15 @@
         });
 
         // 5. 하단 가이드 슈 — 1번 실 홈
-        [-dw * 0.30, dw * 0.30].forEach(gx => {
-          createBox(0.045, 0.022, SILL_GROOVE_W - 0.002, ribMat, pX + gx, botY - 0.012, zShoe, grp);
+        [-hallShoeOffset, hallShoeOffset].forEach(gx => {
+          const shoeBottom=-SILL_GROOVE_D+0.0035,shoeTop=botY+0.009;
+          const shoe=createBox(hallShoeW,shoeTop-shoeBottom,SILL_GROOVE_W-0.002,ribMat,pX+gx,(shoeTop+shoeBottom)/2,zShoe,grp);
+          shoe.name='HallOrdinaryDoorShoe';shoe.userData={type:'hall-door-shoe'};
         });
 
         // 6. 가이드 보강슈 (문짝당 1개) — 문에서 승강로로 살짝 빼서 2번 실 홈을 탄다
-        const shoeMat = M.ss(0x6a727c);
-        const neckZ = (zHoist + zReinf) / 2;
-        const neckD = Math.abs(zHoist - zReinf);
-        createBox(0.050, 0.028, 0.0035, shoeMat, pX, botY + 0.012, zHoist - 0.0018, grp);
-        createBox(0.038, 0.008, neckD, shoeMat, pX, botY + 0.002, neckZ, grp);
-        createBox(0.038, 0.022, SILL_GROOVE_W - 0.002, shoeMat, pX, botY - 0.012, zReinf, grp);
-        [-0.012, 0.012].forEach(bx => {
-          const b = createCylinder(0.0028, 0.0028, 0.007, hpBoltMat, pX + bx, botY + 0.012, zHoist - 0.005, grp);
-          b.rotation.x = Math.PI / 2;
-        });
+        HallRetention.attach({parent:grp,x:pX,z:zReinf,zBack:zHoist,grooveWidth:SILL_GROOVE_W,
+          grooveDepth:SILL_GROOVE_D,runLength:sillRunLen,panelTop:topY});
 
         // 7. 승강장 홀 의장면(+Z) 안전 스티커 — 로비에서 왼쪽=손대지마시오, 오른쪽=기대지마시오
         const mats = getStickerMats();
@@ -1534,7 +1532,8 @@
           grp.add(triKeyGrp);
           grp.userData.triKey = {
             group: triKeyGrp, camPivot, drivePin, pinMesh, pinCap,
-            pinRest: 0.010, camLen, triX, triY, pinY, barX
+            pinRest: 0.010, camLen, triX, triY, pinY, barX,
+            hallZ:zHall, panelInnerX:pX-dw/2
           };
         }
 
@@ -1836,7 +1835,7 @@
         (wallX+fixedSaddleX)/2,hangerY,TC_FIX_Z+sign*(TC_W/2+0.018),hangerGrp);
       addTravelCableSaddle(hangerGrp,fixedSaddleX,hangerY,TC_FIX_Z,'shaftCableSaddle');
       addTravelCableGrip(hangerGrp,TC_X,hangerY-0.09,TC_FIX_Z,'shaftCableGrip').rotation.y=Math.PI/2;
-      const upTop=CEIL_RUN_Y, mrCableY=Y0+TOTAL_H+0.07;
+      const upTop=CEIL_RUN_Y;
       const fixedWrap=[];
       for(let i=0;i<=16;i++){
         const a=i*Math.PI/32;
@@ -1850,8 +1849,9 @@
         [TC_WALL_X,upTop-0.20,TC_FIX_Z],
         [TC_WALL_X,upTop,HARNESS_Z-0.12],
         [MR_CABLE_HOLE_X,upTop+0.04,HARNESS_Z],
-        [MR_CABLE_HOLE_X,mrCableY-0.06,HARNESS_Z],
-        [MR_CABLE_HOLE_X-0.16,mrCableY,HARNESS_Z]
+        // 기계실 바닥 관통구에서 바닥 덕트 밑으로 들어가 끝난다(폭 100mm 리본은 높이 22mm 덕트에 눕지 못함).
+        // 제어반 받침까지는 덕트가 덮는다 — 덕트 세로 간선 X = MR_CABLE_HOLE_X.
+        [MR_CABLE_HOLE_X,MR_DUCT_Y-0.012,HARNESS_Z]
       ],travelCableGrp,'fixedCableRun');
       for(let y=hangerY+0.65;y<upTop-0.30;y+=0.65){
         addTravelCableBand(travelCableGrp,TC_WALL_X,y,TC_FIX_Z).rotation.y=Math.PI/2;

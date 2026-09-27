@@ -69,7 +69,7 @@ const DoorBypass = (() => {
   }
   function stop(){active=false;lastPulse=false;if(gain){gain.gain.cancelScheduledValues(ctx.currentTime);gain.gain.setValueAtTime(0,ctx.currentTime);}CarUnderbody.flash(false,false);}
   function setMode(next){
-    if(!['off','hall','car'].includes(next)||moving||CarDoor.state?.busy||overspeedActive||estop)return false;
+    if(!['off','hall','car'].includes(next)||moving||CarDoor.state?.busy||HallManual.busy||overspeedActive||estop)return false;
     unlockAudio();stop();mode=next;clearTimeout(autoTimer);
     if(next!=='off')setInspectionMode(true);
     document.getElementById('bypass-mode').value=mode;
@@ -79,7 +79,7 @@ const DoorBypass = (() => {
   }
   function carClosedMonitor(){const d=CarDoor.dimensions();return Math.abs(carDoorL.position.x+d.cx)<.001&&Math.abs(carDoorR.position.x-d.cx)<.001;}
   function hallSecured(){return hatchDoors.every(h=>h.interlock?.ready&&Math.abs(h.left.position.x-h.left.userData.cx)<.001&&Math.abs(h.right.position.x-h.right.userData.cx)<.001&&Math.abs(h.hook.rotation.z)<.001);}
-  function canInspect(){return !CarDoor.state?.busy&&(mode==='car'?carClosedMonitor():CarDoor.secured())&&(mode==='hall'||hallSecured());}
+  function canInspect(){return !HallManual.busy&&!CarDoor.state?.busy&&(mode==='car'?carClosedMonitor():CarDoor.secured())&&(mode==='hall'||hallSecured());}
   function update(now=performance.now()){
     const on=mode!=='off'&&insMode&&moving&&insDir!==0&&!estop&&!document.hidden;
     if(!on){if(active)stop();return;}

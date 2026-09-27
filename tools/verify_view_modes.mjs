@@ -42,7 +42,7 @@ try{
  assert.equal(detailed.lightingRestored,true);
  await page.screenshot({animations:'disabled',path:path.join(out,label+'-landscape.png')});
  await page.click('#c-background');
- await page.waitForFunction(()=>!outdoorPresentation.detailed&&!outdoorPresentation.sky.visible);
+ await page.waitForFunction(()=>!outdoorPresentation.detailed&&outdoorPresentation.sky.visible); // 하늘 돔은 두 모드 공통
  await page.click('.sheet.open [data-close]');
  // 부품 카메라 프리셋은 없다: 조속기 시점으로 옮긴 뒤 더블클릭으로 다가가고, 「전체 보기」로 돌아온다.
  const settle=()=>page.waitForFunction(()=>gsap.getTweensOf(camera.position).length===0&&gsap.getTweensOf(controls.target).length===0);
@@ -51,7 +51,7 @@ try{
  await page.mouse.dblclick(640,425,{delay:100});await settle();
  assert.ok(await page.evaluate(()=>camera.position.distanceTo(controls.target))<before*.8,'Double click approaches visible geometry');
  await page.screenshot({path:path.join(out,label+'-focus.png')});
- await page.click('#c-shaft');await settle();
+ await page.click('#c-shaft');await page.click('#overview-home');await settle();
  const home=await page.evaluate(()=>{const midY=Y0+TOTAL_H*0.4;return camera.position.distanceTo(new THREE.Vector3(18,midY,21))+controls.target.distanceTo(new THREE.Vector3(0,midY,0));});
  assert.ok(home<1e-3,`Whole view restores the default shaft view: ${home}`);
  await page.screenshot({animations:'disabled',path:path.join(out,label+'-home.png')});

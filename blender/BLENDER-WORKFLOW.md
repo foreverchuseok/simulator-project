@@ -7,6 +7,8 @@ AI 공통 규칙과 `PLAN.md` 운영 방식은 루트 `AGENTS.md`를 따른다.
 
 - Blender: 5.2 LTS.
 - 모델링 스크립트: `blender/scripts/*.py`.
+- 승장문 하부 이탈방지장치: `blender/scripts/hall_door_retention.py` → `models/gltf/hall_door_retention.glb`. 치수는 `js/hall-retention.js`의 `HALL_RETENTION`과 `elevator.js` 실 계약을 읽는다. 2번 홈 중심/실 상면을 원점으로 문짝당 하나를 부착하며 4층에서 기하·재질을 공유한다. `tools/verify_hall_retention.mjs`로 하단 간극·전 행정·화면을 확인한다.
+- TERRACE 카 천장: `blender/scripts/car_terrace_ceiling.py` → `models/gltf/car_terrace_ceiling.glb`. `js/car-terrace.js`의 `TERRACE_CEILING` JSON을 읽고 GLB extras로 대조한다. X/Z는 정규화 폭/깊이, Y는 미터이며 기존 카 치수로 로더가 배치한다. 4단 패널·LED 홈·렌즈·환기 슬롯, 4개 재질 배치. 검증은 `tools/verify_car_terrace.mjs`, 상세는 `docs/CAR-REBUILD.md`.
 - 승장문 상부 비상가이드: `blender/scripts/hall_emergency_guide.py` → `models/gltf/hall_emergency_guide.glb`. `js/hall-emergency-guide.js`가 extras 치수·장착 X를 읽어 헤더 좌표에 맞춘다. 상세·검증은 `docs/DOOR-REBUILD.md`의 안전부품 ③ 항목을 따른다.
 - 앱이 로드하는 신규 GLB 표준 경로: `models/gltf/*.glb`.
 - 조속기 형상 원본: `blender/scripts/overspeed_governor.py`.
@@ -23,6 +25,12 @@ AI 공통 규칙과 `PLAN.md` 운영 방식은 루트 `AGENTS.md`를 따른다.
 - 로프브레이크: `blender/scripts/rope_brake.py` → `models/gltf/rope_brake.glb`. `js/machine-room-safety.js`의 `RopeBrake`에 장착하며 받침·배선은 유지한다. 치수 공유와 검증은 `docs/MACHINE-ROOM-SAFETY.md`를 따른다.
 - 종단 리미트 스위치(S3-B1370형): `blender/scripts/limit_switch.py` → `models/gltf/limit_switch.glb`. `index.html`의 `LIMIT_SWITCH_MODEL`·`FLS_LEVER_L`·`FLS_ROLLER_R`를 읽는다. 원점은 레버 고정축이고, 노드는 `SwitchBody`·`ContactWindow`·`ContactBridge`·`Lever`>`Roller`다. 장착·검증은 `docs/TRAVEL-CABLE-TERMINAL.md`를 따른다.
 - 승장 도어 의장면·홀 호출버튼: `blender/scripts/hall_door_button.py` → `models/gltf/hall_door_panel.glb` + `models/gltf/hall_call_button.glb`. 치수는 `js/elevator.js`의 `HALL_FINISH` JSON 한 줄을 읽고, 로더 `js/hall-finish.js`가 extras와 대조한다. 도어는 JS 상자를 먼저 세운 뒤 GLB 패널로 교체하며 삼각키·인터록·행거·스티커(`hand.png`/`lean.png`)는 JS가 그대로 붙인다. 버튼 노드는 `ButtonUp`/`ButtonDown`(각 `…Body`·`…Lamp`)이고 종단층은 한 방향만 남긴다.
+- 기계실 제어반(SICON-4000형 양문): `blender/scripts/control_panel_sicon.py` → `models/gltf/control_panel.glb`. 치수는 `js/control-panel.js`의 `CONTROL_PANEL_SPEC` 한 줄을 읽는다. 노드는 `ControlPanel`(extras) > `CabinetBody`·`CabinetInterior`·`DoorLeft`·`DoorRight`다. 문 그룹 원점은 경첩축이며 로더가 `rotation.y`로 여닫는다. 형상은 Three 로컬 좌표(+Z 문)로 정점 버킷에 모아 재질별로 한 메시를 만든다.
+- 기계실 부속: `blender/scripts/machine_room_accessories.py` → `models/gltf/machine_room_tools.glb`(노드 `ReleaseLever`·`TurningHandle`, 원점 = 벽 걸쇠 핀 중심, +X = 벽에서 나옴) + `models/gltf/intercom_phone.glb`(노드 `IntercomPhone`, +Z 앞면·z=0 뒷면). 로더는 `js/environment.js` 걸쇠 블록과 `js/control-panel.js` `mountIntercom()`이다.
+- 기계실 전원: `blender/scripts/machine_room_power.py` → `models/gltf/ard.glb`(노드 `ARD`) + `models/gltf/elevator_distribution_box.glb`(노드 `BoxBody`·`BoxDoor`(피벗 = 오른쪽 경첩축)·`BoxInterior`·`LightSwitch`). 치수는 `js/machine-room-power.js`의 `MR_POWER_SPEC`를 읽는다. 로컬 +Z 앞면·z=0 뒷면(벽)이다.
+- 피트 점검운전 스위치: `blender/scripts/pit_inspection_station.py` → `models/gltf/pit_inspection_station.glb`(루트 `PitInspectionStation`, extras `cableExit`, 원점 = 벽면, +Z 앞). 장착은 `js/environment.js` `buildShaftCableHarness()`.
+- 피트 조속기 인장추: `blender/scripts/pit_tensioner.py` → `models/gltf/pit_tensioner.glb`. `js/pit-tensioner.js`의 `PIT_TENSIONER_SPEC`를 읽는다. 원점은 기존 시브 축, `TensionSheave`만 X축으로 회전하며 카측(−X) 노란 덮개·벽측(+X) 스위치·추는 별도 그룹이다. 상세는 `docs/GOVERNOR-DESIGN.md`의 영상형 인장추 항목.
+- 비상통화장치: `blender/scripts/emergency_call_unit.py` → `models/gltf/emergency_call_unit.glb`(루트 `EmergencyCallUnit`, 노드 `EmergencyCallBody`·`CallLedRing`; JS가 링 재질을 인스턴스별로 바꿔 노랑/초록 표시). 장착·동작은 `js/emergency-call.js`.
 - 피트 사다리 배꼽 스위치: `blender/scripts/pit_ladder_switch.py` → `models/gltf/pit_ladder_switch.glb`. `js/pit-ladder.js`의 `PIT_LADDER_SWITCH`에서 눌린 끝 위치와 스트로크를 읽는다. `SwitchBody`는 고정, `SwitchPlunger`는 +X로 움직이며 끝의 원점이 X=0이다. JS 래퍼가 눌림/해제 위치를 적용한다. 높이 기준과 검증은 `docs/ROADMAP.md`의 사다리 인계 항목 및 `tools/verify_pit_ladder.mjs`를 참고한다.
 
 앱이 읽는 최종 형식은 glTF Binary 단일 파일인 `.glb`다.

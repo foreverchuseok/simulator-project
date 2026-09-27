@@ -1,5 +1,65 @@
 // 엘리베이터 상태 제어와 UI 이벤트 로직을 정의한다.
 const MANUAL_CAMERA = Object.freeze({ minDistance: 0.04, near: 0.002 });
+// 카 정면(탑승 시점): 버튼으로 켜고 끈다. 켜져 있는 동안 카가 움직인 만큼 시점도 따라간다.
+// 드래그·확대로 둘러보는 것은 허용하고, 버튼 재클릭·전체 보기·부품 이동 때만 풀린다.
+let cabinFollow = null;
+const _cabinV = new THREE.Vector3();
+
+function leaveCabinView() {
+  if (!cabinFollow) return;
+  gsap.killTweensOf(cabinFollow);
+  cabinFollow = null;
+  const b = document.getElementById('c-cabin');
+  b?.classList.remove('active'); b?.setAttribute('aria-pressed', 'false');
+}
+
+// 카 뒷벽에 기댄 눈높이. 카가 오르내려도 같은 자리를 유지한다.
+function cabinLookPose() {
+  const eye = carGrp.position.y - S.CAR_H / 2 + 1.55;
+  const back = CAR_CTR_Z - S.CAR_D / 2 + 0.025 + 0.20;
+  return { position: [0, eye, back], target: [0, eye, CAR_CTR_Z + S.CAR_D / 2 - 0.12] };
+}
+
+function enterCabinView() {
+  if (overspeedActive || !controls.enabled) return;
+  controls.minDistance = MANUAL_CAMERA.minDistance;
+  camera.near = MANUAL_CAMERA.near;
+  camera.updateProjectionMatrix();
+  gsap.killTweensOf(camera.position); gsap.killTweensOf(controls.target);
+  // 진입 연출은 카 기준 자세로 매 프레임 보간한다 — 운행 중에 눌러도 카 밖에서 멈추지 않는다.
+  cabinFollow = { y: carGrp.position.y, t: 0, entering: true,
+    fromP: camera.position.clone(), fromT: controls.target.clone() };
+  gsap.to(cabinFollow, { t: 1, duration: 1.2, ease: 'power2.inOut' });
+  const b = document.getElementById('c-cabin');
+  b.classList.add('active'); b.setAttribute('aria-pressed', 'true');
+}
+
+// 사용자가 진입 연출 중에 화면을 잡으면 그 자리에서 보간만 끝내고 추종은 유지한다.
+function settleCabinEntry() {
+  if (!cabinFollow?.entering) return;
+  gsap.killTweensOf(cabinFollow);
+  cabinFollow.entering = false;
+}
+
+function syncCabinView() {
+  const f = cabinFollow;
+  if (!f) return;
+  if (overspeedActive || !controls.enabled) { leaveCabinView(); return; }
+  const y = carGrp.position.y;
+  if (f.entering) {
+    const pose = cabinLookPose();
+    camera.position.lerpVectors(f.fromP, _cabinV.set(...pose.position), f.t);
+    controls.target.lerpVectors(f.fromT, _cabinV.set(...pose.target), f.t);
+    f.y = y;
+    if (f.t >= 1) f.entering = false;
+    return;
+  }
+  const dy = y - f.y;
+  f.y = y;
+  if (!dy) return;
+  camera.position.y += dy;
+  controls.target.y += dy;
+}
 
 function updateManualCameraNear() {
   if (overspeedActive || !controls.enabled) return;
@@ -261,6 +321,7 @@ function updateManualCameraNear() {
     }
 
     function closeDoors(cb) {
+      if (HallManual.active) return; // 점검자의 발 받침은 승장문 아이콘에서 해제한다.
       if (DoorBypass.mode !== 'off') return;
       if (estop) return;
       if (!doorOpen) { if (cb) cb(); return; }
@@ -383,6 +444,7 @@ function updateManualCameraNear() {
     }
 
     function insStart(dir) {
+      if (HallManual.busy) return;
       if (!PitLadder.secured) { updateStatus('v-dir', '피트 사다리 펼침 — 운행 차단', '#f85149'); return; }
       if (!insMode || estop || overspeedActive || insDir === dir) return;
       if (DoorBypass.mode !== 'off' && !DoorBypass.canInspect()) return;
@@ -922,6 +984,7 @@ function updateManualCameraNear() {
     function closeAllMenus() {
       portraitHUD?.close();
       PartActions.close();
+      if(typeof HallManual!=='undefined')HallManual.dismiss();
       document.querySelectorAll('.sheet.open').forEach(d => d.classList.remove('open'));
       document.querySelectorAll('[data-menu].active').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-expanded', 'false'); });
     }
@@ -939,10 +1002,9 @@ function updateManualCameraNear() {
         if (!slots.has(node)) { const marker = document.createComment('portrait-control-home'); node.before(marker); slots.set(node, marker); }
         return node;
       };
-      const actions = ['hall-toggle', 'inspection-reset'].map(id => remember(document.getElementById(id)));
+      const actions = ['inspection-reset'].map(id => remember(document.getElementById(id)));
       const panels = {
-        mode: remember(document.querySelector('#dd-inst .mode-row')),
-        bypass: remember(document.getElementById('bypass-mode').closest('.field'))
+        mode: remember(document.querySelector('#dd-inst .mode-row'))
       };
       const labels = new Map();
       const shortLabel = (node, text) => { if (!labels.has(node)) labels.set(node, node.textContent); node.textContent = text; };
@@ -964,12 +1026,9 @@ function updateManualCameraNear() {
         document.getElementById('mobile-eye-slash').style.display = '';
         if (media.matches) {
           menuButton.setAttribute('aria-controls', 'mobile-tools');
-          actions.forEach(node => dock.insertBefore(node, dock.querySelector('[data-mobile-panel="bypass"]')));
-          shortLabel(actions[0], 'KEY'); shortLabel(actions[1], '리셋');
+          actions.forEach(node => dock.insertBefore(node, dock.querySelector('[data-mobile-panel="mode"]')));
+          shortLabel(actions[0], '리셋');
           for (const [id, text] of [['btn-aut','AUT'],['btn-ins','INS']]) shortLabel(document.getElementById(id),text);
-          for (const [id, values] of [['bypass-mode',['OFF','HALL','CAR']]]) {
-            document.querySelectorAll(`.seg[data-for="${id}"] button`).forEach((node,i) => shortLabel(node,values[i]));
-          }
           shortLabel(document.querySelector('#btn-estop span'), estop ? 'RESET' : 'STOP');
         } else {
           menuButton.setAttribute('aria-controls', 'dd-inst');
@@ -1065,11 +1124,6 @@ function updateManualCameraNear() {
       bindPortraitHUD();
       PartActions.bind();
       showControlHint();
-      // 세로 폰에서는 승장문 점검 패널이 같은 자리(운행바 위)에 뜨므로 고장 시트를 닫아 준다.
-      document.getElementById('hall-toggle')?.addEventListener('click', () => {
-        if (matchMedia('(max-width: 600px)').matches) closeAllMenus();
-        renderSegments();
-      });
 
       document.getElementById('speed-select').addEventListener('change', e => {
         targetSpeed = parseInt(e.target.value);
@@ -1166,7 +1220,9 @@ function updateManualCameraNear() {
       resetPill.addEventListener('click', () => document.getElementById(resetPill.dataset.src)?.click());
 
       // 전체 보기 — 더블클릭으로 가까이 간 화면을 처음 운행 시점으로 되돌린다(부품별 카메라 프리셋은 두지 않는다).
-      document.getElementById('c-shaft').addEventListener('click', () => {
+      document.getElementById('part-icons-toggle').addEventListener('click', () => PartActions.setIconsVisible(!PartActions.iconsVisible));
+      document.getElementById('overview-home').addEventListener('click', () => {
+        closeAllMenus();
         if (overspeedActive || !controls.enabled) return; // 자동 시연·복귀 카메라를 보호한다.
         controls.minDistance = MANUAL_CAMERA.minDistance;
         camera.near = MANUAL_CAMERA.near;
@@ -1174,6 +1230,10 @@ function updateManualCameraNear() {
         gsap.killTweensOf(camera.position); gsap.killTweensOf(controls.target);
         const home = overviewCameraPose();
         moveCam(...home.position, ...home.target, false);
+      });
+      // 한 번 누르면 탑승 시점 고정(카 추종), 다시 누르면 해제되어 자유 시점으로 돌아간다.
+      document.getElementById('c-cabin').addEventListener('click', () => {
+        if (cabinFollow) leaveCabinView(); else enterCabinView();
       });
       // 권상기 내부: 기어 케이스 절개 조각을 빼내 웜·휠 이물림과 오일 레벨을 보여준다.
       const cutBtn = document.getElementById('tm-cutaway');
@@ -1242,6 +1302,7 @@ function updateManualCameraNear() {
       let lastTap = null;
       const cancelMotion = () => {
         if (overspeedActive || !controls.enabled) return;
+        settleCabinEntry();
         gsap.killTweensOf(camera.position);
         gsap.killTweensOf(controls.target);
       };
@@ -1296,6 +1357,7 @@ function updateManualCameraNear() {
         if (!hit) return;
         ignored.add(e);
         cancelMotion();
+        leaveCabinView();   // 부품으로 날아가는 확대는 탑승 시점을 푼다
         const distance = THREE.MathUtils.clamp(hit.distance * 0.3, 0.12, 2);
         const position = camera.position.clone().sub(hit.point).normalize().multiplyScalar(distance).add(hit.point);
         position.y = Math.max(Y0 + 0.35, position.y);
@@ -1322,6 +1384,7 @@ function updateManualCameraNear() {
     }
 
     function moveCam(cx, cy, cz, tx, ty, tz, fitWidth = true) {
+      leaveCabinView();
       // 세로 화면에서는 부품의 좌우가 잘리지 않도록 같은 시선 방향으로 물러난다.
       const distanceScale = fitWidth ? Math.max(1, 0.9 / camera.aspect) : 1;
       cx = tx + (cx - tx) * distanceScale;

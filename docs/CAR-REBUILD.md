@@ -9,6 +9,15 @@ Claude Code, Google Antigravity, Codex, Cursor는 카 작업을 시작하기 전
 
 ## 현재 화면 상태
 
+### TERRACE 실내 의장 (2026-09-27)
+
+- 사용자 선택: 리모델링 카탈로그 PDF 14페이지 TERRACE. 기존 후면·우측 유리 2면은 유지하고, 좌측 금속 벽에 차콜/미세 골드 입자, 카문에 검정 세로결과 샴페인 골드 인레이, 바닥에 밝은 석재와 회색 테두리를 적용했다. 전면 리턴·손잡이·조작반은 은색이며 안전 스티커·명판을 유지한다.
+- 의장 원본은 `js/car-terrace.js`. 텍스처는 고정 시드 Canvas로 최초 한 번만 생성하며 재질은 `M.*`에서 파생한다. 구조 판넬·실·도어 본체 치수와 `S`·FSM·로프·균형추는 바꾸지 않았다.
+- 천장: `blender/scripts/car_terrace_ceiling.py` → `models/gltf/car_terrace_ceiling.glb`. 실제 베벨과 4단 패널, 양쪽 종방향 LED 홈·횡방향 LED 렌즈·환기 슬롯을 4개 재질 메시로 묶는다. 형상 계약은 JS의 `TERRACE_CEILING` JSON 한 줄을 Python이 읽고 GLB extras와 로더가 대조한다. X/Z는 정규화된 폭/깊이이며 JS가 기존 판넬 안쪽 치수로 스케일하고 Y는 미터 단위를 유지한다.
+- 천장 최저점은 마감바닥 위 약 2.210m이며 기존 지붕 하면 아래에 장착한다. 카문 골드 인레이는 의장면보다 0.15mm 돌출되어 스티커(0.6mm) 뒤에 있고, 기존 고정 리턴과 최소 4.85mm 간극을 확보한다. 인레이는 문짝별 1개 메시로 자동 병합되어 문과 함께 움직인다.
+- `node tools/verify_car_terrace.mjs`: Live Server 하드 리로드, 천장 GLB·외곽·높이, 유리 6장, 문 101개 위치의 인레이 추종/간극, 390px 터치 층 호출과 실제 도어 개폐 검증. 정면·천장·유리·세로 화면은 `.shot-terrace/`.
+- `node tools/verify_car_interior.mjs terrace-before` / `terrace-final`: 같은 PC Chromium, DPR 1, 같은 시점·품질에서 1280×850 및 390×844 중앙값 모두 16.7ms 유지. PC draw call 1212→1220, 삼각형 372561→375981. 명판·안내문·스티커·전면 마감 간극 검증 통과. 실제 모바일 기기 조작·성능 검증은 남아 있다.
+
 ### 실내 표시·출입구 마감 (2026-09-27)
 
 - `js/car-panels.js`: 주 조작반 층표시 위 `Kolesa`, 반대쪽 전면 리턴의 `assets/bg/이용자안전수칙.png`, 연속 상부 마감판·하부 리턴을 추가했다. 문 의장면과 하부 리턴 끝의 간극은 5mm다.

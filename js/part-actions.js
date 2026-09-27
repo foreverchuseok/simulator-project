@@ -4,6 +4,14 @@ const PartActions=(()=>{
   const point=new THREE.Vector3(),govScreen={x:0,y:0,visible:false};
   let statusBox,runBox;
   let guidePanel,activeGuide;
+  let iconsVisible=true;
+  function setIconsVisible(value){
+    iconsVisible=!!value;close();
+    document.body.classList.toggle('part-icons-hidden',!iconsVisible);
+    const b=document.getElementById('part-icons-toggle');
+    b.setAttribute('aria-pressed',String(iconsVisible));
+    b.textContent=iconsVisible?'부품 아이콘 숨기기':'부품 아이콘 보이기';
+  }
   const guideButtons=new Map(),guideOffset=new THREE.Vector3(0,.065,-.025),guideWorld=new THREE.Vector3();
   function positionButton(button,x,y){
     x=Math.max(8,Math.min(innerWidth-52,x));y=Math.max(8,Math.min(innerHeight-52,y));
@@ -67,15 +75,20 @@ const PartActions=(()=>{
     return true;
   }
   const govOffset=new THREE.Vector3(0,.32,0);
+  let guideContent;
+  const retentionContent='<div class="part-panel-head"><strong>승장문 하부 이탈방지장치</strong><button type="button" aria-label="이탈방지장치 설명 닫기">×</button></div><p>일반 도어슈 두 개는 1번 실 홈을 따라 움직이며 문 하단을 안내합니다. 가운데 금색 보강슈는 2번 실 홈에 들어가 문짝과 함께 이동합니다.</p><p>하부 이탈방지장치는 문 하단이 실에서 빠지는 것을 억제하는 보조 장치입니다. 위쪽 비상가이드와 함께 문짝의 이탈을 방지하는 역할을 합니다.</p><p class="guide-detail">현재 화면은 구조 설명을 위한 교육용 형상입니다.</p>';
   function updateGuides(){
-    for(const guide of HallEmergencyGuide.guides){
+    if(!guideContent)guideContent=guidePanel.innerHTML;
+    for(const guide of [...HallEmergencyGuide.guides,...HallRetention.devices]){
+      const retention=guide.userData.type==='hall-door-retention';
       let button=guideButtons.get(guide);
       if(!button){
         button=document.createElement('button');button.type='button';button.className='part-action';
-        button.id='guide-action-'+guide.userData.floor+'-'+guide.userData.side;
-        button.setAttribute('aria-label',`${guide.userData.floor+1}층 승강장문 비상가이드 설명`);
+        button.id=retention?'retention-action-'+HallRetention.devices.indexOf(guide):'guide-action-'+guide.userData.floor+'-'+guide.userData.side;
+        const floor=retention?hatchDoors.findIndex(h=>h.left===guide.parent||h.right===guide.parent):guide.userData.floor;
+        button.setAttribute('aria-label',`${floor+1}층 ${retention?'승장문 하부 이탈방지장치':'승강장문 비상가이드'} 설명`);
         button.setAttribute('aria-controls','emergency-guide-panel');button.setAttribute('aria-expanded','false');icon(button,'guide');
-        button.addEventListener('click',()=>{const open=activeGuide!==button||guidePanel.hidden;closeAllMenus();if(open){activeGuide=button;guidePanel.hidden=false;button.setAttribute('aria-expanded','true');}});
+        button.addEventListener('click',()=>{const open=activeGuide!==button||guidePanel.hidden;closeAllMenus();if(open){guidePanel.innerHTML=retention?retentionContent:guideContent;guidePanel.setAttribute('aria-label',retention?'승장문 하부 이탈방지장치 설명':'승강장문 비상가이드 설명');guidePanel.querySelector('button').addEventListener('click',close);activeGuide=button;guidePanel.hidden=false;button.setAttribute('aria-expanded','true');}});
         document.getElementById('part-actions').appendChild(button);guideButtons.set(guide,button);
       }
       guide.getWorldPosition(guideWorld);
@@ -111,5 +124,5 @@ const PartActions=(()=>{
       panel.style.top=Math.max(8,Math.min(innerHeight-panel.offsetHeight-8,parseFloat(brake.style.top)+50))+'px';
     }
   }
-  return {bind,update,close,positionButton};
+  return {bind,update,close,positionButton,setIconsVisible,get iconsVisible(){return iconsVisible;}};
 })();
