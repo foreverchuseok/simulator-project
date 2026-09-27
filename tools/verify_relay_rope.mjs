@@ -9,8 +9,8 @@ const server=http.createServer((req,res)=>{const file=path.resolve(root,'.'+new 
 await new Promise(r=>server.listen(0,'127.0.0.1',r));let browser;
 try{
  browser=await chromium.launch();const page=await browser.newPage({viewport:{width:1600,height:950}}),errors=[];
- page.on('pageerror',e=>{errors.push(e.message);console.log('PAGE ERROR',e.message);});
- await page.goto(`http://127.0.0.1:${server.address().port}/index.html?doorcam=1`,{waitUntil:'networkidle'});
+ page.on('pageerror',e=>{errors.push(e.message);console.log('PAGE ERROR',e.stack);});
+ await page.goto(process.env.SIMULATOR_URL||`http://127.0.0.1:${server.address().port}/index.html?doorcam=1`,{waitUntil:'networkidle'});
  await page.waitForFunction(()=>hatchDoors.length===FLOORS&&hatchDoors.every(h=>h.interlock?.ready));
  const checks=await page.evaluate(()=>{
    const rows=[],check=(name,pass,detail)=>rows.push({name,pass:!!pass,detail});
@@ -43,7 +43,7 @@ try{
          return p.distanceTo(tip)<1e-6;
        }));
        check(`floor ${i} opening ${t}: lower endpoints / pulley tangency`,Math.abs(a[1]-(h.left.position.x+k.bL))<1e-6&&Math.abs(b[0]-(h.left.position.x+k.bR))<1e-6&&[k.seg.loL,k.seg.loR].every(m=>m.position.y===k.loY&&m.position.z===k.loZ));
-       check(`floor ${i} opening ${t}: closer preserved`,Math.abs(k.closer.coil.scale.x-(k.closer.anchorX-h.left.position.x-k.closer.lugDX-0.006))<1e-6);
+       check(`floor ${i} opening ${t}: closer preserved`,Math.abs(k.closer.coil.scale.x-(k.closer.anchorX-h.left.position.x-k.closer.lugDX-2*k.closer.endRun))<1e-6);
      }
      for(const d of [h.left,h.right])d.position.x=d.userData.cx;spinDoorDrive(h);
    }return rows;

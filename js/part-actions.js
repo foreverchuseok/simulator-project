@@ -3,6 +3,8 @@ const PartActions=(()=>{
   let governor,brake,panel,source,brakeRoot,brakeAnchor;
   const point=new THREE.Vector3(),govScreen={x:0,y:0,visible:false};
   let statusBox,runBox;
+  let guidePanel,activeGuide;
+  const guideButtons=new Map(),guideOffset=new THREE.Vector3(0,.065,-.025),guideWorld=new THREE.Vector3();
   function positionButton(button,x,y){
     x=Math.max(8,Math.min(innerWidth-52,x));y=Math.max(8,Math.min(innerHeight-52,y));
     const overlaps=b=>b&&x<b.right+4&&x+44>b.left-4&&y<b.bottom+4&&y+44>b.top-4;
@@ -18,11 +20,12 @@ const PartActions=(()=>{
     governor:'<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2"/><path d="m12 10 4-5M10 13l-5 3m9-3 5 3"/>',
     brake:'<path d="M10 3v18m4-18v18M7 7H4v10h3m10-10h3v10h-3M4 12h4m8 0h4"/>',
     play:'<path d="m9 5 10 7-10 7Z"/>',
-    reset:'<path d="M4 10a8 8 0 1 1 1 8M4 4v6h6"/>'
+    reset:'<path d="M4 10a8 8 0 1 1 1 8M4 4v6h6"/>',
+    guide:'<path d="M4 5h16M7 19V9h4v5h6V9M7 19h5"/><circle cx="18" cy="19" r="3"/><path d="M18 18v2"/>'
   };
   const icons=Object.fromEntries(Object.entries(paths).map(([k,v])=>[k,`url("data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+v+'</svg>')}")`]));
   const icon=(button,key)=>button.style.setProperty('--part-icon',icons[key]);
-  function close(){if(panel)panel.hidden=true;if(brake)brake.setAttribute('aria-expanded','false');}
+  function close(){if(panel)panel.hidden=true;if(brake)brake.setAttribute('aria-expanded','false');if(guidePanel)guidePanel.hidden=true;if(activeGuide)activeGuide.setAttribute('aria-expanded','false');activeGuide=null;}
   function sync(){
     const ovsReset=governor.textContent.trim()==='RST',ucmReset=source.textContent.trim()==='RST';
     icon(governor,ovsReset?'reset':'governor');icon(source,ucmReset?'reset':'play');icon(brake,ucmReset?'reset':'brake');
@@ -33,6 +36,10 @@ const PartActions=(()=>{
     governor.classList.toggle('active',ovsReset);brake.classList.toggle('active',ucmReset);
   }
   function bind(){
+    guidePanel=document.getElementById('emergency-guide-panel');
+    document.getElementById('emergency-guide-dismiss').addEventListener('click',close);
+    document.addEventListener('keydown',e=>{if(e.key==='Escape')close();});
+    document.addEventListener('pointerdown',e=>{if(!guidePanel.hidden&&!guidePanel.contains(e.target)&&e.target!==activeGuide)close();});
     governor=document.getElementById('btn-overspeed');brake=document.getElementById('rope-brake-action');
     panel=document.getElementById('rope-brake-panel');source=document.getElementById('btn-ucm');
     icon(document.getElementById('pit-ladder-action'),'ladder');sync();
@@ -60,10 +67,31 @@ const PartActions=(()=>{
     return true;
   }
   const govOffset=new THREE.Vector3(0,.32,0);
+  function updateGuides(){
+    for(const guide of HallEmergencyGuide.guides){
+      let button=guideButtons.get(guide);
+      if(!button){
+        button=document.createElement('button');button.type='button';button.className='part-action';
+        button.id='guide-action-'+guide.userData.floor+'-'+guide.userData.side;
+        button.setAttribute('aria-label',`${guide.userData.floor+1}층 승강장문 비상가이드 설명`);
+        button.setAttribute('aria-controls','emergency-guide-panel');button.setAttribute('aria-expanded','false');icon(button,'guide');
+        button.addEventListener('click',()=>{const open=activeGuide!==button||guidePanel.hidden;closeAllMenus();if(open){activeGuide=button;guidePanel.hidden=false;button.setAttribute('aria-expanded','true');}});
+        document.getElementById('part-actions').appendChild(button);guideButtons.set(guide,button);
+      }
+      guide.getWorldPosition(guideWorld);
+      if(camera.position.distanceToSquared(guideWorld)>9){button.hidden=true;}else place(button,guide,guideOffset);
+      if(button===activeGuide){
+        if(button.hidden){close();continue;}
+        guidePanel.style.left=Math.max(8,Math.min(innerWidth-guidePanel.offsetWidth-8,parseFloat(button.style.left)-100))+'px';
+        guidePanel.style.top=Math.max(8,Math.min(innerHeight-guidePanel.offsetHeight-8,parseFloat(button.style.top)+50))+'px';
+      }
+    }
+  }
   function update(){
     if(!governor)return;
     statusBox=document.getElementById('statusbar').getBoundingClientRect();
     runBox=document.getElementById('dd-op').getBoundingClientRect();
+    updateGuides();
     const wheel=govHandles()?.ready?govHandles().wheel:null;
     if(wheel){govOffset.copy(wheel.position);govOffset.y+=.32;}
     govScreen.visible=place(governor,wheel?.parent,govOffset);
@@ -77,7 +105,7 @@ const PartActions=(()=>{
       }
     }
     const shown=place(brake,brakeRoot,brakeAnchor);
-    if(!shown){close();return;}
+    if(!shown){panel.hidden=true;brake.setAttribute('aria-expanded','false');return;}
     if(!panel.hidden){
       panel.style.left=Math.max(8,Math.min(innerWidth-panel.offsetWidth-8,parseFloat(brake.style.left)-90))+'px';
       panel.style.top=Math.max(8,Math.min(innerHeight-panel.offsetHeight-8,parseFloat(brake.style.top)+50))+'px';

@@ -115,7 +115,8 @@ const CarDoorTransmission = (() => {
     t.clamps[0].position.z=t.returnZ+(t.ropeZ-t.returnZ)*(leftX+t.endX)/(t.B.x+t.endX);
     t.clamps[1].position.z=t.returnZ;
     t.clamps.forEach((c,i)=>{c.slider.position.x=(i?1:-1)*p.takeup*release;c.spring.scale.x=1-p.takeup*release/.054;});
-    for(const item of t.marks){const distance=item.belt?ropeTravel*p.wheelR/p.drumR:ropeTravel;const u=((item.offset+distance/item.curve.getLength())%1+1)%1;item.curve.getPointAt(u,item.marker.position);}
+    // r128 CurvePath.getPointAt returns a new vector; it ignores a target argument.
+    for(const item of t.marks){const distance=item.belt?ropeTravel*p.wheelR/p.drumR:ropeTravel;const u=((item.offset+distance/item.curve.getLength())%1+1)%1;item.marker.position.copy(item.curve.getPointAt(u));}
     t.travel=ropeTravel;t.angle=angle;
   }
   return {spec,build,pose};

@@ -31,6 +31,18 @@
 
 ## 인계 상태
 
+- 폐문 스프링 체결·금색 구분(2026-09-27): 사용자 104518·104511·1046501 표시 반영. 떠 있던 스프링 행거와 21mm 어긋난 핀을 행거판 체결볼트·브라켓·양쪽 귀판·관통핀·고리로 연결했다. 양끝 고리는 고정 형상을 유지하며 코일만 늘어난다. 스프링 브라켓·연동로프 클립·반대쪽 고정판은 사용자 표시 중앙 GLB 판의 금색을 공유한다. `verify_hall_spring` 4층×101자세 접속 및 색상, Live Server `verify_relay_rope` 185개, `verify_car_door` 통과. `.shot-hall-spring/` 참조. 실제 모바일 확인은 남아 있으며 다음 안전부품은 사용자 지정에 따른다. 커밋·푸시하지 않았다.
+
+- 비상가이드 검증 잔여: 신규 가이드 PC/390px 터치 검사는 통과했다. 기존 `verify_part_actions` PC는 통과했으나 모바일 단독 재실행은 사다리·로프브레이크 이후 조속기 트립 대기에서 시간 초과했다. 기존 모바일 연속 시연 회귀검사의 원인은 미확인으로 남긴다. 실제 기기 확인도 별도다.
+
+- 안전부품 ③ 승강장문 비상가이드(2026-09-27): 사용자 8대 항목 안내문 기준으로 진행한다. 사용자 확인상 ⑤ 상승과속방지·⑥ 개문출발방지·⑦ 브레이크 시스템은 기존 구현이며, 이번에는 ③의 SUS304 절곡형 가이드를 Blender로 제작해 전 층 양쪽 행거판에 총 8개 추가했다. 헤더 안쪽 걸림과 장착부 국부 홈, 근접 설명 아이콘을 적용했다. GLB 생성과 PC·390px 터치 설명창·101개 개폐 위치·간극 검증, 기존 카문/승장문 수동 점검 검증 통과. 상세는 `docs/DOOR-REBUILD.md`, 결과는 `.shot-hall-emergency-guide/`. 화재·파손 동작 시연은 이번 범위에 없으며 실제 모바일 확인은 남아 있다. 나머지 안전부품 항목은 사용자 지정 순서대로 진행한다. 커밋·푸시하지 않았다.
+
+- 카 실내 마감 재개(2026-09-27): `Kolesa` 회사명, 카문 안전스티커 2개, 반대쪽 이용자 안전수칙, 상부 연속 마감 및 Blender `0001-001` 명판을 반영했다. 공중 구슬은 도어 구동 표시점 좌표 갱신 오류를 수정했다. GLB 재생성 성공, `verify_car_interior`의 101자세·명판·스티커·5mm 간극 검증 통과. 같은 PC Chromium·DPR 1·실내 시점에서 1280×850/390×844 중앙값은 전후 16.7ms, p95 16.7→16.8ms. 상세는 `docs/CAR-REBUILD.md`, 결과는 `.shot-render-performance/cabin-after-interior.json`. 실제 모바일 기기 확인은 남아 있다. 다음은 현재 1단계 모바일 사용 경험·실기기 검증이며 커밋·푸시하지 않았다.
+
+- 저녁 전시 광장으로 정리(2026-09-27): 사용자 선택 1번에 따라 달·관측동·안테나·연속 유도등을 제거하고 어두운 회색 콘크리트 광장, 낮은 담장, 먼 나무 7그루와 작은 보행등으로 변경했다. `buildDuskPlaza()`가 생성하며 청회색 하늘·옅은 노을과 부품 조명은 유지한다. 미사용 달 이미지와 README 출처 항목도 제거했다. `verify_view_modes`의 하드 리로드·풍경 전환·확대·터치 및 `verify_portrait_hud`의 320/360/390/412px·층 이동·도어·비상정지 검증 통과, 화면 확인. 같은 PC Chromium·1280×850·DPR 1·기본 시점의 마지막 baseline 중앙값 33.3→33.3ms, p95 33.4→33.4ms, 호출 4,127→4,121회. 첫 측정 p95는 변경 후 50ms로 일시 증가했으며 마지막 안정 구간은 같았다. 결과 `.shot-render-performance/plaza-before.json`·`plaza-after.json`. 실제 모바일 기기 확인은 남아 있다. 커밋·푸시하지 않았다.
+
+- 저녁 SF 평원 배경(2026-09-27): 사용자 선택에 따라 사각 천공섬·구름 메시를 은회색 평원, 낮은 산맥·관측동 2채, 호박색 유도등, 큰 달로 교체했다. `js/environment.js`의 `buildDuskPlain()`이 생성하며 계단·램프·피트 지면 높이와 부품 조명·운행은 유지한다. 달은 NASA SVS 1K 표면 지도를 `assets/bg/moon-color.png`(약 685KiB)로 로컬 로드하며 출처는 README에 기록했다. `verify_view_modes`의 하드 리로드·배경 토글·근접 관찰·터치 검증과 `verify_portrait_hud`의 320/360/390/412px·층 이동·도어·비상정지 검증 통과. 같은 PC Chromium·1280×850·DPR 1·기본 시점에서 `verify_render_performance`의 마지막 baseline 중앙값 33.3→33.3ms, p95 33.4→33.4ms, 호출 4,115→4,127회, 삼각형 1,210,562→1,210,890개. 결과는 `.shot-render-performance/dusk-before.json`·`dusk-release.json`. 실제 모바일 기기 조작·성능 확인은 남아 있다. 커밋·푸시하지 않았다.
+
 - 승장 도어·홀버튼 실사화(2026-09-27): 참고 사진(브론즈) 대신 스테인리스 헤어라인으로 `blender/scripts/hall_door_button.py` → `hall_door_panel.glb`·`hall_call_button.glb`. 전 층 도어 본체를 GLB로 교체(스티커는 기존 PNG 그대로), 호출버튼은 헤어라인 판·장애인 표지·원형 버튼+LED 링·검정 채움 촉지 화살표·점자(위 ⠍⠗ / 아래 ⠣⠐⠗), 1층 ▲·최상층 ▼만. 판 중심 +1.02m(편의법 0.8~1.2m). 버튼 LED는 `HallFinish.setLamp()`로 켤 수 있으나 홀 호출 연동은 아직 없다. `verify_car_door`·`verify_hall_manual`·`verify_triangle_key`·`verify_view_modes` 통과, 같은 시점 주 패스 드로우콜 +36. 삼방틀·인디케이터는 이번 범위 밖. 실제 모바일 확인은 남아 있다. 커밋하지 않았다.
 
 - 부품 옆 원형 아이콘(2026-09-27): 사다리 글자 버튼을 없애고 사다리 상단(1.8m) 곁 원형 아이콘으로 바꿨다. 조속기(OVS)·로프브레이크(UCM, 정상/미작동/미설치 선택 소형 패널)·사다리 조작을 고장·점검 메뉴에서 빼고 각 부품 위 44px 유리 아이콘(`js/part-actions.js`)으로 옮겼다. 메뉴에는 운전 모드·승장문·BYPASS·리셋만 남는다. 기존 id(`btn-overspeed`·`btn-ucm`·`ucm-brake`·`pit-ladder-action`) 계약은 유지한다. Codex 작업이 사용량 한도로 끊긴 뒤 Claude Code가 검증을 마무리했다: `verify_part_actions`(PC·모바일), `verify_pit_ladder`(첫 클릭 카메라를 새 아이콘 위치에 맞춤), `verify_ucm`, `verify_overspeed`, `verify_inspection_reset`, `verify_portrait_hud` 통과. 실제 모바일 확인은 남아 있다. 커밋하지 않았다.

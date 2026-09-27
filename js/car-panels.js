@@ -59,6 +59,12 @@ function buildCarPanels(parent) {
   }
   const transomH=top-(bottom+S.DOOR_H);
   box('entranceTransom',S.DOOR_W,transomH,0.035,steel,0,top-transomH/2,frontZ);
+  // 실내측 연속 마감판과 하부 리턴이 문 위 행거 체결부를 가린다.
+  const finishLip=0.008, innerFace=frontZ-0.020;
+  box('entranceFinishHeader',rearWidth,transomH+finishLip,0.003,steel,0,top-(transomH+finishLip)/2,innerFace);
+  const runningFace=CarDoor.dimensions().doorZ-CarDoor.spec.panelT/2;
+  const returnDepth=runningFace-0.005-innerFace;
+  box('entranceHeaderSoffit',S.DOOR_W,0.003,returnDepth,steel,0,bottom+S.DOOR_H-finishLip,innerFace+returnDepth/2);
   box('carFloorFinish',rearWidth-0.04,finish,sideLength-0.02,M.floor(),0,floorY+finish/2,sideMid);
   // 실 상면은 4T 바닥과 동일 높이. 두 홈은 실을 분할해 실제 음각으로 만든다.
   const sill=new THREE.Group(); sill.name='carSill'; root.add(sill);
@@ -179,7 +185,7 @@ function buildCarControls(parent,{floorY,frontZ,sideX}) {
   box('opbStainlessFace',0.25,1.80,0.006,metal,0,0,0.004,opb);
   box('opbBlackDisplay',0.205,0.46,0.005,dark,0,0.60,0.010,opb);
   label('4',0.070,0.12,0,0.66,0.014,opb,'#d9edff','#10161c').name='opbFloorDisplay';
-  label('AUTO',0.060,0.015,0,0.77,0.014,opb);
+  label('Kolesa',0.112,0.027,0,0.77,0.014,opb).name='opbCompanyName';
   for(let i=0;i<4;i++)box('opbSpeakerSlot',0.034,0.002,0.001,metal,0,0.52-i*0.008,0.014,opb);
   function button(name,text,x,y,alarm=false) {
     const group=new THREE.Group();group.name=name;group.position.set(x,y,0.013);opb.add(group);
@@ -189,6 +195,20 @@ function buildCarControls(parent,{floorY,frontZ,sideX}) {
     return group;
   }
   button('opbEmergencyCall','☎',0,0.415,true);
+  const idPlate=new THREE.Group();idPlate.name='carIdentificationPlate';
+  idPlate.position.set(0,0.305,0.009);opb.add(idPlate);
+  new THREE.GLTFLoader().load('models/gltf/car_identification_plate.glb',gltf=>{
+    gltf.scene.traverse(o=>{if(o.isMesh){o.castShadow=false;o.receiveShadow=false;}});
+    const metadata=gltf.scene.getObjectByName('CarIdentificationPlate').userData;
+    idPlate.add(gltf.scene);idPlate.userData={...metadata,ready:true};
+  },undefined,error=>console.error('Car identification plate load failed',error));
+
+  // 사용자 표시: 주 조작반 반대쪽 전면 리턴 판넬, 보조 조작반보다 위.
+  const noticeTexture=new THREE.TextureLoader().load('assets/bg/이용자안전수칙.png');
+  noticeTexture.encoding=THREE.sRGBEncoding;
+  const noticeMat=new THREE.MeshBasicMaterial({map:noticeTexture,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1});
+  const notice=new THREE.Mesh(new THREE.PlaneGeometry(0.30,0.30*1755/1408),noticeMat);
+  notice.name='carPassengerSafetyNotice';notice.position.set(-opbX,floorY+1.64,frontZ-0.014);notice.rotation.y=Math.PI;root.add(notice);
   for(let floor=4;floor>=1;floor--){
     const y=0.21-(4-floor)*0.145;
     const b=button('opbFloorButton_'+floor,String(floor),0,y);

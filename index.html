@@ -705,6 +705,11 @@
     .part-action:disabled { opacity:.5; cursor:progress; }
     .part-action:focus-visible { outline:2px solid #9fddff; outline-offset:3px; }
     .part-action[hidden], #rope-brake-panel[hidden] { display:none; }
+    #emergency-guide-panel[hidden] { display:none; }
+    #emergency-guide-panel { position:fixed; z-index:112; width:280px; max-width:calc(100vw - 16px); padding:14px; border-radius:16px; color:var(--ui-text); font-family:var(--ui-font); box-sizing:border-box; }
+    #emergency-guide-panel p { font-size:13px; line-height:1.6; margin:10px 0 0; }
+    #emergency-guide-panel .guide-detail { opacity:.75; font-size:12px; }
+    .portrait-tools-hidden #emergency-guide-panel { visibility:hidden !important; }
     #rope-brake-panel { position:fixed; z-index:111; width:230px; max-width:calc(100vw - 16px); padding:10px; border-radius:16px; color:var(--ui-text); font-family:var(--ui-font); }
     .part-panel-head { display:flex; align-items:center; justify-content:space-between; font-size:13px; font-weight:600; }
     .part-panel-head button { width:44px; height:44px; border:0; border-radius:50%; background:transparent; color:inherit; font-size:22px; cursor:pointer; }
@@ -957,7 +962,7 @@
         <h4>보기</h4>
         <div class="toggles">
           <button class="toggle" id="tm-cutaway" aria-pressed="false" title="기어 케이스 절개 — 웜·휠 이물림과 오일 레벨"><span><b><span class="l-full">권상기 내부</span><span class="l-short">권상기</span></b><small>기어 케이스 절개 · 웜·휠 이물림</small></span></button>
-          <button class="toggle" id="c-background" aria-pressed="false" title="기존 건물과 자연 풍경 표시"><span><b><span class="l-full">주변 풍경</span><span class="l-short">풍경</span></b><small>하늘·구름·조명</small></span></button>
+          <button class="toggle" id="c-background" aria-pressed="false" title="저녁 하늘과 주변 조명 전환"><span><b><span class="l-full">주변 풍경</span><span class="l-short">풍경</span></b><small>저녁 하늘·조명</small></span></button>
           <button class="toggle active" id="c-mascot" aria-pressed="true" title="기계실 마스코트 표시/숨김"><span><b>캐릭터</b><small>기계실 마스코트 「승강곰」</small></span></button>
         </div>
         <h4 class="help-title">조작 방법</h4>
@@ -1019,6 +1024,12 @@
 
   <!-- 라이브러리 로드 -->
   <div id="part-actions">
+    <section id="emergency-guide-panel" class="glass" aria-label="승강장문 비상가이드 설명" hidden>
+      <div class="part-panel-head"><strong>③ 승강장문 비상가이드</strong><button id="emergency-guide-dismiss" type="button" aria-label="비상가이드 설명 닫기">×</button></div>
+      <p>문과 연결된 행거판에 고정된 스테인리스 갈고리가 헤더의 C레일 안쪽 턱을 감쌉니다.</p>
+      <p>평상시에는 간극을 두고 문과 함께 이동합니다. 마모·부식·화재 등으로 기존 가이드가 기능을 잃었을 때 문이 제 위치에서 이탈하지 않도록 붙잡는 보조 장치입니다.</p>
+      <p class="guide-detail">참고 형식: SUS304 · 두께 2mm 절곡판. 현재 승장문에 맞춘 교육용 형상입니다.</p>
+    </section>
     <button id="btn-overspeed" class="part-action governor-icon" aria-label="조속기 과속 시연" title="조속기 과속 시연 · 3층 이상" hidden>OVS</button>
     <button id="rope-brake-action" class="part-action brake-icon" aria-label="로프브레이크 시연 설정" aria-expanded="false" aria-controls="rope-brake-panel" hidden></button>
     <section id="rope-brake-panel" class="glass" aria-label="로프브레이크 시연" hidden>
@@ -1071,6 +1082,7 @@
   <script src="js/safety-device.js"></script>
   <script src="js/elevator.js"></script>
   <script src="js/hall-finish.js"></script>
+  <script src="js/hall-emergency-guide.js"></script>
   <script src="js/pit-ladder.js"></script>
   <script src="js/ucm-demo.js"></script>
   <script src="js/part-actions.js"></script>

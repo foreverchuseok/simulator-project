@@ -1036,8 +1036,8 @@
       parent.add(grp);
     }
 
-    const BG_SKY = 0x7ec8f0;       // 상단 시안
-    const BG_HORIZON = 0xe8f4fc;   // 수평선 거의 흰색
+    const BG_SKY = 0x222b49;       // 저녁 하늘
+    const BG_HORIZON = 0x98969c;   // 저녁 안개
     const BG_GROUND = 'rgba(74,69,63,1)';
     const BG_FOG_D = 0.0050;       // 지형 가장자리가 horizon 색에 녹아드는 안개 밀도
 
@@ -1055,13 +1055,13 @@
       const skyTex = createBgGradientTexture(4, 256, (ctx, w, h) => {
         const g = ctx.createLinearGradient(0, 0, 0, h);
         // 캔버스 위=천정, 0.5=수평선, 아래=지평선 아래 하늘.
-        // 천공섬이라 지평선 아래도 그대로 보이므로 흰 안개로 덮지 않고 옅은 하늘색으로 내려간다.
-        g.addColorStop(0.00, '#3f9fe8');
-        g.addColorStop(0.35, '#7fc4f2');
-        g.addColorStop(0.47, '#cfe8fa');
-        g.addColorStop(0.52, '#eef7fc'); // 수평선 밝은 띠
-        g.addColorStop(0.64, '#cfe6f6');
-        g.addColorStop(1.00, '#9cc8e6');
+        // 청보라 천정에서 따뜻한 저녁 지평선으로 이어진다.
+        g.addColorStop(0.00, '#344358');
+        g.addColorStop(0.35, '#69798d');
+        g.addColorStop(0.47, '#a7a3ac');
+        g.addColorStop(0.52, '#c4aaa2'); // 수평선 밝은 띠
+        g.addColorStop(0.64, '#98969c');
+        g.addColorStop(1.00, '#98969c');
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, w, h);
       });
@@ -1851,7 +1851,7 @@
       if (!outdoorPresentation) return;
       const p = outdoorPresentation;
       p.detailed = Boolean(enabled);
-      // 천공섬 배경에서는 지면에 서 있던 지형·주변 건물이 두 모드 모두 나오지 않는다.
+      // 전시 광장과 조경은 공통 배경이며 토글은 하늘·조명만 전환한다.
       if (p.landscape) p.landscape.visible = false;
       if (p.buildings) p.buildings.visible = false;
       p.sky.visible = p.detailed;
@@ -1870,7 +1870,7 @@
        넓은 지면 대신 승강로 + 보도블록 광장 footprint 만 남긴 사각 지반을 세운다.
        상면은 기존 외부 지면과 같은 Y0-0.03 레벨이라 보도블록·계단·램프 높이는 그대로다.
        옆면은 수직 절벽으로 곧게 내려가다 아래쪽에서 안개에 녹는다. */
-    const BUILD_GROUND_SCENERY = false; // 지면이 사라졌으므로 지형·풀밭·개울·주변 건물은 만들지 않는다(코드는 보존).
+    const BUILD_GROUND_SCENERY = false; // 이전 풀밭·개울·도심 배경은 생성하지 않는다.
     const PLINTH_MARGIN = 4.0;          // 보도블록·승강로 바깥으로 남는 흙·잔디 테두리 폭
     const PLAZA_BACK_MARGIN = 2.5;      // 승강로 뒤편으로 깔리는 보도블록 폭
     const PLAZA_FRONT_MARGIN = 3.0;     // 경사로 발치 앞 보도블록 여유
@@ -1970,6 +1970,49 @@
       return geo;
     }
 
+    // 정적 저녁 배경: 텍스처는 초기 한 번 생성하며 추가 광원/그림자 패스는 없다.
+    function buildDuskPlaza(parent) {
+      const surface = createBgGradientTexture(256, 256, (ctx, w, h) => {
+        ctx.fillStyle = '#a0a3a8'; ctx.fillRect(0, 0, w, h);
+        for (let i = 0; i < 1600; i++) {
+          const x = vertHash(i, 2, 3, 41) * w, y = vertHash(i, 5, 7, 42) * h;
+          ctx.fillStyle = i % 2 ? 'rgba(255,255,255,0.035)' : 'rgba(30,35,45,0.035)';
+          ctx.fillRect(x, y, 1, 1);
+        }
+      });
+      surface.encoding = THREE.sRGBEncoding;
+      surface.wrapS = surface.wrapT = THREE.RepeatWrapping; surface.repeat.set(36, 36);
+      const groundMat = M.conc(0x454d5b); groundMat.map = surface;
+      const floor = new THREE.Mesh(new THREE.CircleGeometry(180, 96), groundMat);
+      floor.name = 'duskPlazaGround'; floor.rotation.x = -Math.PI/2; floor.position.y = Y0 - 0.03;
+      floor.receiveShadow = true; floor.userData = { type: 'outdoor-ground' }; parent.add(floor);
+
+      const concrete=M.conc(0x454b53), cap=M.conc(0x5a6068), dark=M.paint(0x293137), amber=M.emit(0xe2b888,0.25);
+      const box=(w,h,d,mat,x,y,z)=>{const o=createBox(w,h,d,mat,x,y,z,parent);o.castShadow=false;o.receiveShadow=false;return o;};
+      // Low boundary walls leave open space around the exhibit.
+      for(const [x,z,w] of [[-31,-27,22],[25,-35,24],[-42,12,12]]) {
+        box(w,.8,.42,concrete,x,Y0+.4,z);
+        box(w+.12,.08,.55,cap,x,Y0+.84,z);
+      }
+      // A few distant trees, shared geometry and two instanced draw calls.
+      const trees=[[-39,-32,4.5],[-29,-34,5.2],[-21,-39,4.0],[20,-42,4.4],[31,-43,5.0],[41,-34,4.3],[-47,7,4.5]];
+      const leaves = new THREE.InstancedMesh(new THREE.SphereGeometry(1,12,10),M.conc(0x1e302d),trees.length*3);
+      const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(.09,.16,1,8),M.conc(0x34332f),trees.length);
+      const dummy = new THREE.Object3D();
+      trees.forEach(([x,z,h],i)=>{
+        dummy.position.set(x,Y0+h*.3,z);dummy.scale.set(1,h*.6,1);dummy.updateMatrix();trunks.setMatrixAt(i,dummy.matrix);
+        [[0,.73,0,.32,.29],[.18,.64,.06,.24,.22],[-.18,.62,-.05,.23,.20]].forEach(([dx,dy,dz,sx,sy],j)=>{
+          dummy.position.set(x+dx*h,Y0+dy*h,z+dz*h);dummy.scale.set(h*sx,h*sy,h*sx*.85);dummy.updateMatrix();leaves.setMatrixAt(i*3+j,dummy.matrix);
+        });
+      });
+      leaves.name='duskPlazaTrees';trunks.name='duskPlazaTrunks';parent.add(leaves,trunks);
+      // Small warm path lights, without continuous runway-like strips.
+      for(const x of [-8,8]) for(const z of [0,8,16]) {
+        box(.12,.42,.12,dark,x,Y0+.21,z);
+        box(.13,.045,.13,amber,x,Y0+.40,z);
+      }
+    }
+
     function buildSkyIsland(parent, cover, topY) {
       const body = new THREE.Mesh(makePlinthGeometry(cover.hw, cover.hd, 17), stylizedMat(0.62, 0.5));
       body.name = 'skyIslandBody';
@@ -2011,32 +2054,19 @@
       shaftHole.moveTo(-wallOut, -shaftBackOutZ); shaftHole.lineTo(-wallOut, -approach.lobbyBackZ);
       shaftHole.lineTo(wallOut, -approach.lobbyBackZ); shaftHole.lineTo(wallOut, -shaftBackOutZ);
       plazaShape.holes.push(shaftHole);
-      // 캡 UV = 미터 좌표이므로 2m 타일 반복 0.5 (makePaverMaterial(1,1))
+      // 반복 보도블록 무늬 대신 이음매 없는 무광 연구기지 바닥.
       const plaza = new THREE.Mesh(new THREE.ExtrudeGeometry(plazaShape, { depth: 0.03, bevelEnabled: false }),
-        makePaverMaterial(1, 1));
+        M.conc(0x596371));
       plaza.name = 'plazaPaver';
       plaza.rotation.x = -Math.PI / 2; // shape (x, y) → 월드 (x, -z), 압출 +Y
       plaza.position.y = Y0 + 0.025;   // 상면 Y0+0.055 (기존 보도블록 상면 유지)
       plaza.receiveShadow = true;
       g.add(plaza);
 
-      // 섬이 받쳐야 할 지상 footprint = 보도블록 광장 ∪ 승강로 외벽
-      const minX = Math.min(-paverW / 2, -wallOut);
-      const maxX = Math.max(paverW / 2, wallOut);
-      const minZ = Math.min(paverZ0, shaftBackOutZ);
-      const maxZ = Math.max(paverZ1, FRONT_WALL_INNER_Z + S.WALL_T);
-      // 테두리를 면마다 더한 뒤 중심·반폭을 다시 낸다.
-      const edgeMinX = minX - PLINTH_MARGIN, edgeMaxX = maxX + PLINTH_MARGIN;
-      const edgeMinZ = minZ - PLINTH_MARGIN, edgeMaxZ = maxZ + PLINTH_MARGIN;
-      const cover = {
-        cx: (edgeMinX + edgeMaxX) / 2, cz: (edgeMinZ + edgeMaxZ) / 2,
-        hw: (edgeMaxX - edgeMinX) / 2, hd: (edgeMaxZ - edgeMinZ) / 2
-      };
-      // 피트 기초 상면(Y0)과 공면이 되지 않도록 섬 상면도 30mm 낮춘다(기존 지면 레벨 유지).
-      buildSkyIsland(g, cover, Y0 - 0.03);
+      // 피트 기초·계단·램프의 기존 높이를 유지한다.
+      buildDuskPlaza(g);
 
-      // 구름은 두 배경 모드에서 모두 보인다(상세 배경 그룹이 아니라 여기에 붙인다).
-      buildSoftClouds(g);
+      // 전시 광장은 저녁 하늘과 낮은 조경으로 주 피사체 주변을 비운다.
 
       parent.add(g);
     }
@@ -2068,30 +2098,16 @@
       }
 
       scene.add(bgGrp);
-      const floor = scene.getObjectByName('skyIslandBody'); // 지면 기준면 = 섬 상면(Y0-0.03)
-      const studioHorizon = '#cfe3ef';
-      // 최초 한 번 그리는 하늘. 구름용 메시·애니메이션·후처리 패스는 추가하지 않는다.
-      const studioBackground = createBgGradientTexture(1024, 1024, (ctx, w, h) => {
+      const floor = scene.getObjectByName('duskPlazaGround'); // 피트 바닥보다 30mm 아래
+      const studioHorizon = '#98969c';
+      const studioBackground = createBgGradientTexture(4, 512, (ctx, w, h) => {
         const gradient = ctx.createLinearGradient(0, 0, 0, h);
-        gradient.addColorStop(0, '#5b93c2');
-        gradient.addColorStop(0.5, '#9ac6de');
-        gradient.addColorStop(0.78, studioHorizon);
-        gradient.addColorStop(1, '#e6f2f8'); // 섬 아래도 먼 하늘 아지랑이로 읽히게 한다
+        gradient.addColorStop(0, '#65758b');
+        gradient.addColorStop(0.28, '#969aab');
+        gradient.addColorStop(0.49, '#c4aaa2');
+        gradient.addColorStop(0.63, '#aaa0a2');
+        gradient.addColorStop(1, studioHorizon);
         ctx.fillStyle = gradient; ctx.fillRect(0, 0, w, h);
-        // 옅고 넓은 구름을 주변에 두어 중앙의 구조물 윤곽을 가리지 않는다.
-        const clouds = [[0.08,0.24,0.25,0.065],[0.83,0.15,0.29,0.075],[0.92,0.45,0.21,0.035],[0.18,0.60,0.26,0.025]];
-        for (const [x,y,rx,ry] of clouds) {
-          for (let i=0;i<7;i++) {
-            ctx.save();
-            ctx.translate((x+(i-3)*rx*0.19)*w,(y+Math.sin(i*2.1)*ry*0.25)*h);
-            ctx.scale(rx*w*0.43,ry*h*(1+Math.sin(i*1.7)*0.25));
-            const glow=ctx.createRadialGradient(0,0,0,0,0,1);
-            glow.addColorStop(0,'rgba(255,253,241,0.34)');
-            glow.addColorStop(0.55,'rgba(255,253,241,0.19)');
-            glow.addColorStop(1,'rgba(255,253,241,0)');
-            ctx.fillStyle=glow;ctx.fillRect(-1,-1,2,2);ctx.restore();
-          }
-        }
       });
       studioBackground.encoding = THREE.sRGBEncoding;
       outdoorPresentation = {

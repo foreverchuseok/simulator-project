@@ -91,6 +91,11 @@ const CarDoor = (() => {
       g.userData={cx:side*d.cx,ox:side*d.ox,type:'car-door',side};
       const h=d.top-d.bottom, mid=(d.top+d.bottom)/2;
       box('carDoorSkin',d.width,h,0.002,skin,0,mid,d.doorZ-spec.panelT/2+0.001,g);
+      const sticker=new THREE.Mesh(new THREE.PlaneGeometry(.13,.13),side>0?getStickerMats().L:getStickerMats().R);
+      sticker.name=side>0?'carDoorHandSticker':'carDoorLeanSticker';
+      const meetInset=.065+.040;
+      sticker.position.set(side>0?-d.width/2+meetInset:d.width/2-meetInset,d.floor+1.55,d.doorZ-spec.panelT/2-.0006);sticker.rotation.y=Math.PI;
+      sticker.userData={type:'car-door-safety-sticker'};g.add(sticker);
       for(const x of [-d.width/2+0.001,d.width/2-0.001]) {
         box('carDoorFold',0.002,h,spec.panelT,zinc,x,mid,d.doorZ,g);
         box('carDoorReturn',0.017,h,0.002,zinc,x-Math.sign(x)*0.0075,mid,d.doorZ+spec.panelT/2-0.001,g);

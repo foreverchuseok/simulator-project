@@ -7,6 +7,7 @@ AI 공통 규칙과 `PLAN.md` 운영 방식은 루트 `AGENTS.md`를 따른다.
 
 - Blender: 5.2 LTS.
 - 모델링 스크립트: `blender/scripts/*.py`.
+- 승장문 상부 비상가이드: `blender/scripts/hall_emergency_guide.py` → `models/gltf/hall_emergency_guide.glb`. `js/hall-emergency-guide.js`가 extras 치수·장착 X를 읽어 헤더 좌표에 맞춘다. 상세·검증은 `docs/DOOR-REBUILD.md`의 안전부품 ③ 항목을 따른다.
 - 앱이 로드하는 신규 GLB 표준 경로: `models/gltf/*.glb`.
 - 조속기 형상 원본: `blender/scripts/overspeed_governor.py`.
 - 조속기 최종 모델: `models/gltf/overspeed_governor.glb`.

@@ -9,6 +9,14 @@ Claude Code, Google Antigravity, Codex, Cursor는 카 작업을 시작하기 전
 
 ## 현재 화면 상태
 
+### 실내 표시·출입구 마감 (2026-09-27)
+
+- `js/car-panels.js`: 주 조작반 층표시 위 `Kolesa`, 반대쪽 전면 리턴의 `assets/bg/이용자안전수칙.png`, 연속 상부 마감판·하부 리턴을 추가했다. 문 의장면과 하부 리턴 끝의 간극은 5mm다.
+- `js/car-door.js`: 승장문과 같은 `hand.png`·`lean.png`를 카문 실내 면에 붙여 문짝과 함께 이동시킨다.
+- `js/car-door-transmission.js`: r128 `CurvePath.getPointAt()` 반환 벡터를 표시점 위치에 복사한다. 무시되는 target 인자로 인해 카 내부 원점에 남던 구슬을 정상 구동 경로로 복원했다.
+- 비상통화 버튼 아래 명판은 `blender/scripts/car_identification_plate.py` → `models/gltf/car_identification_plate.glb`다. 210×64mm 금속판·검은 인쇄·돌출 점자로 구성하며 번호는 `0001-001`이다. QR은 이 시뮬레이터 번호 문자열을 담으며 실제 설치 조회 링크가 아니다.
+- `tools/verify_car_interior.mjs`에서 번호·크기·방향·101개 개폐 자세의 표시점/스티커·마감 간극을 검증한다. PC Chromium, DPR 1, 같은 실내 시점에서 1280×850 및 390×844 중앙값은 전후 16.7ms, p95는 16.7→16.8ms다. 실제 모바일 기기 조작·성능 확인은 남아 있다.
+
 ### 실내 3면 연속 손잡이 (2026-09-27)
 
 - 사용자 표시 사진(235036·2350361)과 제시 치수에 따라 `js/car-panels.js`의 `carAccessibleHandrails`를 설치했다. 마감바닥 기준 중심 850mm, 원형 관 Ø35mm이며 관 전체 높이는 832.5–867.5mm다. 후면의 기존 900mm 손잡이를 낮추고 양측까지 코너 반경 60mm의 연속 관으로 연결한다. 이음 간극은 0이며 출입구 전면은 비우고 앞쪽 끝은 벽으로 되돌린다.
