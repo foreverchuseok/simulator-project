@@ -444,7 +444,7 @@ function updateManualCameraNear() {
     }
 
     function insStart(dir) {
-      if (HallManual.busy) return;
+      if (HallManual.busy || (InspectionStations.active && !InspectionStations.ready)) return;
       if (!PitLadder.secured) { updateStatus('v-dir', '피트 사다리 펼침 — 운행 차단', '#f85149'); return; }
       if (!insMode || estop || overspeedActive || insDir === dir) return;
       if (DoorBypass.mode !== 'off' && !DoorBypass.canInspect()) return;
@@ -496,7 +496,7 @@ function updateManualCameraNear() {
         }
       };
       try {
-        clearTimeout(autoTimer);insHold=0;insStop();
+        clearTimeout(autoTimer);insHold=0;insStop();InspectionReturn.cancel();InspectionStations.release();
         // Fault demonstrations retain their own mechanical recovery sequence.
         if(UCMDemo.state.active){
           await wait(()=>!CarDoor.state.busy);
@@ -539,15 +539,16 @@ function updateManualCameraNear() {
         inspectionResetting=false;
         surfaces.forEach((e,i)=>e.inert=inert[i]);
         buttons.forEach((b,i)=>{b.disabled=false;b.textContent=labels[i];});
-        document.getElementById('inspection-reset').textContent=portraitHUD?.isPortrait()?'리셋':'점검 전체 리셋';
+
       }
     }
 
     // 점검 스위치 ON/OFF. ON: 자동 운전 즉시 차단 / OFF: 착상 위치가 아니면 최근접 층 착상
-    function setInspectionMode(on) {
+    function setInspectionMode(on, { recover = true } = {}) {
       if (!on && (DoorBypass.mode !== 'off' || !DoorBypass.hallSecured())) { updateStatus('v-dir', '승장문 닫기·재잠금 및 BYPASS 해제 후 AUT 전환', '#f0883e'); return; }
       if(overspeedActive)return;
       if (insMode === on) return;
+      if (!on) InspectionStations.release();
       insMode = on;
       insHold = 0;
       insStop();
@@ -570,7 +571,7 @@ function updateManualCameraNear() {
         let off = Infinity;
         FLOOR_Y.forEach(fy => { off = Math.min(off, Math.abs(carGrp.position.y - (fy + S.CAR_H / 2))); });
         updateStatus('v-dir', '자동운전 (AUT)', '#3fb950');
-        if (off > 0.01 && !estop && !overspeedActive && PitLadder.secured) {
+        if (recover && off > 0.01 && !estop && !overspeedActive && PitLadder.secured) {
           rescueToNearestFloor('자동 복귀 (착상)', false);
         } else {
           curFloor = insNearestFloor();
@@ -875,17 +876,17 @@ function updateManualCameraNear() {
 
     // 구출 운전 — 최근접 층까지 서행 이동 후 도어 개방
     // (점검→자동 복귀 착상에도 재사용: label/openAfter 로 문구·도어 개방 여부 조정)
-    function rescueToNearestFloor(label = '구출 운전 (서행)', openAfter = true) {
+    function rescueToNearestFloor(label = '구출 운전 (서행)', openAfter = true, { floor = insNearestFloor(), onArrive } = {}) {
       if (!PitLadder.secured) { updateStatus('v-dir', '피트 사다리 펼침 — 운행 차단', '#f85149'); return; }
       if (!DoorBypass.hallSecured()) return;
       if (DoorBypass.mode !== 'off') return;
-      const nf = insNearestFloor();
+      const nf = floor;
       const ty = FLOOR_Y[nf] + S.CAR_H / 2;
       moving = true; currentState = ELEVATOR_STATE.MOVING;
       updateStatus('v-dir', label, '#f0883e');
       MACH.resume(); MACH.brakeRelease(); MACH.motorOn(); MACH.setDrive(0.28); // 서행 구동음
       let prevY = carGrp.position.y;
-      gsap.to(carGrp.position, {
+      return gsap.to(carGrp.position, {
         y: ty, duration: Math.max(Math.abs(ty - carGrp.position.y) / 0.4, 0.6), ease: 'power1.inOut',
         onUpdate: () => {
           const deltaY = carGrp.position.y - prevY; prevY = carGrp.position.y;
@@ -903,11 +904,13 @@ function updateManualCameraNear() {
           updateStatus('v-spd', '0 m/min', '#f0883e');
           document.querySelectorAll('#fbtns .c-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.f) === nf));
           if (openAfter) setTimeout(() => openDoors(), 300);
+          if (onArrive) onArrive();
         }
       });
     }
 
     function moveElevator(fIdx) {
+      if (InspectionReturn.busy) return;
       if (!PitLadder.secured) { updateStatus('v-dir', '피트 사다리 펼침 — 운행 차단', '#f85149'); return; }
       if (DoorBypass.mode !== 'off') return;
       if(overspeedActive)return;
@@ -983,6 +986,7 @@ function updateManualCameraNear() {
     // 독 팝오버 — 한 번에 하나만 열림, 아이콘 재탭·다른 아이콘·접기 버튼으로 닫힘
     function closeAllMenus() {
       portraitHUD?.close();
+      InspectionStations.dismiss();
       PartActions.close();
       if(typeof HallManual!=='undefined')HallManual.dismiss();
       document.querySelectorAll('.sheet.open').forEach(d => d.classList.remove('open'));
@@ -992,78 +996,22 @@ function updateManualCameraNear() {
     // 세로 폰은 기존 컨트롤 자체를 옮긴다. ID/이벤트/고장 복귀 상태를 복제하지 않는다.
     let portraitHUD = null;
     function bindPortraitHUD() {
-      const media = matchMedia('(max-width: 600px) and (orientation: portrait)');
-      const hud = document.getElementById('hud'), dock = document.getElementById('mobile-tools');
-      const detail = document.getElementById('mobile-detail'), content = document.getElementById('mobile-detail-content');
-      const visibility = document.getElementById('mobile-visibility');
-      const menuButton = document.querySelector('[data-menu="dd-inst"]');
-      const slots = new Map();
-      const remember = node => {
-        if (!slots.has(node)) { const marker = document.createComment('portrait-control-home'); node.before(marker); slots.set(node, marker); }
-        return node;
+      const media=matchMedia('(max-width: 600px) and (orientation: portrait)');
+      const hud=document.getElementById('hud'),visibility=document.getElementById('mobile-visibility');
+      const sync=()=>{
+        insHold=0;insStop();
+        hud.classList.remove('tools-hidden');document.body.classList.remove('portrait-tools-hidden');
+        visibility.setAttribute('aria-pressed','false');visibility.setAttribute('aria-label','도구 숨기기');visibility.title='도구 숨기기';
+        document.getElementById('mobile-eye-slash').style.display='';
+        document.querySelector('#btn-estop span').textContent=media.matches?(estop?'RESET':'STOP'):(estop?'해제':'정지');
       };
-      const actions = ['inspection-reset'].map(id => remember(document.getElementById(id)));
-      const panels = {
-        mode: remember(document.querySelector('#dd-inst .mode-row'))
-      };
-      const labels = new Map();
-      const shortLabel = (node, text) => { if (!labels.has(node)) labels.set(node, node.textContent); node.textContent = text; };
-      const restore = node => slots.get(node).after(node);
-      const closeDetail = () => {
-        Object.values(panels).forEach(restore);
-        detail.hidden = true;
-        dock.querySelectorAll('[data-mobile-panel]').forEach(b => b.setAttribute('aria-expanded', 'false'));
-        // 점검 버튼을 누른 상태에서 패널을 닫거나 회전해도 운전을 지속하지 않는다.
-        if (typeof insHold !== 'undefined' && insHold) { insHold = 0; insStop(); }
-      };
-      const close = () => { closeDetail(); dock.hidden = true; };
-      const sync = () => {
-        closeAllMenus();
-        hud.classList.remove('tools-hidden');
-        document.body.classList.remove('portrait-tools-hidden');
-        visibility.setAttribute('aria-pressed', 'false');
-        visibility.setAttribute('aria-label', '도구 숨기기'); visibility.title = '도구 숨기기';
-        document.getElementById('mobile-eye-slash').style.display = '';
-        if (media.matches) {
-          menuButton.setAttribute('aria-controls', 'mobile-tools');
-          actions.forEach(node => dock.insertBefore(node, dock.querySelector('[data-mobile-panel="mode"]')));
-          shortLabel(actions[0], '리셋');
-          for (const [id, text] of [['btn-aut','AUT'],['btn-ins','INS']]) shortLabel(document.getElementById(id),text);
-          shortLabel(document.querySelector('#btn-estop span'), estop ? 'RESET' : 'STOP');
-        } else {
-          menuButton.setAttribute('aria-controls', 'dd-inst');
-          actions.forEach(restore);
-          // AUT/INS의 small 마크업까지 원래 그대로 복원한다.
-          labels.forEach((text,node) => { node.textContent = text; }); labels.clear();
-          document.getElementById('btn-aut').innerHTML = '<small>AUT</small>자동';
-          document.getElementById('btn-ins').innerHTML = '<small>INS</small>점검';
-          document.querySelector('#btn-estop span').textContent = estop ? '해제' : '정지';
-        }
-      };
-      dock.querySelectorAll('[data-mobile-panel]').forEach(button => button.addEventListener('click', () => {
-        const wasOpen = button.getAttribute('aria-expanded') === 'true';
-        closeDetail();
-        if (wasOpen) return;
-        content.appendChild(panels[button.dataset.mobilePanel]);
-        document.getElementById('mobile-detail-title').textContent = button.textContent;
-        detail.hidden = false; button.setAttribute('aria-expanded','true'); renderSegments();
-      }));
-      document.getElementById('mobile-detail-close').addEventListener('click', closeDetail);
-      visibility.addEventListener('click', () => {
-        const hide = !hud.classList.contains('tools-hidden'); closeAllMenus();
-        document.getElementById('hall-dismiss')?.click();
-        hud.classList.toggle('tools-hidden',hide); visibility.setAttribute('aria-pressed',String(hide));
-        document.body.classList.toggle('portrait-tools-hidden',hide);
-        visibility.setAttribute('aria-label',hide ? '도구 보이기' : '도구 숨기기'); visibility.title = visibility.getAttribute('aria-label');
-        document.getElementById('mobile-eye-slash').style.display = hide ? 'none' : '';
+      visibility.addEventListener('click',()=>{
+        const hide=!hud.classList.contains('tools-hidden');closeAllMenus();
+        hud.classList.toggle('tools-hidden',hide);document.body.classList.toggle('portrait-tools-hidden',hide);
+        visibility.setAttribute('aria-pressed',String(hide));visibility.setAttribute('aria-label',hide?'도구 보이기':'도구 숨기기');visibility.title=visibility.getAttribute('aria-label');
+        document.getElementById('mobile-eye-slash').style.display=hide?'none':'';
       });
-      actions.forEach(node => { if (!node.hasAttribute('aria-label')) node.setAttribute('aria-label',node.title); });
-      media.addEventListener('change',sync);
-      const api = { close, isPortrait: () => media.matches, toggle: () => {
-        const wasOpen = !dock.hidden; closeAllMenus();
-        if (!wasOpen) { dock.hidden = false; menuButton.classList.add('active'); menuButton.setAttribute('aria-expanded','true'); renderSegments(); }
-      }};
-      portraitHUD = api; sync(); return api;
+      media.addEventListener('change',sync);portraitHUD={close:()=>{},isPortrait:()=>media.matches};sync();return portraitHUD;
     }
 
     /* select 원본(값·change 이벤트는 기존 코드가 그대로 쓴다)을 한 번에 누르는 세그먼트 버튼으로 보여준다.
@@ -1108,7 +1056,7 @@ function updateManualCameraNear() {
       document.querySelectorAll('[data-menu]').forEach(btn => {
         btn.addEventListener('click', () => {
           if (portraitHUD?.isPortrait()) document.getElementById('hall-dismiss')?.click();
-          if (btn.dataset.menu === 'dd-inst' && portraitHUD?.isPortrait()) { portraitHUD.toggle(); return; }
+
           const menu = document.getElementById(btn.dataset.menu);
           const wasOpen = menu.classList.contains('open');
           closeAllMenus();
@@ -1164,15 +1112,20 @@ function updateManualCameraNear() {
         b.addEventListener('pointerdown', e => {
           if (b.disabled) return;
           e.preventDefault();
-          insHold = dir; insStart(dir);
+          b.setPointerCapture(e.pointerId);insHold = dir; insStart(dir);
         });
         // 버튼 밖에서 손을 떼도 반드시 멈추도록 포인터 해제는 window 에서 받는다
         b.addEventListener('contextmenu', e => e.preventDefault());
+        b.addEventListener('lostpointercapture',()=>{insHold=0;insStop();});
+        b.addEventListener('keydown',e=>{if((e.key===' '||e.key==='Enter')&&!e.repeat&&!b.disabled){e.preventDefault();insHold=dir;insStart(dir);}});
+        b.addEventListener('keyup',e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();insHold=0;insStop();}});
+        b.addEventListener('blur',()=>{insHold=0;insStop();});
       });
       const insRelease = () => { insHold = 0; insStop(); };
       window.addEventListener('pointerup', insRelease);
       window.addEventListener('pointercancel', insRelease);
       window.addEventListener('blur', insRelease);
+      window.addEventListener('resize', insRelease);
       document.addEventListener('visibilitychange', () => { if (document.hidden) insRelease(); });
 
       const estopBtn = document.getElementById('btn-estop');
@@ -1183,10 +1136,11 @@ function updateManualCameraNear() {
         estopBtn.querySelector('span').textContent = portraitHUD?.isPortrait() ? (estop ? 'RESET' : 'STOP') : (estop ? '해제' : '정지');
       };
       estopBtn.addEventListener('click', e => {
-        if (overspeedActive) { updateStatus('v-dir', '조속기 트립 — 고장·점검에서 OVS 복귀', '#f85149'); return; }
+        if (overspeedActive) { updateStatus('v-dir', '조속기 트립 — 고장 복귀 버튼으로 OVS 복귀', '#f85149'); return; }
         estop = !estop;
         paintEstop();
         if (estop) {
+          InspectionReturn.cancel(true);
           insHold = 0; insStop();
           gsap.killTweensOf(carGrp.position); gsap.killTweensOf(cwtGrp.position); moving = false;
           CarDoor.pause();

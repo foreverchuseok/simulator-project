@@ -8,17 +8,18 @@ const BuildingLights = (() => {
   const MR_LED = { len: 0.90, z: 1.01, y: 1.89, body: { d: 0.042, h: 0.046 } };
   const ICON = 'url("data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.3 1.1 2.2h5c0-.9.4-1.6 1.1-2.2A6 6 0 0 0 12 3Z"/></svg>') + '")';
   const ROCKER_TILT = 0.14;
-  const state = { pit: false, top: false, mr: false };
+  const state = { pit: false, top: false, mr: false, car: false };
   const circuits = {
     shaft: { diffuser: null, halos: [], lamps: [] },
-    mr: { diffuser: null, halos: [], lamps: [] }
+    mr: { diffuser: null, halos: [], lamps: [] },
+    car: { diffuser: null, halos: [], lamps: [] }
   };
   const switches = {};   // key → { node, rocker, q0, button, anchor(local offset) }
   const anchor = new THREE.Vector3(), zAxis = new THREE.Vector3(0, 0, 1), tiltQ = new THREE.Quaternion();
   let haloTex = null;
 
   const shaftOn = () => state.pit !== state.top;
-  const circuitOn = key => key === 'mr' ? state.mr : shaftOn();
+  const circuitOn = key => key === 'mr' || key === 'car' ? state[key] : shaftOn();
 
   function diffuserMaterial() {
     return new THREE.MeshStandardMaterial({ color: 0xdfe4e8, emissive: 0xf4f8ff, emissiveIntensity: 0, roughness: 0.35 });
@@ -75,6 +76,32 @@ const BuildingLights = (() => {
     });
   }
 
+  // 0714301 표시: 좌측 상단 난간, 카탑 박스 뒤쪽. +Z 끝이 박스 쪽(사진 왼쪽)이다.
+  function buildCarRailLED() {
+    const rail = carGrp.getObjectByName('carHandrail'), mount = rail.userData.lightMount;
+    const topBox = carGrp.getObjectByName('carTopBox');
+    const len = 0.60, front = topBox.position.z - 0.20 - 0.06;
+    const g = new THREE.Group(); g.name = 'CarRailLED';
+    g.position.set(mount.x, mount.y, front - len / 2); rail.add(g);
+    g.userData = { type: 'car-rail-led', length: len, lit: false };
+    const metal = M.ss(0xbfc6cc), black = M.paint(0x15191d);
+    for (const z of [-len * 0.33, len * 0.33]) {
+      createBox(0.008, 0.030, 0.046, black, 0.004, 0, z, g).name = 'ledMagnet';
+    }
+    createBox(0.026, 0.043, len, metal, 0.021, 0, 0, g).name = 'ledBody';
+    const diffuser = M.emit(0xf4f8ff, 0); diffuser.color.setHex(0xdfe4e8);
+    createBox(0.012, 0.033, len - 0.062, diffuser, 0.040, 0, -0.013, g).name = 'ledDiffuser';
+    for (const z of [-1, 1]) createBox(0.038, 0.045, 0.013, black, 0.027, 0, z * (len / 2 - 0.0065), g);
+    const sw = new THREE.Group(); sw.name = 'carRailLightSwitch'; sw.position.set(0.04, 0, len / 2 - 0.030); g.add(sw);
+    createBox(0.014, 0.027, 0.023, black, 0, 0, 0, sw).name = 'lightRocker';
+    createBox(0.001, 0.007, 0.002, M.paint(0xffffff), 0.0075, 0.006, 0, sw);
+    g.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = true; } });
+    circuits.car.diffuser = diffuser; circuits.car.lamps.push(g);
+    const glow = halo(g, 0.048, 0, 0, len + 0.10, 0.14, 0.3);
+    circuits.car.halos.push(glow);
+    addSwitch('car', sw, '카 상부 난간 조명', [0.04, 0.12, 0]);
+  }
+
   function makeButton(key, label) {
     const b = document.createElement('button');
     b.id = `light-switch-${key}`; b.type = 'button'; b.className = 'part-action'; b.hidden = true;
@@ -91,6 +118,7 @@ const BuildingLights = (() => {
 
   function build() {
     adoptShaftLamps();
+    buildCarRailLED();
     const pw = MachineRoomPower.root, floorY = Y0 + TOTAL_H + 0.02, wallX = -(S.SHAFT_W / 2) + 0.030;   // MR_LINING_T
     buildMachineRoomLED(pw, wallX, floorY);
     addSwitch('pit', shaftCableGrp.getObjectByName('pitLightSwitchBox'), '승강로 조명 (피트 3로 스위치)', [0.09, 0.13, 0]);

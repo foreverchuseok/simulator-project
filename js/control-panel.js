@@ -79,6 +79,7 @@ const ControlPanel = (() => {
   function toggle() {
     if (!ready || busy || !doorL || !doorR) return false;
     open = !open;
+    if (!open && InspectionStations.active === 'machine') InspectionStations.dismiss();
     busy = true;
     syncButton();
     const a = THREE.MathUtils.degToRad(S0.doorOpenDeg);
@@ -92,10 +93,10 @@ const ControlPanel = (() => {
     return true;
   }
 
-  // 부품 버튼 — 양문 맞댐선 위(몸통 높이 75%)에 띄운다. 기계실 전경(약 7~8m)에서도 보이도록 10m 이내.
+  // 문과 겹치지 않도록 상단 회생제동 장치 위에 띄운다.
   function update() {
     if (!button || !root) return;
-    anchor.set(0, (S0.baseH + S0.bodyH * 0.75) * KY, S0.depth / 2 * KZ + 0.05);
+    anchor.set(0, (S0.baseH + S0.bodyH + S0.resistor[2]) * KY + 0.09, S0.depth / 2 * KZ + 0.05);
     root.localToWorld(anchor);
     const near = camera.position.distanceToSquared(anchor) < 100;
     anchor.project(camera);

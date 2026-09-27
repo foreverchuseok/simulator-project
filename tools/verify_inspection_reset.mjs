@@ -7,6 +7,7 @@ try {
  for(const mobile of [false,true]){
   const page=await browser.newPage({viewport:mobile?{width:390,height:844}:{width:1280,height:850},hasTouch:mobile,deviceScaleFactor:1});
   page.on('pageerror',e=>errors.push(e.message));
+  await page.routeWebSocket('**',ws=>ws.close());
   await page.goto(process.env.SIMULATOR_URL||'http://127.0.0.1:5500/index.html',{waitUntil:'networkidle'});
   await page.waitForFunction(()=>CarDoor.state?.ready&&PitLadder.secured&&hatchDoors.every(h=>h.interlock?.ready)&&document.getElementById('loading').classList.contains('hide'));
   // One floor at a time: the bear holds 2F fully open with its foot, then reset must relock and send it home.
@@ -32,11 +33,10 @@ try {
   if(mobile)await page.tap('#hall-reset');else await page.click('#hall-reset');
   await page.waitForFunction(()=>!inspectionResetting,{},{timeout:30000});
   assert.equal(await page.evaluate(()=>!estop&&!insMode&&!moving&&insHold===0&&CarDoor.secured()&&document.getElementById('btn-estop').getAttribute('aria-pressed')==='false'),true);
-  // Menu reset is reachable on the portrait dock and the desktop sheet.
-  await page.click('#hall-dismiss');await page.click('[data-menu="dd-inst"]');
-  assert.equal(await page.locator('#inspection-reset').isVisible(),true);
-  await page.screenshot({path:`${out}/${mobile?'mobile':'desktop'}-menu.png`});
-  await page.click('#inspection-reset');await page.waitForFunction(()=>!inspectionResetting);
+  // The global menu is removed; reset remains on the hall inspection panel.
+  assert.equal(await page.locator('[data-menu="dd-inst"]').count(),0);
+  assert.equal(await page.locator('#hall-reset').isVisible(),true);
+  await page.click('#hall-reset');await page.waitForFunction(()=>!inspectionResetting);
   await page.evaluate(()=>moveElevator(2));await page.waitForFunction(()=>!moving&&curFloor===2,{},{timeout:30000});
   if(!mobile){
    await page.waitForFunction(()=>!CarDoor.state.busy);

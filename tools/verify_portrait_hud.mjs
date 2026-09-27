@@ -7,17 +7,20 @@ try{
 await page.goto(`http://127.0.0.1:${server.address().port}/index.html`,{waitUntil:'networkidle'});await page.waitForFunction(()=>govHandles()?.ready&&document.querySelector('#loading.hide'));await page.waitForTimeout(7500);
 for(const viewport of [{width:390,height:844},{width:360,height:740},{width:320,height:568},{width:412,height:915}]){
  await page.setViewportSize(viewport);await page.waitForTimeout(250);await check();
- await page.tap('[data-menu="dd-inst"]');await check();assert.equal(await page.locator('#dd-inst').evaluate(e=>e.classList.contains('open')),false);
+ await page.tap('[data-menu="dd-view"]');await check();assert.equal(await page.locator('#dd-inst').count(),0);
  await page.screenshot({path:path.join(out,`tools-${viewport.width}.png`)});
- for(const name of ['mode']){await page.tap(`[data-mobile-panel="${name}"]`);await check();await page.screenshot({path:path.join(out,`${name}-${viewport.width}.png`)});await page.tap('#mobile-detail-close');}
+ await page.tap('#dd-view [data-close]');
+ await page.evaluate(()=>InspectionStations.toggle('car'));await page.waitForFunction(()=>InspectionStations.ready);await check();
+ const drive=await page.locator('#inspection-drive').boundingBox();assert.ok(drive.x>=0&&drive.x+drive.width<=viewport.width);assert.equal(await page.locator('#inspection-drive button').count(),3);
+ await page.screenshot({path:path.join(out,`mode-${viewport.width}.png`)});await page.evaluate(()=>setInspectionMode(false));
  await page.tap('#mobile-visibility');assert.equal(await page.locator('#dd-op').evaluate(e=>getComputedStyle(e).visibility),'hidden');await check();
  await page.tap('#mobile-visibility');await check();assert.equal(await page.locator('#dd-op').evaluate(e=>getComputedStyle(e).visibility),'visible');
 }
-// Mode and brake/bypass controls use their original selectors and change handlers.
-await page.tap('[data-menu="dd-inst"]');await page.tap('[data-mobile-panel="mode"]');await page.tap('#btn-ins');assert.equal(await page.locator('#btn-ins-up').isEnabled(),true);await page.tap('#btn-aut');assert.equal(await page.locator('#btn-ins-up').isEnabled(),false);
-// Orientation change with an open panel restores every control, then moves it back only once.
-await page.setViewportSize({width:844,height:390});await page.waitForTimeout(250);await page.tap('[data-menu="dd-inst"]');assert.equal(await page.locator('#dd-inst #btn-overspeed').count(),0);assert.equal(await page.locator('#dd-inst #btn-ins').count(),1);await page.tap('#dd-inst [data-close]');
-await page.setViewportSize({width:390,height:844});await page.waitForTimeout(250);await page.tap('[data-menu="dd-inst"]');assert.equal(await page.locator('#mobile-tools #btn-overspeed').count(),0);await page.tap('[data-menu="dd-inst"]');await page.evaluate(()=>{HallManual.select(1);HallManual.observe();});await page.waitForFunction(()=>!document.getElementById('hall-action-1').hidden);await page.tap('#hall-action-1');assert.equal(await page.locator('#hall-panel').isVisible(),true);await page.screenshot({path:path.join(out,'hall.png')});await page.tap('[data-menu="dd-inst"]');assert.equal(await page.locator('#hall-panel').isVisible(),false);await page.tap('[data-menu="dd-inst"]');
+// Orientation preserves the three-button panel; the retired global menu stays absent.
+await page.evaluate(()=>InspectionStations.toggle('car'));await page.waitForFunction(()=>InspectionStations.ready);
+await page.setViewportSize({width:844,height:390});await page.waitForTimeout(250);assert.equal(await page.locator('#inspection-drive button').count(),3);assert.equal(await page.locator('#dd-inst').count(),0);
+await page.setViewportSize({width:390,height:844});await page.waitForTimeout(250);await page.evaluate(()=>setInspectionMode(false));
+await page.evaluate(()=>{HallManual.select(1);HallManual.observe();});await page.waitForFunction(()=>!document.getElementById('hall-action-1').hidden);await page.tap('#hall-action-1');assert.equal(await page.locator('#hall-panel').isVisible(),true);await page.screenshot({path:path.join(out,'hall.png')});await page.tap('[data-menu="dd-view"]');assert.equal(await page.locator('#hall-panel').isVisible(),false);await page.tap('[data-menu="dd-view"]');
 await page.tap('#btn-estop');assert.equal(await page.evaluate(()=>currentState),'ESTOP');assert.equal(await page.locator('#btn-estop span').textContent(),'RESET');await page.tap('#btn-estop');
 await page.tap('[data-f="1"]');await page.waitForFunction(()=>curFloor===1&&!moving);await page.waitForFunction(()=>doorOpen);await page.screenshot({path:path.join(out,'arrived.png')});
 await page.tap('#c-shaft');await page.tap('#overview-home');await page.waitForFunction(()=>gsap.getTweensOf(camera.position).length===0);await page.screenshot({path:path.join(out,'overview.png')});await page.tap('#mobile-visibility');await page.screenshot({path:path.join(out,'hidden.png')});

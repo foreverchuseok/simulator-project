@@ -69,7 +69,12 @@ const Mascot = (() => {
     const dome = add(helmet, new THREE.SphereGeometry(.19, 40, 20, 0, Math.PI * 2, 0, Math.PI / 2), HELMET); dome.scale.set(1.03, .82, 1.0);
     add(helmet, new THREE.CylinderGeometry(.215, .215, .012, 40), HELMET, 0, .003, .02).scale.z = 1.08;
     add(helmet, new THREE.BoxGeometry(.03, .028, .30), HELMET, 0, .145, 0);
-    add(helmet, new THREE.CylinderGeometry(.03, .03, .004, 24), std(0x1d2d4f, .5), 0, .105, .158).rotation.x = Math.PI / 2 - .7;
+    const logoCanvas=document.createElement('canvas');logoCanvas.width=512;logoCanvas.height=128;
+    const logoContext=logoCanvas.getContext('2d');logoContext.fillStyle='#1d2d4f';
+    logoContext.font='bold 88px Arial';logoContext.textAlign='center';logoContext.textBaseline='middle';logoContext.fillText('KOELSA',256,67);
+    const logoTexture=new THREE.CanvasTexture(logoCanvas);logoTexture.encoding=THREE.sRGBEncoding;
+    const logo=add(helmet,new THREE.SphereGeometry(.191,32,8,Math.PI/2-.40,.80,.83,.27),new THREE.MeshBasicMaterial({map:logoTexture,transparent:true,depthWrite:false}));
+    logo.name='MascotHelmetKOELSA';logo.scale.set(1.03,.82,1);
 
     // arms: right one waves, left holds a small wrench
     const arm = s => {
@@ -116,9 +121,9 @@ const Mascot = (() => {
     inspectionHome={position:root.position.clone(),rotation:root.rotation.clone(),visible:root.visible};
     root.visible=true;parts.body.position.set(0,0,0);parts.body.rotation.set(0,0,0);parts.head.rotation.set(0,0,0);parts.wrench.visible=false;
   }
-  function inspectionPose(x,y,z,foot,handA,handB){
+  function inspectionPose(x,y,z,foot,handA,handB,yaw=Math.PI){
     if(!inspectionHome)return;
-    root.position.set(x,y,z);root.rotation.set(0,Math.PI,0);
+    root.position.set(x,y,z);root.rotation.set(0,yaw,0);
     const lean=Math.min(1,foot/.2);parts.body.position.x=.045*lean;parts.body.rotation.z=-.15*lean;
     root.updateMatrixWorld(true);
     parts.feet[0].position.z=foot;
@@ -135,6 +140,7 @@ const Mascot = (() => {
     if(!inspectionHome)return;
     root.position.copy(inspectionHome.position);root.rotation.copy(inspectionHome.rotation);root.visible=inspectionHome.visible;
     parts.body.position.x=0;parts.body.rotation.z=0;parts.feet[0].position.z=0;parts.legs[0].position.z=0;parts.legs[0].scale.z=.075;parts.wrench.visible=true;
+    parts.feet.forEach(f=>f.position.y=0);
     for(const arm of [parts.waveArm,parts.holdArm]){arm.rotation.set(0,0,0);arm.userData.rig.upper.position.y=-.07;arm.userData.rig.upper.scale.y=.09;arm.userData.rig.paw.position.y=-.15;}
     inspectionHome=null;
   }

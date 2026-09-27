@@ -224,6 +224,8 @@
       // ── (2) 상부 크로스헤드 빔 (Top Beam / Double C-Channels - 도면 92p) ──
       // 1:1 권상 로프(Z=0)를 가운데 두고 전·후 2본의 평행 C채널 배치
       const chFwdZ = 0.070, chAftZ = -0.070;
+      // 카상부 점검기: 윗면 취부 높이와 배선이 지나는 전면 웹 좌표(0727311 후속 수정).
+      carFrameGrp.userData.inspectionMount = { x: -chLen * .32, y: chY, z: chFwdZ + .027, topY: chY + chH / 2 };
       // 전면 C채널
       createBox(chLen, chH, 0.014, frmMat, 0, chY, chFwdZ + 0.020, carFrameGrp); // 웹
       createBox(chLen, 0.014, 0.045, frmMat, 0, chY + chH / 2 - 0.007, chFwdZ - 0.005, carFrameGrp); // 상단 플랜지
@@ -398,6 +400,7 @@
       const hrRearZ = -D / 2 + 0.18;                     // 후면 난간 Z
       const hrLeftX = -W / 2 + 0.15, hrRightX = W / 2 - 0.15; // 좌/우 난간 X
       const hrFrontZ = hrRearZ + hrD;                    // 전면 개구부 측 Z
+      handrailGrp.userData.lightMount = { x: hrLeftX + 0.019, y: railTopY, frontZ: hrFrontZ };
 
       // (a) 수직 지주 포스트 (Vertical Posts - 7개소)
       const postLocations = [
