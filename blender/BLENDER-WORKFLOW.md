@@ -31,6 +31,7 @@ AI 공통 규칙과 `PLAN.md` 운영 방식은 루트 `AGENTS.md`를 따른다.
 - 피트 점검운전 스위치: `blender/scripts/pit_inspection_station.py` → `models/gltf/pit_inspection_station.glb`(루트 `PitInspectionStation`, extras `cableExit`, 원점 = 벽면, +Z 앞). 장착은 `js/environment.js` `buildShaftCableHarness()`.
 - 피트 조속기 인장추: `blender/scripts/pit_tensioner.py` → `models/gltf/pit_tensioner.glb`. `js/pit-tensioner.js`의 `PIT_TENSIONER_SPEC`를 읽는다. 원점은 기존 시브 축, `TensionSheave`만 X축으로 회전하며 카측(−X) 노란 덮개·벽측(+X) 스위치·추는 별도 그룹이다. 상세는 `docs/GOVERNOR-DESIGN.md`의 영상형 인장추 항목.
 - 비상통화장치: `blender/scripts/emergency_call_unit.py` → `models/gltf/emergency_call_unit.glb`(루트 `EmergencyCallUnit`, 노드 `EmergencyCallBody`·`CallLedRing`; JS가 링 재질을 인스턴스별로 바꿔 노랑/초록 표시). 장착·동작은 `js/emergency-call.js`.
+- 정전시 조명장치·원형 비상등: `blender/scripts/emergency_lighting.py` → `models/gltf/emergency_power_unit.glb`·`emergency_round_lamp.glb`. z=0 부착면·+Z 앞면. 치수는 Python 상수/GLB extras, JS가 `PowerStatus`·`LampLEDs`를 점등한다. 장착·아이콘은 `js/emergency-lighting.js`, 상세는 `docs/CAR-REBUILD.md`, 검증은 `tools/verify_emergency_lighting.mjs`.
 - 피트 사다리 배꼽 스위치: `blender/scripts/pit_ladder_switch.py` → `models/gltf/pit_ladder_switch.glb`. `js/pit-ladder.js`의 `PIT_LADDER_SWITCH`에서 눌린 끝 위치와 스트로크를 읽는다. `SwitchBody`는 고정, `SwitchPlunger`는 +X로 움직이며 끝의 원점이 X=0이다. JS 래퍼가 눌림/해제 위치를 적용한다. 높이 기준과 검증은 `docs/ROADMAP.md`의 사다리 인계 항목 및 `tools/verify_pit_ladder.mjs`를 참고한다.
 
 앱이 읽는 최종 형식은 glTF Binary 단일 파일인 `.glb`다.

@@ -10,12 +10,9 @@ const HallEmergencyGuide=(()=>{
     // reference. Keep the rope terminal windows and all lower mounting points.
     const plate=parent.getObjectByName('hallHangerPlate');
     if(!plateGeometries.has(side)){
-      const x=side*spec.mountX,half=spec.width/2+.002,top=.080,notch=spec.bridgeY-.005+.040;
-      const shape=new THREE.Shape();
-      shape.moveTo(-.190,-.080);shape.lineTo(.190,-.080);shape.lineTo(.190,top);
-      shape.lineTo(x+half,top);shape.lineTo(x+half,notch);shape.lineTo(x-half,notch);shape.lineTo(x-half,top);shape.lineTo(-.190,top);shape.closePath();
-      for(const w of parent.userData.windows||[]){const hole=new THREE.Path();hole.moveTo(w.x0,w.y0);hole.lineTo(w.x1,w.y0);hole.lineTo(w.x1,w.y1);hole.lineTo(w.x0,w.y1);hole.closePath();shape.holes.push(hole);}
-      plateGeometries.set(side,new THREE.ExtrudeGeometry(shape,{depth:spec.plateThickness,bevelEnabled:false}));
+      plateGeometries.set(side,createHallHangerPlateGeometry(plate.userData.profile,parent.userData.windows||[],{
+        x:side*spec.mountX,width:spec.width,bridgeY:spec.bridgeY
+      }));
     }
     plate.geometry.dispose();plate.geometry=plateGeometries.get(side);plate.position.z=g.plateZ-spec.plateThickness/2;
     parent.add(guide);guides.push(guide);

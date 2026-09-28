@@ -45,6 +45,7 @@ const InspectionReturn=(()=>{
     Mascot.inspectionPose(callPose.x,callPose.y,callPose.z,0,null,hand);
   }
   function start(kind){
+    if(InterlockDemo.active)return false;
     if(busy)return false;
     kind=kind||source;if(!['pit','car','machine'].includes(kind))return false;
     if(estop||overspeedActive||UCMDemo.state.active||HallManual.active||CarDoor.state?.busy||DoorBypass.mode!=='off'||!DoorBypass.hallSecured()||!PitLadder.secured){

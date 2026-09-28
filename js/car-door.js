@@ -20,8 +20,8 @@ const CarDoor = (() => {
     const dw=S.DOOR_W/2+0.02, cx=dw/2+0.006, ox=dw*1.5-0.01;
     const front=S.CAR_D/2-0.055, floor=-S.CAR_H/2+0.004;
     // Jamb fold outer face + drawing's 5 mm running gap + half panel thickness.
-    const doorZ=front+0.0325+0.005+spec.panelT/2;
-    return {cx,ox,stroke:ox-cx,width:cx*2-spec.gap,doorZ,guideZ:doorZ+spec.shoeGrooveOffset,floor,
+    const jambFaceZ=front+0.0325, doorZ=jambFaceZ+0.005+spec.panelT/2;
+    return {cx,ox,stroke:ox-cx,width:cx*2-spec.gap,doorZ,jambFaceZ,guideZ:doorZ+spec.shoeGrooveOffset,floor,
       bottom:floor+spec.bottomGap,top:floor+S.DOOR_H,
       sillW:2*(ox+cx)+0.02,headerW:2*(ox+spec.plateW/2+0.075),
       trackY:floor+S.DOOR_H+0.09};

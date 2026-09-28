@@ -148,6 +148,8 @@ function updateManualCameraNear() {
       function brakeSet() { setTractionBrake(false); const c = ac(), t = c.currentTime; thump(c, t, 75, 0.09, 0.06); clack(c, t + 0.02, 520, 0.045, 0.09); }
       // 로프브레이크 파지 — 강철 턱이 로프를 무는 "쾅" (UCM 시연)
       function ropeBrakeBang() { const c = ac(), t = c.currentTime; thump(c, t, 48, 0.32, 0.5); clack(c, t, 340, 0.08, 0.35); clack(c, t + 0.015, 1400, 0.05, 0.18); hiss(c, t + 0.02, 0.35, 0.05, 2500); }
+      // 카 타격판이 우레탄 완충기를 치는 묵직한 "쿵" + 먼지 이는 쉿 소리 (완충기 충돌 시연)
+      function bufferImpact() { const c = ac(), t = c.currentTime; thump(c, t, 40, 0.6, 0.65); thump(c, t + 0.01, 88, 0.28, 0.32); clack(c, t, 170, 0.16, 0.3); clack(c, t + 0.006, 950, 0.05, 0.08); hiss(c, t + 0.04, 1.1, 0.03, 800); }
       // 승객이 에이프런에 부딪히는 가벼운 "쿵"
       function bump() { const c = ac(), t = c.currentTime; thump(c, t, 110, 0.12, 0.18); clack(c, t, 260, 0.05, 0.1); }
       function overspeedImpact(kind) {
@@ -224,7 +226,7 @@ function updateManualCameraNear() {
         });
       }
       function effect(play) { return { currentTime: 0, play() { try { play(); return Promise.resolve(); } catch (e) { return Promise.reject(e); } } }; }
-      return { resume, motorOn, motorOff, setDrive, brakeRelease, brakeSet, duck, ropeBrakeBang, bump, overspeedImpact,
+      return { resume, motorOn, motorOff, setDrive, brakeRelease, brakeSet, duck, ropeBrakeBang, bufferImpact, bump, overspeedImpact,
         doorOpen: effect(() => door(false)), doorClose: effect(() => door(true)), chime: effect(chime) };
     })();
 
@@ -321,6 +323,7 @@ function updateManualCameraNear() {
     }
 
     function closeDoors(cb) {
+      if (InterlockDemo.active) return;
       if (HallManual.active) return; // 점검자의 발 받침은 승장문 아이콘에서 해제한다.
       if (DoorBypass.mode !== 'off') return;
       if (estop) return;
@@ -444,6 +447,7 @@ function updateManualCameraNear() {
     }
 
     function insStart(dir) {
+      if (InterlockDemo.active) return;
       if (HallManual.busy || (InspectionStations.active && !InspectionStations.ready)) return;
       if (!PitLadder.secured) { updateStatus('v-dir', '피트 사다리 펼침 — 운행 차단', '#f85149'); return; }
       if (!insMode || estop || overspeedActive || insDir === dir) return;
@@ -496,12 +500,13 @@ function updateManualCameraNear() {
         }
       };
       try {
-        clearTimeout(autoTimer);insHold=0;insStop();InspectionReturn.cancel();InspectionStations.release();
+        InterlockDemo.cancel();clearTimeout(autoTimer);insHold=0;insStop();InspectionReturn.cancel();InspectionStations.release();
         // Fault demonstrations retain their own mechanical recovery sequence.
         if(UCMDemo.state.active){
           await wait(()=>!CarDoor.state.busy);
           UCMDemo.reset(document.getElementById('btn-ucm'));await wait(()=>!UCMDemo.state.active);
         }
+        if(BufferDemo.active){BufferDemo.reset();await wait(()=>!BufferDemo.active);}
         if(overspeedActive){
           await wait(()=>governorPhase==='tripped'||!overspeedActive);
           if(overspeedActive)resetGovernorFault(document.getElementById('btn-overspeed'));
@@ -545,6 +550,7 @@ function updateManualCameraNear() {
 
     // 점검 스위치 ON/OFF. ON: 자동 운전 즉시 차단 / OFF: 착상 위치가 아니면 최근접 층 착상
     function setInspectionMode(on, { recover = true } = {}) {
+      if (InterlockDemo.active) return;
       if (!on && (DoorBypass.mode !== 'off' || !DoorBypass.hallSecured())) { updateStatus('v-dir', '승장문 닫기·재잠금 및 BYPASS 해제 후 AUT 전환', '#f0883e'); return; }
       if(overspeedActive)return;
       if (insMode === on) return;
@@ -712,6 +718,7 @@ function updateManualCameraNear() {
     }
 
     function startOverspeedFault(btn) {
+      if (InterlockDemo.active) return;
       if (!PitLadder.secured) { updateStatus('v-dir', '피트 사다리 펼침 — 운행 차단', '#f85149'); return; }
       const gov = mrGrp.userData.governor;
       if (insMode) { updateStatus('v-dir', '점검운전 중 — 자동 시연 불가 (AUT 전환)', '#f0883e'); return; }
@@ -910,6 +917,7 @@ function updateManualCameraNear() {
     }
 
     function moveElevator(fIdx) {
+      if (InterlockDemo.active) return;
       if (InspectionReturn.busy) return;
       if (!PitLadder.secured) { updateStatus('v-dir', '피트 사다리 펼침 — 운행 차단', '#f85149'); return; }
       if (DoorBypass.mode !== 'off') return;
@@ -1136,8 +1144,11 @@ function updateManualCameraNear() {
         estopBtn.querySelector('span').textContent = portraitHUD?.isPortrait() ? (estop ? 'RESET' : 'STOP') : (estop ? '해제' : '정지');
       };
       estopBtn.addEventListener('click', e => {
+        // 완충기 충돌 시연: 내려가는 중이면 그 자리 정지, 완충기 위·정지 상태면 1층 복귀 (js/buffer-demo.js)
+        if (BufferDemo.active) { const st = BufferDemo.state.stage; if (st === 'approach') BufferDemo.halt(); else BufferDemo.reset(); return; }
         if (overspeedActive) { updateStatus('v-dir', '조속기 트립 — 고장 복귀 버튼으로 OVS 복귀', '#f85149'); return; }
         estop = !estop;
+        InterlockDemo.pause(estop);
         paintEstop();
         if (estop) {
           InspectionReturn.cancel(true);
@@ -1161,14 +1172,14 @@ function updateManualCameraNear() {
       });
       // 고장 래치 복귀 버튼 — OVS·UCM 버튼이 RST 를 표시하는 동안만 상태 카드 아래에 띄우고, 누르면 그 버튼을 누른다.
       const resetPill = document.getElementById('fault-reset');
-      const latchSources = ['btn-overspeed', 'btn-ucm'].map(id => document.getElementById(id)).filter(Boolean);
+      const latchSources = ['btn-overspeed', 'btn-ucm', 'buffer-demo-action'].map(id => document.getElementById(id)).filter(Boolean);
       const syncResetPill = () => {
         const src = latchSources.find(b => b.textContent.trim() === 'RST');
         resetPill.hidden = !src;
         document.body.classList.toggle('fault-latched', !!src);   // 승장문 패널을 복귀 버튼 아래로 내린다
         if (!src) return;
         resetPill.disabled = src.disabled; resetPill.dataset.src = src.id;
-        resetPill.querySelector('span').textContent = src.id === 'btn-ucm' ? '개문발차 복귀' : '과속 복귀';
+        resetPill.querySelector('span').textContent = src.id === 'btn-ucm' ? '개문발차 복귀' : src.id === 'buffer-demo-action' ? '완충기 복귀' : '과속 복귀';
       };
       latchSources.forEach(b => new MutationObserver(syncResetPill).observe(b, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['disabled'] }));
       resetPill.addEventListener('click', () => document.getElementById(resetPill.dataset.src)?.click());

@@ -5,6 +5,7 @@ const HallManual=(()=>{
   const point=new THREE.Vector3(),el=id=>document.getElementById(id);
   const busy=()=>activeFloor>=0&&phase!=='holding';
   function allowed(f){
+    if(InterlockDemo.active)return {ok:false,message:'인터록 시연이 끝난 뒤 점검하세요.'};
     if(InspectionStations.active||InspectionReturn.busy)return {ok:false,message:'피트·카상부 점검운전을 먼저 종료하세요.'};
     if(!Number.isInteger(f)||!hatchDoors[f]?.interlock?.ready)return {ok:false,message:'도어 준비 중입니다.'};
     if(moving||estop||overspeedActive||UCMDemo.state.active||CarDoor.state?.busy||busy())return {ok:false,message:'운행·시연을 멈춘 뒤 점검하세요.'};
@@ -90,6 +91,7 @@ const HallManual=(()=>{
     el('hall-dismiss').onclick=dismiss;el('hall-half').onclick=()=>request(.5);el('hall-open').onclick=()=>request(1);el('hall-close').onclick=close;el('hall-observe').onclick=observe;refresh();
   }
   function resetAll(){
+    InterlockDemo.cancel();
     timeline?.kill();timeline=null;const coupled=hatchDoors.some(h=>h.manualCoupled);activeFloor=-1;phase='idle';HallInspector.end();
     if(coupled&&CarDoor.state?.ready){CarDoor.state.release=0;carDoorR.position.x=CarDoor.dimensions().cx;doorOpen=false;CarDoor.pose();}
     CarDoor.state.coupledFloor=-1;

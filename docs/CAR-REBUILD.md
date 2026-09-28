@@ -9,6 +9,24 @@ Claude Code, Google Antigravity, Codex, Cursor는 카 작업을 시작하기 전
 
 ## 현재 화면 상태
 
+### 카 완충기 타격부·충돌 시연 (2026-09-29)
+
+- 사용자 표시 `001601`: 완충기가 치는 플랭크 가운데를 얇은 판이 아니라 통 강재로 채웠다. `js/car-underbody.js`의 `carBufferStrike`가 두 플랭크 웹 안쪽 사이(Z −0.086~0.166), 가운데 두 종통 보강채널 사이(X ±0.1475)를 카 바닥 서브팬 밑면(−H/2−0.01)부터 플랭크 하면까지 채우고, 밑에 16mm 타격판(`carBufferStrikePlate`, 타격면 `userData.faceY`)을 댄다. 하중검출(오버로드) 부품과 겹치는 칸만 실제 메시 경계에서 3mm 여유로 비운다(절단 4곳, 채움률 약 96%).
+- 치수 원본: `carFrameGrp.userData.safetyPlank`(플랭크 Y·웹 Z·두께·색)와 `carPlatform.userData.stringerW/panBottomY`(`js/elevator.js`). 완충기는 `BUFFER_DIM.urethaneHeight 0.19`·`urethaneStroke 0.06`(`js/environment.js`)이며 `updateBuffers()`가 `bufferGrp.userData.car`(우레탄 피벗 그룹·상면 Y)를 남긴다.
+- 시연 `js/buffer-demo.js`: 피트 카 완충기 위 아이콘 `#buffer-demo-action` → 문 닫힘 → 카가 최하층을 지나 정격속도(60 m/min)로 하강 → 타격판이 완충기를 60mm 압축(부피 보존으로 옆으로 부풂, 평균 감속 약 0.85g)·쿵 소리(`MACH.bufferImpact`)·먼지·화면 흔들림 → 옆에서 채움 단면 관찰 → 균형추 상부로 이동해 노란 치수로 여유거리 표시 → 복귀 대기. 복귀는 아이콘·`#fault-reset`·정지 버튼·점검 전체 리셋 중 하나로 1층 착상. 하강 중 정지 버튼은 그 자리 정지다. 유입식(90 m/min)에서는 시연하지 않는다.
+- 현재 모델 수치: 1층 정지 시 타격면↔완충기 상면 849mm(런바이), 압축 포함 카 909mm 하강·균형추 909mm 상승, 균형추 최상부↔천장 로프 관통부 하면 3.38→2.47m. 여유거리는 시연 시작 때 균형추 평면 위 가장 낮은 고정물(로프·레일 제외)에서 잰다. 교육용 모델 값이며 법정 검사값이 아니다.
+- 검증 `node tools/verify_buffer_demo.mjs`: 채움 경계·하중검출 비간섭·헤드⊂타격판, 충돌속도·압축·로프 끝점·카 하강=균형추 상승, 카 최저점(에이프런 토) 피트 바닥 위 64mm, 1층/3층 시작·비상정지·점검 리셋·유입식 차단·PC/390px 터치, 오류 0건. 결과 `.shot-buffer/`. 동일 PC 시점 채움 숨김/표시 중앙값 16.7/16.7ms(호출 954→956, 삼각형 +192), 390px 16.7/16.7ms. 실제 모바일 확인은 남아 있다.
+
+### 정전시 조명장치·원형 비상등 (2026-09-29)
+
+- 사용자 사진 `003338`의 검은 ABS 함·투명 덮개·축전지 명판·회로기판·변압기/릴레이/단자대와 12개 LED 원형등을 Blender로 재구성했다. 치수 기준자가 없는 사진이므로 함 290×205×60mm·등 지름 120mm는 기존 카에 맞춘 모델 치수다. 원본 `blender/scripts/emergency_lighting.py` → `models/gltf/emergency_power_unit.glb`·`emergency_round_lamp.glb`.
+- 두 모델은 로컬 z=0 부착면, +Z가 덮개/발광 방향이며 scale=1이다. 치수·LED 개수·케이블 출구는 Python 상수 → GLB extras가 원본이다. `EmergencyPowerUnit`의 `EmergencyPowerBody`·`TransparentCover`·`PowerStatus`, `EmergencyRoundLamp`의 `EmergencyLampBody`·`LampLEDs`·`LampLens` 이름을 JS 로더가 읽는다.
+- 배치(`js/emergency-lighting.js`): 전원함은 `0034371` 파란 표시 근처인 카탑박스 앞 아래 카 지붕 위, 상부 원형등은 카탑박스 윗면 +Z 여유 공간, 카내 등은 `0036241` 청록 원 위치인 출입구 우측 천장에 하향 설치했다. 카탑박스 윗판과 천장의 실제 치수에서 높이를 파생한다. 카 그룹 이동·로프·균형추·FSM은 유지한다.
+- 카상부 전원함 옆 `#emergency-light-action` 아이콘 하나로 두 비상등을 함께 켜고 끈다. 초기 소등이며 LED 발광·확산 빛 번짐·그림자 없는 근거리 광원 2개를 사용한다. 기존 조명 회로와 독립적인 점등 시험으로, 전체 정전/운행 정지 시나리오는 추가하지 않는다. 아이콘은 카상부에서 보이며 전체 부품 아이콘 숨김을 따른다.
+- 배선은 `CarWiring.run()`을 사용해 전원함·비상등을 카탑박스 하부 인입구에 연결한다. 상부등 선은 전면 명판/안전 스티커를 피해 +Z 측면으로 내려가고, 카내 선은 천장 위를 지난다.
+- 검증 `node tools/verify_emergency_lighting.mjs`: Blender 실행/두 GLB 내보내기 성공, Live Server 캐시 비활성으로 함·등 정면/사선/근접·PC/390px 화면 확인. 양쪽 동시 점등/소등·기존 조명 상태 유지·아이콘 숨김/재표시·문 개폐·1→2층 실제 운행 시 장착 추종·터치 통과, 브라우저 오류 0건. 함은 지붕 위 3mm, 상부등은 박스 윗면 위 2mm, 비상통화장치와 약 56mm, 카내 등은 천장 밑 1mm 여유다. 결과는 `.shot-emergency-lighting/`.
+- 동일 PC Chromium·1280×850·DPR 1·동일 시점에서 추가 전/소등/점등 프레임 중앙값은 모두 16.7ms. 상부 p95 33.4ms 유지, 호출 1,073→1,106→1,108회. 카내 p95 33.3→33.4ms, 호출 825→851→852회. `--before`는 신규 모듈만 빈 build/update로 대체한 비교다. 실제 모바일 기기의 조작·성능은 미검증이며 다음 확인 대상이다.
+
 ### TERRACE 실내 의장 (2026-09-27)
 
 - 사용자 선택: 리모델링 카탈로그 PDF 14페이지 TERRACE. 기존 후면·우측 유리 2면은 유지하고, 좌측 금속 벽에 차콜/미세 골드 입자, 카문에 검정 세로결과 샴페인 골드 인레이, 바닥에 밝은 석재와 회색 테두리를 적용했다. 전면 리턴·손잡이·조작반은 은색이며 안전 스티커·명판을 유지한다.

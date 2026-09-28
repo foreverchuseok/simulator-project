@@ -334,6 +334,7 @@ const UCMDemo = (() => {
 
   /* ── 시연 흐름 ─────────────────────────────────────────── */
   function start(button) {
+    if(InterlockDemo.active)return;
     btn = button;
     if (U.active) return;
     const why = !PitLadder.secured ? '피트 사다리 펼침 — 운행 차단'

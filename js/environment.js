@@ -4443,8 +4443,10 @@
     }
 
     // 완충기 형상과 균형추 최하단 위치가 공유하는 치수 원본.
+    // urethaneHeight = 몸통 0.15 + 헤드 0.04, urethaneStroke = 카 완충기 충돌 시연 압축 행정(js/buffer-demo.js).
     const BUFFER_DIM = Object.freeze({ baseHeight: 0.4, cwtBaseScale: 0.35,
-      hydraulicRodCenter: 0.55, hydraulicRodHeight: 0.25, cwtMinGap: 0.16 });
+      hydraulicRodCenter: 0.55, hydraulicRodHeight: 0.25, cwtMinGap: 0.16,
+      urethaneHeight: 0.19, urethaneStroke: 0.06 });
 
     function counterweightBottomHeight() {
       // 속도 변경 시 균형추가 순간 이동하지 않도록 가장 높은 완충기를 기준으로 고정한다.
@@ -4463,7 +4465,7 @@
         [0, CWT_CENTER_Z, BUFFER_DIM.cwtBaseScale] // 균형추 하부
       ];
 
-      pos.forEach(([px, pz, heightScale]) => {
+      pos.forEach(([px, pz, heightScale], i) => {
         // 1. 완충기 지지대 (철재 기둥)
         const baseH = BUFFER_DIM.baseHeight * heightScale; // 카 0.4m, 균형추 0.14m
         createBox(0.2, baseH, 0.2, M.ss(0x8a929a), px, Y0 + baseH / 2, pz, bufferGrp);
@@ -4476,6 +4478,8 @@
           createCylinder(0.08, 0.09, 0.4, M.paint(0x111827), px, plateY + 0.22, pz, bufferGrp);
           createCylinder(0.035, 0.035, BUFFER_DIM.hydraulicRodHeight, M.ss(0xd8e0e8),
             px, plateY + BUFFER_DIM.hydraulicRodCenter, pz, bufferGrp);
+          if (i === 0) bufferGrp.userData.car = { type: 'oil', urethane: null,
+            topY: plateY + BUFFER_DIM.hydraulicRodCenter + BUFFER_DIM.hydraulicRodHeight / 2 };
         } else {
           // [저속] 에너지 축적형 완충기
           // 비선형 (폴리우레탄 - 실물 반영: 검은색 우레탄 질감)
@@ -4485,10 +4489,18 @@
             roughness: 0.85,
             metalness: 0.0
           });
+          // 받침판 윗면을 피벗으로 둔 그룹 — 충돌 시연은 scale 만 바꿔 압축·배부름을 보인다.
+          const urethane = new THREE.Group();
+          urethane.name = i === 0 ? 'carBufferUrethane' : 'cwtBufferUrethane';
+          urethane.position.set(px, plateY + 0.02, pz);
+          bufferGrp.add(urethane);
           // 둥근 원통형 우레탄 형태
-          createCylinder(0.09, 0.09, 0.15, urethaneMat, px, plateY + 0.095, pz, bufferGrp);
+          createCylinder(0.09, 0.09, 0.15, urethaneMat, 0, 0.075, 0, urethane);
           // 상단 모따기 부분 (우레탄 헤드)
-          createCylinder(0.08, 0.09, 0.04, urethaneMat, px, plateY + 0.19, pz, bufferGrp);
+          createCylinder(0.08, 0.09, 0.04, urethaneMat, 0, 0.17, 0, urethane);
+          if (i === 0) bufferGrp.userData.car = { type: 'urethane', urethane,
+            topY: plateY + 0.02 + BUFFER_DIM.urethaneHeight,
+            height: BUFFER_DIM.urethaneHeight, stroke: BUFFER_DIM.urethaneStroke };
         }
       });
       scene.add(bufferGrp);

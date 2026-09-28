@@ -706,9 +706,22 @@
     .part-action.active, .part-action[aria-expanded="true"] { background:rgba(27,112,174,.76); border-color:#a8e1ff; }
     .part-action:disabled { opacity:.5; cursor:progress; }
     .part-action:focus-visible { outline:2px solid #9fddff; outline-offset:3px; }
+    #interlock-demo-panel { position:fixed; z-index:110; left:50%; bottom:112px; transform:translateX(-50%); width:min(360px,calc(100vw - 24px)); box-sizing:border-box; padding:12px 14px; color:#edf5fc; background:rgba(25,39,53,.93); border:1px solid #ffffff38; border-radius:16px; box-shadow:0 6px 24px #0004; }
+    #interlock-demo-panel[hidden] { display:none; }
+    #interlock-demo-panel header { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:13px; }
+    #interlock-demo-cancel { color:inherit; background:transparent; border:0; min-width:36px; min-height:36px; cursor:pointer; font-size:22px; }
+    .interlock-contacts { display:flex; gap:8px; margin-top:6px; }
+    .interlock-contacts[hidden] { display:none; }
+    #interlock-demo-message { margin:6px 0 0; font-size:13px; line-height:1.6; word-break:keep-all; }
+    .interlock-contacts span { flex:1; padding:7px 8px; border-radius:8px; font-size:12px; text-align:center; background:#763617; color:#ffe2cd; }
+    .interlock-contacts span[data-closed="true"] { background:#205339; color:#c7f9dc; }
+    @media(max-width:600px) and (orientation:portrait) { #interlock-demo-panel { left:8px; bottom:18px; transform:none; width:calc(100vw - 92px); } }
     .part-action[hidden], #rope-brake-panel[hidden] { display:none; }
     .part-icons-hidden .part-action, .part-icons-hidden #part-actions, .part-icons-hidden #hall-panel { display:none !important; }
-    #emergency-guide-panel[hidden] { display:none; }
+    #emergency-guide-panel[hidden], #finger-gap-panel[hidden] { display:none; }
+    #finger-gap-panel { position:fixed; z-index:112; width:260px; max-width:calc(100vw - 16px); padding:14px; border-radius:16px; color:var(--ui-text); font-family:var(--ui-font); box-sizing:border-box; }
+    #finger-gap-panel p { font-size:13px; line-height:1.6; margin:10px 0 0; word-break:keep-all; }
+    .portrait-tools-hidden #finger-gap-panel { visibility:hidden !important; }
     #emergency-guide-panel { position:fixed; z-index:112; width:280px; max-width:calc(100vw - 16px); padding:14px; border-radius:16px; color:var(--ui-text); font-family:var(--ui-font); box-sizing:border-box; }
     #emergency-guide-panel p { font-size:13px; line-height:1.6; margin:10px 0 0; }
     #emergency-guide-panel .guide-detail { opacity:.75; font-size:12px; }
@@ -872,7 +885,8 @@
     }
 
     /* 개문발차(UCM) 시연 중에는 근접 사다리 버튼을 숨긴다 (js/ucm-demo.js) */
-    .ucm-active #pit-ladder-action { visibility: hidden !important; }
+    .ucm-active #pit-ladder-action, .buffer-demo-active #pit-ladder-action { visibility: hidden !important; }
+    .buffer-demo-active .part-action:not(#buffer-demo-action) { visibility: hidden !important; }
     #inspection-drive { position:fixed; z-index:30; left:50%; bottom:calc(var(--edge-b) + 100px); transform:translateX(-50%); display:flex; gap:8px; padding:8px; border-radius:18px; pointer-events:auto; }
     #inspection-drive[hidden] { display:none; }
     #inspection-drive button { min-width:100px; min-height:52px; border:1px solid #ffffff24; border-radius:12px; background:#ffffff15; color:white; font-family:inherit; font-weight:700; font-size:15px; touch-action:none; user-select:none; }
@@ -999,7 +1013,17 @@
   </div>
 
   <!-- 라이브러리 로드 -->
+  <section id="interlock-demo-panel" aria-label="인터록 작동 시연" hidden>
+    <header><strong id="interlock-demo-title" aria-live="polite"></strong><button id="interlock-demo-cancel" type="button" aria-label="인터록 시연 종료">×</button></header>
+    <p id="interlock-demo-message" role="status" hidden></p>
+    <div class="interlock-contacts"><span id="interlock-main-contact"></span><span id="interlock-aux-contact"></span></div>
+  </section>
   <div id="part-actions">
+    <button id="buffer-demo-action" class="part-action" type="button" aria-label="카 완충기 충돌 시연" title="카 완충기 충돌 시연" hidden>BUF</button>
+    <section id="finger-gap-panel" class="glass" aria-label="문틀 틈새 기준 설명" hidden>
+      <div class="part-panel-head"><strong id="finger-gap-title">문틀 틈새 기준</strong><button id="finger-gap-dismiss" type="button" aria-label="틈새 기준 설명 닫기">×</button></div>
+      <p>어린이 손끼임 방지를 위해 문턱 위 <b>1.6m</b>까지 양쪽 문틀과 문짝 사이 틈새를 <b>5mm 이하</b>로 관리합니다.</p>
+    </section>
     <section id="emergency-guide-panel" class="glass" aria-label="승강장문 비상가이드 설명" hidden>
       <div class="part-panel-head"><strong>③ 승강장문 비상가이드</strong><button id="emergency-guide-dismiss" type="button" aria-label="비상가이드 설명 닫기">×</button></div>
       <p>문과 연결된 행거판에 고정된 스테인리스 갈고리가 헤더의 C레일 안쪽 턱을 감쌉니다.</p>
@@ -1052,7 +1076,7 @@
   <script src="js/building-lights.js"></script>
   <script src="js/emergency-call.js"></script>
   <script src="js/mascot.js"></script>
-  <script src="js/hall-interlock.js"></script>
+  <script src="js/hall-interlock.js?v=20260928-interlock-2"></script>
   <script src="js/car-door-transmission.js"></script>
   <script src="js/car-terrace.js"></script>
   <script src="js/car-door.js"></script>
@@ -1067,12 +1091,16 @@
   <script src="js/hall-emergency-guide.js"></script>
   <script src="js/pit-ladder.js"></script>
   <script src="js/ucm-demo.js"></script>
+  <script src="js/buffer-demo.js?v=20260929-buffer-1"></script>
   <script src="js/part-actions.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/hall-inspector.js"></script>
   <script src="js/hall-manual.js"></script>
   <script src="js/inspection-stations.js"></script>
   <script src="js/inspection-return.js"></script>
+  <script src="js/interlock-demo.js?v=20260928-interlock-2"></script>
+  <script src="js/finger-gap.js?v=20260929-finger-gap-2"></script>
+  <script src="js/emergency-lighting.js?v=20260929-emergency-light-1"></script>
 
   <script>
     // 층수 및 층고 배열 (피트 1.76m, 1층 4.0m, 2층 3.65m, 3층 3.7m)
@@ -1537,6 +1565,8 @@
       CarUnderbody.build();     // 에이프런과 카 하부 CC27 바이패스 경광등
       DoorBypass.bind();
       HallManual.bind();
+      InterlockDemo.bind();
+      FingerGap.bind();
       buildShaftCableHarness(); // 도어 접점 검정 배선 · 조명 · 상하 스위치 박스
       BuildingLights.build();   // 승강로 등 3로 스위치(피트·상부) + 기계실 일자형 LED 단독 스위치
       buildCounterWeight();     // 후면 균형추
@@ -1544,9 +1574,11 @@
       buildWireRopes();         // 로프
       buildPitFoundation();     // 피트
       EmergencyCall.build();    // 비상통화장치 4곳 + 기계실 인터폰 표시등 (js/emergency-call.js)
+      EmergencyLighting.build(); // 카탑 정전시 조명장치 + 카상부/카내 원형 비상등
       PitLadder.build(pitGrp);  // 좌측벽 측면 접이식 피트 사다리 (정지·조명 스위치 옆)
       UCMDemo.build(scene);     // 개문발차 시연 승객 「퉁이」(평소 숨김)
       updateBuffers();          // 동적 완충기
+      BufferDemo.build();       // 카 완충기 충돌 시연 아이콘·먼지·균형추 여유거리 치수 (js/buffer-demo.js)
 
       // ?tcam(해치 케이블 행거)만 빌드 결과(travelCable.hangerY)가 있어야 잡을 수 있다
       if (travelCable.ready && location.search.includes('tcam') && !location.search.includes('tcam=2')) {
@@ -1576,10 +1608,13 @@
       // (방향·속도가 로프와 물리적으로 일치하고, 카가 멈추면 시브도 즉시 멈춘다).
       Mascot.update(performance.now() / 1000);
       UCMDemo.update(performance.now() / 1000);
+      BufferDemo.update();
       controls.update();
       if (camera.position.y < Y0 + 0.35) camera.position.y = Y0 + 0.35;
       PartActions.update();
       HallManual.update();
+      InterlockDemo.update();
+      FingerGap.update();
       PitLadder.update();
       ControlPanel.update();
       MachineRoomPower.update();
@@ -1587,6 +1622,7 @@
       InspectionStations.update();
       InspectionReturn.update();
       EmergencyCall.update(performance.now() / 1000);
+      EmergencyLighting.update();
       renderer.render(scene, camera);
     }
 

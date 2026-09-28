@@ -3,6 +3,56 @@ const CarUnderbody = (() => {
   let assembly, lens;
   const spec = Object.freeze({ apronHeight:0.75, thickness:0.002, toeLength:0.035, toeAngle:Math.PI/3,
     beaconWidth:0.16, beaconDepth:0.105, beaconHeight:0.095, period:0.65, pulse:0.28 });
+  /* 카 완충기 타격부(사용자 001601 표시): 얇은 판으로 막지 않고, 플랭크 두 채널 사이를 카 바닥 서브팬 밑면부터
+     플랭크 하면까지 강재로 통째로 채운 뒤 밑에 16mm 타격판을 댄다. 폭은 가운데 두 종통 보강 채널 사이.
+     하중검출(오버로드) 부품과 겹치는 칸만 실제 형상에서 3mm 여유로 비운다. 치수 원본은
+     carFrameGrp.userData.safetyPlank · carPlatform.userData(elevator.js). */
+  const strikeSpec=Object.freeze({plateT:.016,plateOverhangX:.0125,clearance:.003});
+  function buildBufferStrike(overload){
+    const plank=carGrp.getObjectByName('carFrameGrp').userData.safetyPlank;
+    const pf=carGrp.getObjectByName('carPlatform').userData;
+    const halfX=Math.min(...pf.stringerX.map(Math.abs))-pf.stringerW/2;
+    const z0=plank.webZ[0]+plank.webT/2,z1=plank.webZ[1]-plank.webT/2;
+    const y0=plank.y-plank.halfH,y1=pf.panBottomY;
+    const region=new THREE.Box3(new THREE.Vector3(-halfX,y0,z0),new THREE.Vector3(halfX,y1,z1));
+    carGrp.updateMatrixWorld(true);
+    const inv=new THREE.Matrix4().copy(carGrp.matrixWorld).invert(),cuts=[];
+    overload.traverse(o=>{
+      if(!o.isMesh)return;
+      const b=new THREE.Box3().setFromObject(o).applyMatrix4(inv).expandByScalar(strikeSpec.clearance).intersect(region);
+      if(b.max.x-b.min.x>1e-4&&b.max.y-b.min.y>1e-4&&b.max.z-b.min.z>1e-4)cuts.push(b);
+    });
+    const fill=new THREE.Group();fill.name='carBufferStrike';assembly.add(fill);
+    const mat=M.paint(plank.color);mat.color.convertSRGBToLinear();
+    // 칸(x,z)마다 절단과 겹치지 않는 y 구간만 채운다. 같은 구간이 이어지는 x 칸은 한 상자로 합친다.
+    const spans=(x,z)=>{
+      let seg=[[y0,y1]];
+      for(const c of cuts){
+        if(x<=c.min.x||x>=c.max.x||z<=c.min.z||z>=c.max.z)continue;
+        seg=seg.flatMap(([a,b])=>[[a,Math.min(b,c.min.y)],[Math.max(a,c.max.y),b]].filter(([p,q])=>q-p>1e-4));
+      }
+      return seg;
+    };
+    const edges=(lo,hi,key)=>[...new Set([lo,hi,...cuts.flatMap(c=>[c.min[key],c.max[key]])])].sort((a,b)=>a-b);
+    const xs=edges(-halfX,halfX,'x'),zs=edges(z0,z1,'z');
+    for(let j=0;j<zs.length-1;j++){
+      const za=zs[j],zb=zs[j+1];let run=null;
+      const flush=()=>{if(run)for(const [a,b] of run.seg)createBox(run.xb-run.xa,b-a,zb-za,mat,(run.xa+run.xb)/2,(a+b)/2,(za+zb)/2,fill);run=null;};
+      for(let i=0;i<xs.length-1;i++){
+        const xa=xs[i],xb=xs[i+1],seg=spans((xa+xb)/2,(za+zb)/2),key=JSON.stringify(seg);
+        if(run&&run.key===key)run.xb=xb;else{flush();run={xa,xb,seg,key};}
+      }
+      flush();
+    }
+    const faceY=y0-strikeSpec.plateT;
+    const plate=createBox(2*(halfX+strikeSpec.plateOverhangX),strikeSpec.plateT,plank.webZ[1]-plank.webZ[0]+plank.webT,
+      M.ss(0x5f6870),0,y0-strikeSpec.plateT/2,(plank.webZ[0]+plank.webZ[1])/2,fill);
+    plate.name='carBufferStrikePlate';
+    batchStaticChildren(fill,'carBufferStrike');
+    fill.userData={type:'car-buffer-strike',faceY,top:y1,bottom:y0,halfX,z:[z0,z1],cuts:cuts.length,
+      plate:{halfX:halfX+strikeSpec.plateOverhangX,z:[plank.webZ[0]-plank.webT/2,plank.webZ[1]+plank.webT/2]}};
+    return fill;
+  }
   function build() {
     assembly=new THREE.Group();assembly.name='carUnderbody';carGrp.add(assembly);
     const steel=M.ss(0x929ca5), dark=M.paint(0x32383d), red=M.paint(0x950b0b);
@@ -31,6 +81,7 @@ const CarUnderbody = (() => {
     }
     apron.userData={type:'car-apron',height:spec.apronHeight,width:w,front,top,toeAngle:60,reference:'부품설계 256'};
     const overload=carGrp.getObjectByName('carOverloadAssembly');
+    buildBufferStrike(overload);
     const overloadBounds=new THREE.Box3().setFromObject(overload);
     const local=carGrp.worldToLocal(overloadBounds.getCenter(new THREE.Vector3()));
     const bz=(local.z+z)/2, by=-S.CAR_H/2-.115;
@@ -58,7 +109,7 @@ const CarUnderbody = (() => {
     return assembly;
   }
   function flash(on,lit){if(!lens)return;lens.material.emissiveIntensity=lit?1.2:0;lens.material.color.setHex(lit?0xe50804:0x580202);const q=assembly.getObjectByName('carBypassBeacon');q.userData.active=on;q.userData.lit=lit;}
-  return {spec,build,flash,get root(){return assembly;}};
+  return {spec,strikeSpec,build,flash,get root(){return assembly;}};
 })();
 
 const DoorBypass = (() => {
@@ -69,6 +120,7 @@ const DoorBypass = (() => {
   }
   function stop(){active=false;lastPulse=false;if(gain){gain.gain.cancelScheduledValues(ctx.currentTime);gain.gain.setValueAtTime(0,ctx.currentTime);}CarUnderbody.flash(false,false);}
   function setMode(next){
+    if(InterlockDemo.active)return false;
     if(!['off','hall','car'].includes(next)||moving||CarDoor.state?.busy||HallManual.busy||overspeedActive||estop)return false;
     unlockAudio();stop();mode=next;clearTimeout(autoTimer);
     if(next!=='off')setInspectionMode(true);

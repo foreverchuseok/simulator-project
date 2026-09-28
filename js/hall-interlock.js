@@ -67,6 +67,13 @@ const HallInterlock = (() => {
       state.d = new THREE.Vector3();
       state.bottom = new THREE.Vector3();
       state.q = new THREE.Quaternion();
+      // Contact state follows the actual GLB bridge/leaves and plug pins.
+      const named=(parent,re)=>{const out=[];parent.traverse(o=>{if(o.isMesh&&re.test(o.name.replace(/_/g,' ')))out.push(o);});return out;};
+      const bridge=named(pivot,/^Contact bridge$/)[0],leaves=named(fixed,/^Stationary contact leaf/);
+      const pins=named(opposite,/^Auxiliary contact pin/),socket=named(fixed,/^Terminal spine$/)[0];
+      if(!bridge||leaves.length!==2||pins.length!==2||!socket)throw new Error('Interlock contact geometry missing');
+      state.contacts={bridge,leaves,pins,socket,mainClosed:true,auxClosed:true,mainGap:0,auxGap:0,
+        bridgeBox:new THREE.Box3(),leafBox:new THREE.Box3(),pinBox:new THREE.Box3(),socketBox:new THREE.Box3()};
       // Cam stays on the cylinder; the drive pin reaches the GLB link plane.
       h.right.updateWorldMatrix(true, true);
       moving.updateWorldMatrix(true, true);
@@ -136,6 +143,22 @@ const HallInterlock = (() => {
     s.stock.position.copy(bottom).addScaledVector(d, 0.020 + stockLen / 2);
     s.stock.quaternion.copy(s.q);
     s.stock.scale.y = stockLen;
+    const c=s.contacts;
+    s.fixed.updateWorldMatrix(true,true);s.opposite.updateWorldMatrix(true,true);
+    c.bridgeBox.setFromObject(c.bridge);c.socketBox.setFromObject(c.socket);
+    c.mainClosed=true;c.mainGap=0;
+    for(const leaf of c.leaves){
+      c.leafBox.setFromObject(leaf);
+      const dx=Math.max(c.leafBox.min.x-c.bridgeBox.max.x,c.bridgeBox.min.x-c.leafBox.max.x,0);
+      const dy=Math.max(c.leafBox.min.y-c.bridgeBox.max.y,c.bridgeBox.min.y-c.leafBox.max.y,0);
+      const dz=Math.max(c.leafBox.min.z-c.bridgeBox.max.z,c.bridgeBox.min.z-c.leafBox.max.z,0);
+      const gap=Math.hypot(dx,dy,dz);c.mainGap=Math.max(c.mainGap,gap);c.mainClosed&&=gap<.0002;
+    }
+    c.auxClosed=true;c.auxGap=0;
+    for(const pin of c.pins){
+      c.pinBox.setFromObject(pin);const gap=c.socketBox.min.x-c.pinBox.max.x;
+      c.auxGap=Math.max(c.auxGap,gap);c.auxClosed&&=gap<-.001;
+    }
   }
   return { attach, update, updateAll: hs => hs.forEach(update) };
 })();

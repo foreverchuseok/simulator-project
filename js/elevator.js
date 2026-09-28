@@ -246,18 +246,22 @@
       });
 
       // ── (3) 하부 세이프티 플랭크 빔 (Safety Plank / Bottom Channel Beam - 도면 91p) ──
-      const safetyWebMat = M.paint(0x526970);
+      const safetyWebColor = 0x526970, safetyWebMat = M.paint(safetyWebColor);
       safetyWebMat.color.convertSRGBToLinear();
       const safetyBeamLen = 2 * (stileX - 0.060);
-      for (const z of [-0.09, 0.17]) {
+      // 완충기 타격부 채움(car-underbody.js)이 읽는 플랭크 치수 원본.
+      const plankHalfH = 0.125, plankWebZ = [-0.09, 0.17], plankWebT = 0.008;
+      carFrameGrp.userData.safetyPlank = { y: plankY, halfH: plankHalfH, webZ: plankWebZ, webT: plankWebT,
+        length: safetyBeamLen, color: safetyWebColor };
+      for (const z of plankWebZ) {
         const plate=new THREE.Shape();
-        plate.moveTo(-safetyBeamLen/2,-0.125);plate.lineTo(safetyBeamLen/2,-0.125);
-        plate.lineTo(safetyBeamLen/2,0.125);plate.lineTo(-safetyBeamLen/2,0.125);plate.closePath();
+        plate.moveTo(-safetyBeamLen/2,-plankHalfH);plate.lineTo(safetyBeamLen/2,-plankHalfH);
+        plate.lineTo(safetyBeamLen/2,plankHalfH);plate.lineTo(-safetyBeamLen/2,plankHalfH);plate.closePath();
         for(const sign of [-1,1])for(const [inset,dy,r] of [[0.17,0.035,0.023],[0.31,0.085,0.005],[0.43,0.085,0.005]]){
           const hole=new THREE.Path();hole.absarc(sign*(safetyBeamLen/2-inset),dy,r,0,Math.PI*2,true);plate.holes.push(hole);
         }
-        const web=new THREE.Mesh(new THREE.ExtrudeGeometry(plate,{depth:0.008,bevelEnabled:false}),safetyWebMat);
-        web.position.set(0,plankY,z-0.004);carFrameGrp.add(web);
+        const web=new THREE.Mesh(new THREE.ExtrudeGeometry(plate,{depth:plankWebT,bevelEnabled:false}),safetyWebMat);
+        web.position.set(0,plankY,z-plankWebT/2);carFrameGrp.add(web);
         web.name='safetyPlankWeb';
         for (const dy of [-0.121, 0.121])
           createBox(safetyBeamLen, 0.008, 0.044, safetyWebMat, 0, plankY + dy, z + (z < 0 ? 0.018 : -0.018), carFrameGrp);
@@ -354,11 +358,11 @@
       createBox(0.04, pltH, D - 0.08, pltMat,  W / 2 - 0.02, pltMidY, 0, platformGrp); // 우측
 
       // Z방향 하부 종통 보강 채널 6본 (도면 93p)
-      const stringerX = [-0.85, -0.51, -0.17, 0.17, 0.51, 0.85];
+      const stringerX = [-0.85, -0.51, -0.17, 0.17, 0.51, 0.85], stringerW = 0.045;
       platformGrp.name = 'carPlatform';
-      platformGrp.userData = { stringerX, bottomY: pltMidY - (pltH - 0.01) / 2 };
+      platformGrp.userData = { stringerX, stringerW, bottomY: pltMidY - (pltH - 0.01) / 2, panBottomY: pltFloorY - 0.010 };
       stringerX.forEach(sx => {
-        createBox(0.045, pltH - 0.01, D - 0.08, pltMat, sx, pltMidY, 0, platformGrp);
+        createBox(stringerW, pltH - 0.01, D - 0.08, pltMat, sx, pltMidY, 0, platformGrp);
       });
 
       // 하부 아연도금 강판 서브팬 (Sub-floor Pan Plate - 도면 94p)
@@ -630,6 +634,44 @@
       const x0 = h.left.position.x + c.lugDX + c.endRun;
       c.coil.position.x = x0;                                  // 헬릭스 원점 = 러그 쪽 끝
       c.coil.scale.x = Math.max(0.05, c.anchorX - c.endRun - x0); // 끝 고리는 변형하지 않고 코일만 늘린다
+      if (c.opposite) {
+        const s=c.opposite;
+        s.coil.position.x=s.anchorX+s.endRun;
+        s.coil.scale.x=Math.max(.05,h.right.position.x+s.lugDX-s.endRun-s.coil.position.x);
+      }
+      for (const door of [h.left,h.right]) {
+        const travel=door.position.x-door.userData.cx;
+        for (const roller of door.userData.trackRollers||[]) roller.rotation.z=-travel/roller.userData.radius;
+      }
+    }
+
+    // 2026-09-28 field photos: one punched, folded plate profile shared with
+    // the emergency-guide notch. Preserve real openings when the GLB attaches.
+    function createHallHangerPlateGeometry(p, windows, guide) {
+      const w=p.width/2,lo=-p.height/2,hi=p.height/2,s=new THREE.Shape();
+      s.moveTo(-w,lo);
+      for(const x of [-p.mountX,p.mountX]){
+        s.lineTo(x-.018,lo);s.lineTo(x-.018,lo+.022);
+        s.quadraticCurveTo(x-.018,lo+.026,x-.014,lo+.026);
+        s.lineTo(x+.014,lo+.026);s.quadraticCurveTo(x+.018,lo+.026,x+.018,lo+.022);s.lineTo(x+.018,lo);
+      }
+      s.lineTo(w,lo);s.lineTo(w,hi);
+      if(guide){const x=guide.x,half=guide.width/2+.002,notch=guide.bridgeY-.005+.040;
+        s.lineTo(x+half,hi);s.lineTo(x+half,notch);s.lineTo(x-half,notch);s.lineTo(x-half,hi);}
+      s.lineTo(-w,hi);s.closePath();
+      for(const win of windows){const hole=new THREE.Path();hole.moveTo(win.x0,win.y0);hole.lineTo(win.x1,win.y0);hole.lineTo(win.x1,win.y1);hole.lineTo(win.x0,win.y1);hole.closePath();s.holes.push(hole);}
+      // Upper factory punch row; keep the spring lug and safety-guide neck solid.
+      for(let x=-w+.034;x<w-.02;x+=.028){
+        if(Math.abs(x)<.035||Math.abs(Math.abs(x)-.085)<.038)continue;
+        const hole=new THREE.Path();hole.absarc(x,hi-.012,.0035,0,Math.PI*2,true);s.holes.push(hole);
+      }
+      // Adjustment slots next to the lower door fixing pockets.
+      for(const x of [-w+.017,w-.017]){
+        const hole=new THREE.Path(),y=lo+.042,r=.0035,a=.005;
+        hole.moveTo(x-a,y-r);hole.lineTo(x+a,y-r);hole.absarc(x+a,y,r,-Math.PI/2,Math.PI/2,false);
+        hole.lineTo(x-a,y+r);hole.absarc(x-a,y,r,Math.PI/2,Math.PI*1.5,false);s.holes.push(hole);
+      }
+      return new THREE.ExtrudeGeometry(s,{depth:p.thickness,bevelEnabled:true,bevelThickness:.0003,bevelSize:.0003,bevelSegments:2,steps:1,curveSegments:8});
     }
 
     /**
@@ -880,6 +922,10 @@
       const topW     = S.DOOR_W + jambW * 2; // 삼방틀 전체 폭 1.82m
       const transH   = 0.520;             // 상부 트랜섬(막판) 높이 520mm
       const jambZ    = FRONT_WALL_INNER_Z + jambD / 2 - 0.010; // 전면 벽체와 결합되는 Z 중심
+      // 어린이 손끼임 방지: 문짝 홀면 ↔ 문설주 안쪽 립 5mm. 립 뒷면만 문짝 쪽으로 연장한다.
+      const JAMB_RUN_GAP = 0.005;
+      const jambRibBack  = DOOR_HALL_Z + JAMB_RUN_GAP - jambZ;       // 립 뒷면 (삼방틀 로컬 Z)
+      const jambRibFront = -jambD / 2 + 0.025;                        // 립 앞면 (기존 위치 유지)
 
       function createJambAssembly(fy, parent) {
         const jGrp = new THREE.Group();
@@ -893,7 +939,7 @@
           createBox(jambW, doorH, jambD, jambMat, jx, doorH / 2, 0, jGrp);
 
           // 안쪽 도어 가이드 립 (단면 절곡 디테일)
-          createBox(0.012, doorH, 0.025, ribMat, jx - side * (jambW / 2 - 0.006), doorH / 2, -jambD / 2 + 0.0125, jGrp);
+          createBox(0.012, doorH, jambRibFront - jambRibBack, ribMat, jx - side * (jambW / 2 - 0.006), doorH / 2, (jambRibFront + jambRibBack) / 2, jGrp);
 
           // 하단 실 보강(Sill Reinforcement) 결합 브라켓 & M8 볼트 2개소 (도면 172p)
           createBox(0.055, 0.035, 0.045, darkSsMat, jx, 0.018, -jambD / 2 + 0.022, jGrp);
@@ -952,11 +998,13 @@
          행거판과 연동로프 고정단이 레일 밖 허공으로 튀어나갔다. */
       const {cx,ox} = CarDoor.dimensions();
       const sillRunLen = 2 * (ox + Math.abs(cx-DOOR_MEET_GAP/2-HALL_FINISH.panelW/2) + hallShoeOffset + hallShoeW/2 + 0.020);
-      const HP_W = 0.380; // 행거 플레이트 폭 (buildHangerAssembly 베이스판과 동일 원본)
+      const HP_W = S.DOOR_W / 2 - 0.05; // 실사: 문짝 폭 대부분을 덮는 은색 행거판.
+      const hangerPlateSpec={width:HP_W,height:.160,thickness:.0035,mountX:HP_W/2-.055};
+      const trackRollerSpec={radius:.036,depth:.014,z:.0055,x:HP_W/2-.135};
 
       // ── 승장 도어 오퍼레이터 (행거 케이스 + 양단 브라켓 + C레일 속 롤러) ──
-      const hcGalvMat = new THREE.MeshStandardMaterial({ color: 0xbac3cd, metalness: 0.65, roughness: 0.38 });
-      const hcRailMat = new THREE.MeshStandardMaterial({ color: 0xd8e0e8, metalness: 0.75, roughness: 0.25 });
+      const hcGalvMat = M.ss(0x929da5);hcGalvMat.metalness=.65;hcGalvMat.roughness=.38;
+      const hcRailMat = M.ss(0xbfc6cc);hcRailMat.metalness=.75;hcRailMat.roughness=.25;
       const hcDarkMat = new THREE.MeshStandardMaterial({ color: 0x22262c, metalness: 0.50, roughness: 0.60 });
       const ropeMat   = new THREE.MeshStandardMaterial({ color: 0x8a929c, metalness: 0.80, roughness: 0.30 });
 
@@ -966,7 +1014,7 @@
       const ilGoldZincMat=M.ss(0xaa8c32);
       ilGoldZincMat.metalness=0.80;ilGoldZincMat.roughness=0.30;
       // Spring end fittings share one contract with the coil endpoint update.
-      const closerSpec={movingX:-0.015,endRun:0.024,coilR:0.0075,wireR:0.0021,eyeR:0.006,pinR:0.003,cheekZ:0.0055,cheekT:0.002};
+      const closerSpec={movingX:-0.015,oppositeX:.15,endRun:0.024,coilR:0.0065,wireR:0.00135,eyeR:0.006,pinR:0.003,cheekZ:0.0055,cheekT:0.002};
       function springEnd(parent,x,y,sign,name){
         const p=closerSpec,end=new THREE.Group();end.name=name;end.position.set(x,y,0);parent.add(end);
         const eye=new THREE.Mesh(new THREE.TorusGeometry(p.eyeR,p.wireR,8,32),ilSpringMat);eye.name='springEndEye';end.add(eye);
@@ -985,7 +1033,7 @@
         end.children.forEach(o=>o.name='');batchStaticChildren(end,name);return end;
       }
 
-      const hcW = 2 * (ox + HP_W / 2 + 0.075); // 행거 케이스 전폭 ≈ 2.82m (도어 행정에서 역산)
+      const hcW = 2 * (ox + HP_W / 2 + 0.075); // 행거판 폭·도어 행정에서 역산 (현재 3.14m).
       const CASE_H = 0.104;       // 174p C형 케이스 높이 (104mm)
       const CASE_D = 0.035;       // 174p C형 케이스 깊이 (35mm)
       const TRACK_OFF = 0.069;    // 174p 피아노선 → 트랙센터 수직거리 (69mm)
@@ -1014,7 +1062,7 @@
         }
         return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), n, wireR, 6, false);
       }
-      const closerCoilGeo = makeCoilGeometry(100, closerSpec.coilR, closerSpec.wireR);
+      const closerCoilGeo = makeCoilGeometry(300, closerSpec.coilR, closerSpec.wireR,8);
 
       function createHangerCaseAssembly(fy, parent) {
         const hcGrp = new THREE.Group();
@@ -1068,6 +1116,24 @@
         createBox(hcW - 0.02, 0.012, 0.003, hcGalvMat, 0, caseBotY + 0.008, lipZ, hcGrp);
         createBox(hcW - 0.04, 0.006, 0.016, hcRailMat, 0, topRailY, 0, hcGrp);
         createBox(hcW - 0.04, 0.006, 0.016, hcRailMat, 0, botRailY, 0, hcGrp);
+
+        // Field side views show the folded lower fixing strip behind the wheels.
+        // Its slotted bolt holes are actual openings, not black decals.
+        const stripShape=new THREE.Shape(),stripHalf=hcW/2-.025;
+        stripShape.moveTo(-stripHalf,-.018);stripShape.lineTo(stripHalf,-.018);
+        stripShape.lineTo(stripHalf,.018);stripShape.lineTo(-stripHalf,.018);stripShape.closePath();
+        const lowerMount=new THREE.Group();lowerMount.name='hallHeaderLowerMount';
+        lowerMount.position.set(0,caseBotY-.022,webZ+.004);hcGrp.add(lowerMount);
+        for(let x=-stripHalf+.11;x<stripHalf-.05;x+=.36){
+          const hole=new THREE.Path();hole.moveTo(x-.012,-.004);hole.lineTo(x+.012,-.004);
+          hole.absarc(x+.012,0,.004,-Math.PI/2,Math.PI/2,false);hole.lineTo(x-.012,.004);hole.absarc(x-.012,0,.004,Math.PI/2,Math.PI*1.5,false);stripShape.holes.push(hole);
+          const washer=createCylinder(.008,.008,.0015,hcRailMat,x,0,-.001,lowerMount);washer.rotation.x=Math.PI/2;
+          const bolt=new THREE.Mesh(new THREE.CylinderGeometry(.0055,.0055,.005,6),boltMat);bolt.position.set(x,0,-.004);bolt.rotation.x=Math.PI/2;lowerMount.add(bolt);
+        }
+        const strip=new THREE.Mesh(new THREE.ExtrudeGeometry(stripShape,{depth:.0025,bevelEnabled:false,curveSegments:8}),hcGalvMat);lowerMount.add(strip);
+        createBox(hcW-.05,.0025,.014,hcGalvMat,0,-.017,.006,lowerMount);
+        createBox(hcW-.05,.008,.0025,hcGalvMat,0,.019,.00125,lowerMount);
+        batchStaticChildren(lowerMount,'headerLowerMount');
 
         /* 3. 연동 풀리 — 케이스 양단, C레일 높이.
            홈 반지름 ROPE_R 에 로프가 앉고 바깥 플랜지 PUL_R 가 이탈을 막는다.
@@ -1153,10 +1219,11 @@
         const covLeftX  = -ox - 0.075;
         const covLen    = covRightX - covLeftX;
         const covMidX   = (covRightX + covLeftX) / 2;
-        const covTopY   = caseTopY + 0.046;
-        createBox(covLen, 0.0025, 0.034, hcGalvMat, covMidX, covTopY, 0, hcGrp);          // 상면
+        const secondSpringY=scbY+.023,secondSpringZ=-.025;
+        const covTopY   = caseTopY + 0.070;
+        createBox(covLen, 0.0025, 0.065, hcGalvMat, covMidX, covTopY, -.015, hcGrp);          // 상면
         createBox(covLen, 0.012, 0.0025, hcGalvMat, covMidX, covTopY - 0.007, lipZ + 0.006, hcGrp); // 전면 립
-        createBox(covLen, 0.038, 0.0025, hcGalvMat, covMidX, caseTopY + 0.027, webZ - 0.006, hcGrp); // 후면 측벽
+        createBox(covLen, 0.062, 0.0025, hcGalvMat, covMidX, caseTopY + 0.039, webZ - 0.006, hcGrp); // 후면 측벽
         // 커버 상단 고정 나사 (도면 181p) — 340mm 간격
         for (let sx = covLeftX + 0.12; sx < covRightX - 0.05; sx += 0.34) {
           createCylinder(0.0025, 0.0025, 0.004, boltMat, sx, covTopY + 0.002, 0, hcGrp);
@@ -1168,7 +1235,16 @@
         sprCoil.castShadow = false;
         hcGrp.add(sprCoil);
 
-        // 4. 행거판·롤러는 문짝과 함께 올린다. 이번엔 C레일만 둔다.
+        // The second long closer runs to the opposite leaf (field video 16s).
+        const secondAnchorX=-springAnchorX;
+        createBox(.004,.050,.044,ilGoldZincMat,-scbX,caseTopY+.025,-.012,hcGrp);
+        createBox(.065,.0035,.055,ilGoldZincMat,-scbX,caseTopY+.0018,-.012,hcGrp);
+        createBox(.023,.0035,.015,ilGoldZincMat,-scbX+.010,secondSpringY-.010,secondSpringZ,hcGrp);
+        const secondFixed=springEnd(hcGrp,secondAnchorX,secondSpringY,1,'hallSpringOppositeFixedEnd');secondFixed.position.z=secondSpringZ;
+        const secondCoil=new THREE.Mesh(closerCoilGeo,ilSpringMat);secondCoil.name='hallSpringOppositeCoil';
+        secondCoil.position.set(0,secondSpringY,secondSpringZ);secondCoil.castShadow=false;hcGrp.add(secondCoil);
+
+        // 4. 행거판·주행 롤러는 아래 buildHangerAssembly에서 문짝에 장착한다.
 
         // Field-reference GLB: fixed switch, +X hook, -X long slotted keeper.
         const ilMount = new THREE.Group();
@@ -1181,7 +1257,7 @@
 
         return {
           relPulley: pulL, endPulley: pulR, ilMount,
-          geom: { trackCtrZ, caseCY, topRailY, botRailY, lipZ, plateZ: HP_PLATE_Z, caseTopY, caseBotY, caseWidth:hcW, springY:scbY, latch: latchSpec },
+          geom: { trackCtrZ, caseCY, topRailY, botRailY, lipZ, plateZ: HP_PLATE_Z, caseTopY, caseBotY, caseWidth:hcW, springY:scbY, secondSpringY,secondSpringZ,plateSpec:hangerPlateSpec, latch: latchSpec },
           /* 연동 링크 핸들 — spinDoorDrive(h) 가 도어 행정만 보고 갱신한다.
              hcGrp.position.x = 0 이므로 여기 x 값은 월드 x 와 같다. */
           link: {
@@ -1190,7 +1266,8 @@
             upY: pulY + ROPE_R, loY: pulY - ROPE_R, ropeR: ROPE_R,
             aOff: RA_OFF, aHalf: RA_HALF, terminalType: 'opposed-threaded-studs',
             bL: RB_OFF + RB_L, bR: RB_OFF + RB_R,
-            closer: { anchorX:springAnchorX, lugDX:closerSpec.movingX, endRun:closerSpec.endRun, coil:sprCoil, fixedEnd }
+            closer: { anchorX:springAnchorX, lugDX:closerSpec.movingX, endRun:closerSpec.endRun, coil:sprCoil, fixedEnd,
+              opposite:{anchorX:secondAnchorX,lugDX:closerSpec.oppositeX,endRun:closerSpec.endRun,coil:secondCoil,fixedEnd:secondFixed} }
           }
         };
       }
@@ -1211,25 +1288,35 @@
       scene.add(sillSupportGrp);
 
       // ── 행거 플레이트 공통 재질 ──
-      const hpPlateMat   = new THREE.MeshStandardMaterial({ color: 0xbaa870, metalness: 0.65, roughness: 0.40 }); // 크로메이트 아연도금 강판
+      const hpPlateMat = M.ss(0xb8c1ca);hpPlateMat.metalness=.65;hpPlateMat.roughness=.34; // 실사 은색 아연도금 판금.
       const hpSteelMat   = new THREE.MeshStandardMaterial({ color: 0x8e97a3, metalness: 0.70, roughness: 0.35 }); // 구조용 스틸
       const hpRollerMat  = new THREE.MeshStandardMaterial({ color: 0x1f242b, metalness: 0.30, roughness: 0.60 }); // 블랙 고무/우레탄 롤러
       const hpBoltMat    = new THREE.MeshStandardMaterial({ color: 0xc8d2dc, metalness: 0.80, roughness: 0.25 }); // 아연도금 볼트/너트
       const hpSpringMat  = new THREE.MeshStandardMaterial({ color: 0xd0d5da, metalness: 0.75, roughness: 0.25 }); // 인장 스프링 스틸
       const hpDarkMat    = new THREE.MeshStandardMaterial({ color: 0x1f2329, roughness: 0.80 }); // 슬롯/음영 매트 블랙
 
-      /* 텐셔너 감김 — 본선과 같은 makeGovRopeMat (은색 연선 텍스처).
-         좁은 홈에서 6연선 로브를 밀어 넣으면 회색 덩어리로 보이므로 단면은 원통이다. */
+      const tr=trackRollerSpec;
+      const trackTreadGeometry=new THREE.LatheGeometry([
+        new THREE.Vector2(.014,-tr.depth/2),new THREE.Vector2(tr.radius-.0025,-tr.depth/2),
+        new THREE.Vector2(tr.radius,-tr.depth/2+.0025),new THREE.Vector2(tr.radius,tr.depth/2-.0025),
+        new THREE.Vector2(tr.radius-.0025,tr.depth/2),new THREE.Vector2(.014,tr.depth/2)
+      ],40);
+      const trackRaceGeometry=new THREE.TorusGeometry(.009,.001,6,24);
+
+      // 종단 리드는 본선과 같은 굵기·재질·UV 방향을 쓴다.
       function makeRopeTube(grp, pts) {
         const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
-        const tg = new THREE.TubeGeometry(curve, 48, ROPE_RD * 0.9, 12, false);
+        const tg = new THREE.TubeGeometry(curve, 48, ROPE_RD, 12, false);
+        // TubeGeometry는 U가 길이지만 와이어 텍스처는 V가 길이다.
+        // 둘레 방향 반복을 늘리면 짧은 리드가 굵은 사선 띠처럼 보인다.
+        const uv=tg.attributes.uv;
+        for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getY(i),uv.getX(i));
         const mat = makeGovRopeMat();
         const len = curve.getLength();
         mat.userData.ropeLen = len;
-        mat.userData.ropeUvAlongU = true;
         const n = Math.max(0.4, len / GOV_ROPE_PITCH);
-        if (mat.map) mat.map.repeat.set(n, 1);
-        if (mat.normalMap) mat.normalMap.repeat.set(n, 1);
+        if (mat.map) mat.map.repeat.set(1, n);
+        if (mat.normalMap) mat.normalMap.repeat.set(1, n);
         const tube = new THREE.Mesh(tg, mat);
         tube.castShadow = true;
         grp.add(tube);
@@ -1242,42 +1329,54 @@
         const isHookSide = side > 0; // side > 0: 화면 왼쪽 패널 (right 그룹, 월드 +X) = 걸쇠/2열롤러/하단연장바
         const tensY = g.caseCY - ROPE_R; // 하부 연동 로프 및 텐셔너 높이
 
-        // 1. 메인 행거 플레이트 베이스판 (폭 380mm x 높이 160mm x 두께 3.5mm)
-        if (isHookSide) {
-          // 화면 좌측 패널 (right 그룹): 솔리드 플레이트 (후면 로프 차폐)
-          createBox(0.380, 0.160, 0.0035, hpPlateMat, 0, g.caseCY - 0.040, plateZ, grp).name='hallHangerPlate';
-        } else {
-          // 직접 종단용 관통창 2개. 가운데는 세로 취부 브라켓의 체결 면이다.
-          const pShape = new THREE.Shape();
-          pShape.moveTo(-0.190,-0.080);pShape.lineTo(0.190,-0.080);
-          pShape.lineTo(0.190,0.080);pShape.lineTo(-0.190,0.080);pShape.closePath();
-          grp.userData.windows=[];
-          for(const sign of [-1,1]) {
-            const x=sign*0.099,y=0.040-ROPE_R-sign*END_DY;
-            const w={x0:x-0.024,x1:x+0.024,y0:y-0.012,y1:y+0.012};
-            const hole=new THREE.Path();hole.moveTo(w.x0,w.y0);hole.lineTo(w.x1,w.y0);
-            hole.lineTo(w.x1,w.y1);hole.lineTo(w.x0,w.y1);hole.closePath();
-            pShape.holes.push(hole);grp.userData.windows.push(w);
-          }
-
-          const pGeom = new THREE.ExtrudeGeometry(pShape, { depth: 0.0035, bevelEnabled: false });
-          const pMesh = new THREE.Mesh(pGeom, hpPlateMat);
-          pMesh.name='hallHangerPlate';
-          pMesh.position.set(0, g.caseCY - 0.040, plateZ - 0.00175);
-          grp.add(pMesh);
+        // 1. 메인 행거판 치수·가공 원본은 hangerPlateSpec이다.
+        // Punched silver plate and hidden track wheels (field reference 2026-09-28).
+        grp.userData.windows=[];
+        if(!isHookSide)for(const sign of [-1,1]){
+          const x=sign*.099,y=.040-ROPE_R-sign*END_DY;
+          grp.userData.windows.push({x0:x-.024,x1:x+.024,y0:y-.012,y1:y+.012});
         }
+        const plate=new THREE.Mesh(createHallHangerPlateGeometry(hangerPlateSpec,grp.userData.windows),hpPlateMat);
+        plate.name='hallHangerPlate';plate.userData.profile=hangerPlateSpec;
+        plate.position.set(0,g.caseCY-.040,plateZ-hangerPlateSpec.thickness/2);grp.add(plate);
+        const details=new THREE.Group();details.name='hallHangerFasteners';grp.add(details);
+        function faceBolt(x,y,r=.0045){
+          const washer=createCylinder(r*1.5,r*1.5,.0012,ilGoldZincMat,x,y,plateZ-.0025,details);washer.rotation.x=Math.PI/2;
+          const head=new THREE.Mesh(new THREE.CylinderGeometry(r,r,.0035,6),ilGoldZincMat);
+          head.position.set(x,y,plateZ-.0048);head.rotation.x=Math.PI/2;details.add(head);
+        }
+        const rs=trackRollerSpec,runSurface=g.botRailY+.003;
+        grp.userData.trackRollers=[];
+        for(const x of [-rs.x,rs.x]){
+          const y=runSurface+rs.radius,wheel=new THREE.Group();wheel.name='hallTrackRoller';wheel.position.set(x,y,rs.z);
+          const tread=new THREE.Mesh(trackTreadGeometry,hpRollerMat);tread.rotation.x=Math.PI/2;wheel.add(tread);
+          for(const z of [-rs.depth/2,rs.depth/2]){
+            const bearing=createCylinder(.014,.014,.0015,hpBoltMat,0,0,z,wheel);bearing.rotation.x=Math.PI/2;
+            const race=new THREE.Mesh(trackRaceGeometry,hpSteelMat);race.position.z=z;wheel.add(race);
+          }
+          const mark=createCylinder(.0015,.0015,.0018,hpDarkMat,.009,0,-rs.depth/2-.0008,wheel);mark.rotation.x=Math.PI/2;
+          wheel.userData={radius:rs.radius,depth:rs.depth,railSurface:runSurface,halfRail:hcW/2-.020,webFace:CASE_D/2-.0035};
+          batchStaticChildren(wheel,'trackRoller');grp.add(wheel);grp.userData.trackRollers.push(wheel);
+          const axle=createCylinder(.004,.004,rs.z-plateZ+.008,hpBoltMat,x,y,(rs.z+plateZ)/2,details);axle.rotation.x=Math.PI/2;
+          faceBolt(x,y,.0055);
+        }
+        const antiR=.011,antiY=g.caseBotY-antiR-.0015,antiX=-side*.19;
+        const anti=createCylinder(antiR,antiR,rs.depth,hpRollerMat,antiX,antiY,rs.z,details);anti.rotation.x=Math.PI/2;
+        const antiAxle=createCylinder(.0035,.0035,rs.z-plateZ+.007,hpBoltMat,antiX,antiY,(rs.z+plateZ)/2,details);antiAxle.rotation.x=Math.PI/2;
+        faceBolt(antiX,antiY);
+        for(const x of [-HP_W/2+.017,HP_W/2-.017])faceBolt(x,g.caseCY-.040-.080+.042,.0038);
+        batchStaticChildren(details,'hangerFasteners');
 
-        // 2. 도면 174p 하단 일체형 34mm L-플랜지 & M8 직결 볼트 2세트 (도어 상단과 완벽 일체화)
         const flapZ = hatchPanelZ(g.trackCtrZ); // 0 (단일 PLUMB 축)
         const flapY = g.caseCY - 0.120 - 0.0035 / 2;
         // 도어 상단을 덮는 34mm 수평 플랜지
-        createBox(0.380, 0.0035, 0.034, hpPlateMat, 0, flapY, flapZ, grp);
+        createBox(HP_W, 0.0035, 0.034, hpPlateMat, 0, flapY, flapZ, grp);
         // 수직 행거판과 하단 플랜지를 잇는 절곡 코너 연결부
         if (Math.abs(plateZ - flapZ) > 0.002) {
-          createBox(0.380, 0.0035, Math.abs(plateZ - flapZ), hpPlateMat, 0, flapY, (plateZ + flapZ) / 2, grp);
+          createBox(HP_W, 0.0035, Math.abs(plateZ - flapZ), hpPlateMat, 0, flapY, (plateZ + flapZ) / 2, grp);
         }
         // 상단 M8 체결 볼트 머리 & 하단 사각 너트 2세트
-        [-0.120, 0.120].forEach(bx => {
+        [-hangerPlateSpec.mountX, hangerPlateSpec.mountX].forEach(bx => {
           createCylinder(0.006, 0.006, 0.004, hpBoltMat, bx, flapY + 0.0035, flapZ, grp);
           createBox(0.013, 0.005, 0.013, hpBoltMat, bx, flapY - 0.0045, flapZ, grp);
         });
@@ -1295,6 +1394,16 @@
             createCylinder(0.004,0.004,0.025,hpBoltMat,RA_OFF+dx,clampY,plateZ+0.003,clamp).rotation.x=Math.PI/2;
 
           // Roller base, hook, compression spring and link are supplied by the GLB.
+          const sx=closerSpec.oppositeX,shY=g.secondSpringY,sz=g.secondSpringZ;
+          const bracket=new THREE.Group();bracket.name='hallSpringOppositeHanger';grp.add(bracket);
+          const bottom=g.caseCY+.016,top=shY-.009;
+          createBox(.035,top-bottom,.0035,ilGoldZincMat,sx,(bottom+top)/2,plateZ-.0035,bracket);
+          createBox(.035,.0035,.024,ilGoldZincMat,sx,shY-.010,sz,bracket);
+          for(const dx of [-.009,.009]){
+            const bolt=createCylinder(.0035,.0035,.008,ilGoldZincMat,sx+dx,g.caseCY+.027,plateZ-.006,bracket);bolt.rotation.x=Math.PI/2;
+          }
+          batchStaticChildren(bracket,'oppositeSpringHanger');
+          const end=springEnd(grp,sx,shY,-1,'hallSpringOppositeMovingEnd');end.position.z=sz;
         } else {
           // ── 화면 우측 행거판 (left 그룹, 월드 -X): SPRING HANGER + 연동 로프 텐셔너 + 실물 7계열 보조접점 수놈 핀 L브라켓 ──
           // 도어 중앙 방향은 로컬 +X 방향임!
@@ -1605,6 +1714,8 @@
           ilGoldZincMat.metalness=reference.material.metalness;ilGoldZincMat.roughness=reference.material.roughness;
         });
         if (right.userData.triKey) right.userData.triKey.floorIdx = i;
+        // 손끼임 방지 틈새 표시(finger-gap.js)가 읽는 월드 기준값.
+        h.fingerGap = { edgeX: S.DOOR_W / 2, floorY: fy, faceZ: DOOR_HALL_Z, panelT: HATCH_DT, jambZ: DOOR_HALL_Z + JAMB_RUN_GAP };
         hatchDoors.push(h);
         spinDoorDrive(h); // 닫힘 상태의 로프 마디·풀리각·클로저 스프링 길이 초기화
       }
