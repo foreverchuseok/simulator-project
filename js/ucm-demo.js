@@ -1,8 +1,8 @@
 /* ─────────────────────────────────────────────────────────────
    개문발차(UCM, Unintended Car Movement) 시연 — 로프브레이크 정상 / 미작동 / 미설치
    ▪ 어느 이유로(권상기 브레이크 고장) 문이 열린 채 카가 올라간다. 빈 카는 균형추보다 가벼워 상승한다.
-   ▪ 정상: 기계실 로프브레이크가 로프를 "쾅" 물어 카를 세운다. 현장 기준대로 에이프런 2/3가
-     드러나기 전(약 +0.38m)에 멈춘다. 타려던 승객은 에이프런에 걸려 넘어지지만(전도) 크게 다치지 않는다.
+   ▪ 정상: 기계실 로프브레이크가 로프를 "쾅" 물어 카를 세운다. 현재 시연에서는 에이프런 2/3가
+     드러나기 전(약 +0.45~0.47m)에 멈춘다. 타려던 승객은 에이프런에 걸려 넘어지는 자세를 보인다.
    ▪ 미작동·미설치: 카가 계속 올라가고 승객이 문틈으로 쏠린다. 장면은 사고 순간 전에
      붉은 화면과 안내 카드로 넘어간다(초등학생이 봐도 거부감 없게, 잔혹 묘사 없음).
    ▪ 캐릭터 「퉁이」는 기계실 마스코트 「승강곰」과 같은 구·타원체 조형이다. build() 에서 한 번만 만들고
@@ -30,7 +30,7 @@ const UCMDemo = (() => {
   const LEAN = { step: .01, max: 1.5, clear: .006, lift: .35, standOff: .26, gravity: 30 }; // lift .35: 정상 정지(≈0.45m)에서는 들리지 않는다
   /* 시간 배율(느린 동작) — 승장에서는 카가 눈에 보이게(약 +0.12m) 올라가고, 기계실로 가는 동안은
      거의 멈춘 듯하다가, 기계실에서 로프가 천천히 흐르다 파지된다. */
-  const TS = { landing: .35, landed: .12, transit: .03, machineRoom: .12, failBack: .05, failLanding: .3 };
+  const TS = { landing: .65, landed: .12, transit: .03, machineRoom: .65, failBack: .05, failLanding: .3 };
   let char = null, parts = null, stars = null, btn = null;
   const U = { active: false, stage: 'rest', mode: 'normal', tl: null, tick: null, ts: 0, rise: 0, v: 0,
     baseY: 0, cwtBase: 0, gripAt: -1, stopped: false, jaws: null, walk: 0, t0: 0 };
@@ -251,13 +251,15 @@ const UCMDemo = (() => {
   }
   function landingCam(dur, ease) {
     const L = FLOOR_Y[U.f], z = FRONT_WALL_INNER_Z;
+    const scale = Math.max(1, .85 / camera.aspect);
     // 승장 벽이 옆 시야를 막으므로 개구부 정면 약간 오른쪽·낮은 높이에서 본다(오른쪽에 에이프런이 드러남).
-    _camTo(0.85, L + 1.1, z + 2.7, 0.1, L + 0.42, z - 0.25, dur, ease);
+    _camTo(.65, L + .55 + .55 * scale, z - .25 + 2.95 * scale, .1, L + .55, z - .25, dur, ease);
   }
   // 개문발차 순간: 문턱 높이로 낮춰, 올라가는 카 문턱 밑으로 에이프런이 드러나는 모습을 오른쪽 개구부에서 본다.
   function sillCam(dur) {
     const L = FLOOR_Y[U.f], z = FRONT_WALL_INNER_Z;
-    _camTo(1.05, L + 0.78, z + 2.15, 0.12, L + 0.36, z - 0.2, dur, 'power2.inOut');
+    const scale = Math.max(1, .85 / camera.aspect);
+    _camTo(.45, L + .45 + .4 * scale, z - .2 + 2.7 * scale, .05, L + .45, z - .2, dur, 'power2.inOut');
   }
   /* 기계실: 로프브레이크 옆·뒤 사선(브레이크 로컬 +X·−Z, 로프 높이 약간 위). 정면만 보면 브레이크 뒷면이
      너무 강조된다(사용자 지적). 이 시점은 현수도르래·로프 흐름과 함께, 파지 순간 황동 윗턱 판이
@@ -266,29 +268,25 @@ const UCMDemo = (() => {
   function mrCam(dur) {
     const body = scene.getObjectByName('RopeBrake');
     body.updateMatrixWorld(true);
-    const c = body.localToWorld(new THREE.Vector3(...MR_VIEW.cam)), t = body.localToWorld(new THREE.Vector3(...MR_VIEW.target));
+    const c = new THREE.Vector3(...MR_VIEW.cam), t = new THREE.Vector3(...MR_VIEW.target);
+    c.sub(t).multiplyScalar(Math.max(1, .85 / camera.aspect)).add(t);
+    body.localToWorld(c); body.localToWorld(t);
     _camTo(c.x, c.y, c.z, t.x, t.y, t.z, dur, 'power2.inOut');
   }
-  function shake() {
-    const p = camera.position.clone();
-    gsap.timeline()
-      .to(camera.position, { x: p.x + .018, y: p.y - .014, duration: .035 })
-      .to(camera.position, { x: p.x - .014, y: p.y + .01, duration: .045 })
-      .to(camera.position, { x: p.x + .008, y: p.y - .006, duration: .05 })
-      .to(camera.position, { x: p.x, y: p.y, duration: .08 });
-  }
-
   /* ── 카 운동 (시간 배율 U.ts 로 느린 동작) ─────────────────── */
   function motionTick(time, deltaMs) {
-    if (U.stopped) return;
+    if (U.stopped || U.closing) return;
     const dt = Math.min((deltaMs || 16.7) / 1000, .05) * U.ts;
     if (!dt) return;
     U.t0 += dt;
     if (!U.startled && U.rise >= MOTION.startle) startle();
     if (!U.falling && U.rise >= MOTION.trip) trip();
     if (U.mode === 'normal' && U.gripAt < 0 && U.rise >= MOTION.trigger) U.gripAt = U.t0 + MOTION.response;
-    if (U.gripAt >= 0 && U.t0 >= U.gripAt) {
-      if (!U.bang) { U.bang = true; ropeBrakeBang(); }
+    if (!U.bang && U.gripAt >= 0 && U.t0 >= U.gripAt) {
+      // 75ms 접촉 장면 동안 교육용 시간을 정지한다. 제동·소리는 턱이 로프에 닿은 뒤 시작한다.
+      ropeBrakeBang(); return;
+    }
+    if (U.bang) {
       U.v = Math.max(0, U.v - MOTION.decel * dt);
     } else {
       U.v = Math.min(MOTION.vMax, U.v + MOTION.accel * dt);
@@ -301,26 +299,20 @@ const UCMDemo = (() => {
     MACH.setDrive(Math.min(U.v / MOTION.vMax, 1) * .6);
     if (U.v === 0 && (U.bang || r >= MOTION.failEnd)) { U.stopped = true; onCarStopped(); }
   }
-  // 파지 순간 턱을 주황으로 번쩍 — 턱 재질만 한 번 복제해 다른 부품은 빛나지 않는다.
-  function flashJaws() {
-    const j = jaws(); if (!j) return;
-    if (!j.mats) {
-      j.mats = [];
-      [j.up, j.lo].forEach(n => n.traverse(o => { if (o.isMesh && o.material.emissive) { o.material = o.material.clone(); j.mats.push(o.material); } }));
-    }
-    const f = { k: 1 };
-    gsap.to(f, { k: 0, duration: .9, ease: 'power2.out', onUpdate: () => j.mats.forEach(m => m.emissive.setRGB(f.k, .42 * f.k, .08 * f.k)) });
-  }
   function ropeBrakeBang() {
     const j = jaws();
-    U.bangView = U.view;   // 검증용: 파지는 기계실 화면에서 일어나야 한다
-    if (j) {
-      gsap.to(j.up.position, { y: j.up0 + RB.upperTravel, duration: .12, ease: 'power4.in' });
-      gsap.to(j.lo.position, { y: j.lo0 + RB.lowerTravel, duration: .12, ease: 'power4.in' });
-    }
-    gsap.delayedCall(.1, () => { MACH.ropeBrakeBang?.(); shake(); flashJaws(); });
-    caption('쾅! 로프브레이크가 로프를 물었습니다 — 카가 멈춥니다', '#ffd9a8');
-    updateStatus('v-dir', '로프브레이크 작동 (UCMP)', '#f85149');
+    if (!j) return;
+    U.closing = true;
+    const t = gsap.timeline({onComplete: () => {
+      if (!U.active || U.stage === 'resetting') return;
+      U.closing = false; U.bang = true; U.bangView = U.view;
+      MACH.ropeBrakeBang(); UCMEffects.grip();
+      caption('팍! 턱이 로프를 잡았습니다 — 카 제동', '#ffd9a8');
+      updateStatus('v-dir', '로프브레이크 작동 (UCMP)', '#f85149');
+    }});
+    U.tweens.push(t);
+    t.to(j.up.position, {y:j.up0 + RB.upperTravel,duration:.075,ease:'power4.in'}, 0)
+      .to(j.lo.position, {y:j.lo0 + RB.lowerTravel,duration:.075,ease:'power4.in'}, 0);
   }
   function onCarStopped() {
     MACH.motorOff(); updateStatus('v-spd', '0 m/min', '#f0883e');
@@ -329,12 +321,13 @@ const UCMDemo = (() => {
       U.stage = 'gripped';
       updateStatus('v-dir', '⚠ 로프브레이크 동작 · 에러 정지', '#f85149');
       caption('로프가 멈췄습니다 — 카 정지 (에러). 승강장 모습을 확인합니다', '#ffd9a8');
+      UCMEffects.capture('grip');
     }
   }
 
   /* ── 시연 흐름 ─────────────────────────────────────────── */
   function start(button) {
-    if(InterlockDemo.active)return;
+    if(InterlockDemo.active || ARDDemo.active || BufferDemo.active || HallManual.active || InspectionReturn.busy)return;
     btn = button;
     if (U.active) return;
     const why = !PitLadder.secured ? '피트 사다리 펼침 — 운행 차단'
@@ -350,19 +343,20 @@ const UCMDemo = (() => {
     if (mode !== 'none' && !(inst?.userData.ready && jaws())) { updateStatus('v-dir', '로프브레이크 모델 로딩 중', '#f0883e'); return; }
     Object.assign(U, { active: true, stage: 'boarding', mode, f: curFloor, rise: 0, v: 0, t0: 0, ts: 0, gripAt: -1,
       bang: false, stopped: false, startled: false, falling: false, landed: false, theta: 0, fallW: 0, returned: false, fatalShown: false,
-      view: 'landing', bangView: '', riseAtSwitch: 0, calls: [], baseY: carGrp.position.y });
+      view: 'landing', bangView: '', riseAtSwitch: 0, calls: [], tweens: [], closing: false, hasCamera: false, baseY: carGrp.position.y });
     btn.disabled = true;
+    MACH.resume(); UCMEffects.prepare();
     if (inst) inst.visible = mode !== 'none';
-    const go = () => { clearTimeout(autoTimer); run(); };
+    const go = () => { clearTimeout(autoTimer); if (U.active && U.stage === 'boarding') run(); };
     if (doorOpen && currentState === ELEVATOR_STATE.DOOR_OPEN) go();
-    else if (!doorOpen) { openDoors(go); if (!doorOpen) { U.active = false; btn.disabled = false; updateStatus('v-dir', '도어를 열 수 없습니다', '#f0883e'); } }
-    else { U.active = false; btn.disabled = false; updateStatus('v-dir', '도어 동작이 끝난 뒤 시연', '#f0883e'); }
+    else if (!doorOpen) { openDoors(go); if (!doorOpen) { U.active = false; btn.disabled = false; UCMEffects.clear(); document.body.classList.remove('ucm-active'); if (inst) inst.visible = true; updateStatus('v-dir', '도어를 열 수 없습니다', '#f0883e'); } }
+    else { U.active = false; btn.disabled = false; UCMEffects.clear(); document.body.classList.remove('ucm-active'); if (inst) inst.visible = true; updateStatus('v-dir', '도어 동작이 끝난 뒤 시연', '#f0883e'); }
   }
 
   function run() {
     moving = true; currentState = ELEVATOR_STATE.MOVING;   // 다른 운행·도어 명령 차단
     document.body.classList.add('ucm-active');            // 시연 중 떠 있는 사다리 버튼 숨김
-    _saveCam();
+    _saveCam(); U.hasCamera = true;
     const L = FLOOR_Y[U.f], zWall = FRONT_WALL_INNER_Z;
     // 승장 문턱 위 (발 중심). 신발 앞코 = 발 중심 −0.12m → 한 걸음(−0.08m) 내딛으면 에이프런(CAR_FRONT_Z)에 닿는다.
     const standZ = CAR_FRONT_Z + .21;
@@ -379,39 +373,42 @@ const UCMDemo = (() => {
       .call(() => { U.walk = 0; neutral(); }, null, 2.2)
       // 한 발을 카 문턱 위로 내딛는 순간 개문발차 — 승장 화면에서 카가 눈에 보이게 올라간다(startle 은 상승량으로 발동)
       .to(parts.legs[1].rotation, { x: -.55, duration: .3 }, 2.25)
-      .call(() => sillCam(.9), null, 2.1)
+      .call(() => sillCam(.45), null, 2.1)
       .call(() => {
         U.stage = 'moving';
-        caption('⚠ 개문발차! 브레이크 고장으로 문이 열린 채 카가 올라갑니다', '#ffb4a8');
+        caption('권상기 주브레이크 고장 · 문이 열린 채 카가 올라갑니다', '#ffb4a8');
         updateStatus('v-dir', '▲ 개문발차 (UCM)', '#f85149');
-        MACH.resume(); MACH.brakeRelease(); MACH.motorOn();
+        MACH.brakeRelease(); MACH.ucmBrakeFailure(); MACH.motorOn();
+        UCMEffects.hit('failure', '브레이크 기능 상실', '빈 카 · 권상기 주브레이크 고장 → 상승 개문발차');
+        UCMEffects.capture('failure');
         U.ts = TS.landing; U.view = 'landing'; U.tick = motionTick; gsap.ticker.add(motionTick);
       }, null, 2.6)
       ;
   }
   // 이후 흐름은 사건으로 잇는다: 넘어져 상체가 카 바닥에 닿으면(onLanded) → 잠깐 보여 주고 기계실로.
-  function later(sec, fn) { const c = gsap.delayedCall(sec, fn); U.calls.push(c); return c; }
+  function later(sec, fn) { const c = gsap.delayedCall(sec, () => { if (U.active && U.stage !== 'resetting') fn(); }); U.calls.push(c); return c; }
   function onLanded() {
     MACH.bump?.();
     caption('승객이 넘어지며 상체가 올라가는 카 바닥을 덮쳤습니다!', '#ffb4a8');
+    UCMEffects.capture('departure');
     U.ts = TS.landed;                                       // 넘어진 순간을 잠깐 보여 준다
-    later(.8, toMachineRoom);
+    later(.45, toMachineRoom);
   }
   function toMachineRoom() {
-    U.ts = TS.transit; U.view = 'machine-room'; U.riseAtSwitch = U.rise; mrCam(1.6);
+    U.ts = TS.transit; U.view = 'machine-room'; U.riseAtSwitch = U.rise; mrCam(.65);
     caption('기계실 · 느린 동작으로 로프가 움직이는 모습을 봅니다');
-    later(1.6, () => {
-      U.ts = TS.machineRoom;
+    later(.65, () => {
+      U.ts = U.mode === 'normal' ? TS.machineRoom : TS.landed;
       caption(U.mode === 'none' ? '기계실 · 로프브레이크가 설치되어 있지 않습니다 — 로프를 잡을 장치가 없습니다'
         : U.mode === 'fail' ? '기계실 · 로프브레이크가 작동하지 않습니다 — 로프가 계속 움직입니다'
-        : '기계실 · 문 열림 상태에서 착상 구역을 벗어나는 순간을 감시합니다');
+        : '로프브레이크 · 움직이는 로프를 잡는 순간');
       if (U.mode === 'normal') waitStop(); else later(1.8, failBack);
     });
   }
-  // 정지 후 2.2 s 기계실 관람 → 승장으로 돌아가 결과 확인
+  // 정지 뒤 짧은 정적 → 승장으로 돌아가 결과 확인.
   function waitStop() {
     if (!U.stopped) { later(.1, waitStop); return; }
-    later(2.2, () => {
+    later(1.2, () => {
       U.ts = 1; U.view = 'landing'; landingCam(1.6);
       caption('승장 · 카가 에이프런이 조금 보이는 높이에서 멈췄습니다');
       later(1.5, recover);
@@ -428,6 +425,7 @@ const UCMDemo = (() => {
   function startle() {
     U.startled = true;
     const p = parts, s = gsap.timeline();
+    U.tweens.push(s);
     s.to(char.position, { z: CAR_FRONT_Z + LEAN.standOff, duration: .24, ease: 'power2.out' }, 0)
       .to(p.legs[1].rotation, { x: 0, duration: .24, ease: 'power3.in' }, 0)
       .to(p.arms[0].rotation, { z: -2.2, duration: .3 }, .05)      // "어?" 양팔 번쩍
@@ -441,14 +439,15 @@ const UCMDemo = (() => {
     U.falling = true; U.fallW = 0; U.theta = parts.body.rotation.x;
     gsap.killTweensOf(parts.arms[0].rotation); gsap.killTweensOf(parts.arms[1].rotation); gsap.killTweensOf(parts.head.rotation);
     const reach = leanPose(0).arms;
-    reach.forEach((a, i) => gsap.to(parts.arms[i].rotation, { x: a.x, z: a.z, duration: .22 }));
-    gsap.to(parts.head.rotation, { x: 0, duration: .18 });
+    reach.forEach((a, i) => U.tweens.push(gsap.to(parts.arms[i].rotation, { x: a.x, z: a.z, duration: .22 })));
+    U.tweens.push(gsap.to(parts.head.rotation, { x: 0, duration: .18 }));
     caption('카 문턱에 걸려 앞으로 넘어집니다', '#ffb4a8');
   }
   // 정상: 카가 멈춘 뒤 몸을 일으켜(상체를 카 바닥에서 떼고) 승장에 주저앉는다 — 경상.
   function recover() {
     const floorTop = carGrp.position.y - S.CAR_H / 2, p = parts;
     const s = gsap.timeline();
+    U.tweens.push(s);
     s.call(() => { U.stage = 'stumble'; }, null, 0)
       .to(U, { theta: 0, duration: .6, ease: 'power2.inOut', onUpdate: () => applyLean(U.theta) }, 0)     // 상체를 일으킨다
       .to(p.arms[0].rotation, { x: 0, z: -.3, duration: .5 }, .1)
@@ -456,6 +455,7 @@ const UCMDemo = (() => {
       .to(char.position, { y: FLOOR_Y[U.f], duration: .3 }, 0)
       .call(() => {
         const sitZ = clearZ(POSE.sit, floorTop, .03), t = gsap.timeline({ onComplete: finishNormal });
+        U.tweens.push(t);
         t.to(char.position, { z: Math.max(sitZ, char.position.z), duration: .38, ease: 'power1.out' }, 0);   // 뒤로 물러나며
         toPose(t, POSE.sit, 0, .38, 'power1.in');                                                            // 주저앉음
         t.call(() => MACH.bump?.(), null, .36)
@@ -466,8 +466,8 @@ const UCMDemo = (() => {
   }
   function finishNormal() {
     U.stage = 'done';
-    const mm = Math.round(U.rise * 1000), ratio = Math.round(U.rise / 0.75 * 100);
-    caption(`✔ 로프브레이크 정상 작동 — 카 +${mm}mm 정지 (에이프런 약 ${ratio}% 노출, 2/3 이전). 승객은 넘어졌지만 카가 멈춰 경상입니다. RST로 복귀`, '#b8f5c4');
+    caption('로프브레이크 작동 · 상승 개문발차 정지', '#b8f5c4');
+    UCMEffects.finish();
     if (btn) { btn.disabled = false; btn.textContent = 'RST'; }
     controls.enabled = true;
   }
@@ -478,8 +478,8 @@ const UCMDemo = (() => {
       <div style="font-size:30px;font-weight:800;color:#ff6a5e;margin:6px 0 10px">사망사고</div>
       <div>로프브레이크가 ${U.mode === 'none' ? '<b>설치되어 있지 않아</b>' : '<b>작동하지 않아</b>'} 문이 열린 채 카가 계속 올라갔습니다.<br>
       타려던 승객이 카 문턱과 승강장 사이에 <b>끼이거나 승강로로 추락</b>하는 사고로 이어집니다.</div>
-      <div style="margin-top:12px;font-size:14px;color:#ffc9c2">개문출발 방지장치(로프브레이크)는 문이 열린 채 카가 움직이면<br>에이프런이 2/3 드러나기 전에 카를 세워 이런 사고를 막습니다.</div>
-      <div style="margin-top:14px;font-size:13px;color:#e8b3ad">실제 사고 사례를 교육용으로 단순화한 장면입니다 · RST로 복귀</div></div>`);
+      <div style="margin-top:12px;font-size:14px;color:#ffc9c2;text-align:left;word-break:keep-all">${UCM_STOP_GUIDE.replace(/\n/g, '<br>')}</div>
+      <div style="margin-top:14px;font-size:13px;color:#e8b3ad">실제 사고 사례를 교육용으로 단순화한 장면입니다 · 종료 버튼으로 정상 복귀</div></div>`);
     caption('사망사고 — 로프브레이크 ' + (U.mode === 'none' ? '미설치' : '미작동'), '#ffb4a8');
     char.visible = false;       // 사고 순간은 화면에 보이지 않는다
     if (btn) { btn.disabled = false; btn.textContent = 'RST'; }
@@ -490,17 +490,20 @@ const UCMDemo = (() => {
     if (!U.active || U.stage === 'resetting') return;
     U.stage = 'resetting'; if (btn) btn.disabled = true;
     U.tl?.kill(); U.calls.forEach(c => c.kill()); U.calls = [];
+    U.tweens.forEach(t => t.kill()); U.tweens = []; U.closing = false;
+    UCMEffects.clear(); clearTimeout(autoTimer);
     gsap.killTweensOf(parts.body.rotation); gsap.killTweensOf(char.position); gsap.killTweensOf(U, 'theta');
     U.falling = false; char.position.y = FLOOR_Y[U.f];
     if (U.tick) { gsap.ticker.remove(U.tick); U.tick = null; }
     U.stopped = true; U.walk = 0; U.ts = 0;
+    moving = true; currentState = ELEVATOR_STATE.MOVING;
     overlay(false); char.visible = false; neutral();
     caption('복귀 · 로프브레이크 수동 해제 → 카 착상 → 도어 닫힘 → 운행 가능');
     updateStatus('v-dir', '개문발차 복귀 중…', '#f0883e');
     const j = jaws();
     if (j) { gsap.to(j.up.position, { y: j.up0, duration: .5 }); gsap.to(j.lo.position, { y: j.lo0, duration: .5 }); }
     const inst = brakeInstall(); if (inst) inst.visible = true;
-    _restoreCam(1.2);
+    if (U.hasCamera) { gsap.killTweensOf(camera.position); gsap.killTweensOf(controls.target); _restoreCam(1.2); U.hasCamera = false; }
     MACH.resume(); MACH.motorOn(); MACH.setDrive(.25);
     const from = U.rise, dur = Math.max(from / .25, .8);
     gsap.to(U, { rise: 0, duration: dur, delay: .5, ease: 'power1.inOut',

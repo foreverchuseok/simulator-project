@@ -147,7 +147,8 @@ function updateManualCameraNear() {
       // 브레이크 체결 — 묵직한 쿵 + 클랙
       function brakeSet() { setTractionBrake(false); const c = ac(), t = c.currentTime; thump(c, t, 75, 0.09, 0.06); clack(c, t + 0.02, 520, 0.045, 0.09); }
       // 로프브레이크 파지 — 강철 턱이 로프를 무는 "쾅" (UCM 시연)
-      function ropeBrakeBang() { const c = ac(), t = c.currentTime; thump(c, t, 48, 0.32, 0.5); clack(c, t, 340, 0.08, 0.35); clack(c, t + 0.015, 1400, 0.05, 0.18); hiss(c, t + 0.02, 0.35, 0.05, 2500); }
+      function ropeBrakeBang() { const c = ac(), t = c.currentTime; thump(c, t, 48, 0.26, 0.5); clack(c, t, 340, 0.065, 0.35); clack(c, t + 0.008, 1400, 0.045, 0.22); screech(c, t + 0.012, .22, .075); hiss(c, t + 0.02, 0.24, 0.045, 2500); }
+      function ucmBrakeFailure() { const c = ac(), t = c.currentTime; thump(c, t, 42, .34, .34); clack(c, t, 260, .09, .23); clack(c, t + .045, 1100, .07, .12); }
       // 카 타격판이 우레탄 완충기를 치는 묵직한 "쿵" + 먼지 이는 쉿 소리 (완충기 충돌 시연)
       function bufferImpact() { const c = ac(), t = c.currentTime; thump(c, t, 40, 0.6, 0.65); thump(c, t + 0.01, 88, 0.28, 0.32); clack(c, t, 170, 0.16, 0.3); clack(c, t + 0.006, 950, 0.05, 0.08); hiss(c, t + 0.04, 1.1, 0.03, 800); }
       // 승객이 에이프런에 부딪히는 가벼운 "쿵"
@@ -236,7 +237,7 @@ function updateManualCameraNear() {
         });
       }
       function effect(play) { return { currentTime: 0, play() { try { play(); return Promise.resolve(); } catch (e) { return Promise.reject(e); } } }; }
-      return { resume, motorOn, motorOff, setDrive, brakeRelease, brakeSet, duck, ropeBrakeBang, bufferImpact, bump, overspeedImpact,
+      return { resume, motorOn, motorOff, setDrive, brakeRelease, brakeSet, duck, ropeBrakeBang, ucmBrakeFailure, bufferImpact, bump, overspeedImpact,
         doorOpen: effect(() => door(false)), doorClose: effect(() => door(true)), chime: effect(chime) };
     })();
 
@@ -969,6 +970,7 @@ function updateManualCameraNear() {
 
     function moveElevator(fIdx) {
       if (ARDDemo.active) return;
+      if (UCMDemo.state.active) return;
       if (InterlockDemo.active) return;
       if (InspectionReturn.busy) return;
       if (!PitLadder.secured) { updateStatus('v-dir', '피트 사다리 펼침 — 운행 차단', '#f85149'); return; }
@@ -1153,7 +1155,7 @@ function updateManualCameraNear() {
         }
       });
       document.getElementById('btn-open').addEventListener('click', () => { if (!moving && !estop) openDoors(); });
-      document.getElementById('btn-close').addEventListener('click', () => { if (!moving) closeDoors(); });
+      document.getElementById('btn-close').addEventListener('click', () => { if (!moving && !UCMDemo.state.active) closeDoors(); });
       // 개문발차(UCM) 시연 — 로프브레이크 정상/미작동/미설치 (js/ucm-demo.js)
       document.getElementById('btn-ucm')?.addEventListener('click', e => {
         UCMDemo.toggle(e.currentTarget);
@@ -1197,6 +1199,7 @@ function updateManualCameraNear() {
       };
       estopBtn.addEventListener('click', e => {
         if (ARDDemo.active) { ARDDemo.halt(); return; }
+        if (UCMDemo.state.active) { UCMDemo.reset(document.getElementById('btn-ucm')); return; }
         // 완충기 충돌 시연: 내려가는 중이면 그 자리 정지, 완충기 위·정지 상태면 1층 복귀 (js/buffer-demo.js)
         if (BufferDemo.active) { const st = BufferDemo.state.stage; if (st === 'approach') BufferDemo.halt(); else BufferDemo.reset(); return; }
         if (overspeedActive) { updateStatus('v-dir', '조속기 트립 — 고장 복귀 버튼으로 OVS 복귀', '#f85149'); return; }
