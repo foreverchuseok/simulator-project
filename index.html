@@ -886,7 +886,7 @@
 
     /* 개문발차(UCM) 시연 중에는 근접 사다리 버튼을 숨긴다 (js/ucm-demo.js) */
     .ucm-active #pit-ladder-action, .buffer-demo-active #pit-ladder-action { visibility: hidden !important; }
-    .buffer-demo-active .part-action:not(#buffer-demo-action) { visibility: hidden !important; }
+    .buffer-demo-active .part-action:not(#buffer-demo-action):not(#cwt-buffer-demo-action) { visibility: hidden !important; }
     #inspection-drive { position:fixed; z-index:30; left:50%; bottom:calc(var(--edge-b) + 100px); transform:translateX(-50%); display:flex; gap:8px; padding:8px; border-radius:18px; pointer-events:auto; }
     #inspection-drive[hidden] { display:none; }
     #inspection-drive button { min-width:100px; min-height:52px; border:1px solid #ffffff24; border-radius:12px; background:#ffffff15; color:white; font-family:inherit; font-weight:700; font-size:15px; touch-action:none; user-select:none; }
@@ -1020,6 +1020,7 @@
   </section>
   <div id="part-actions">
     <button id="buffer-demo-action" class="part-action" type="button" aria-label="카 완충기 충돌 시연" title="카 완충기 충돌 시연" hidden>BUF</button>
+    <button id="cwt-buffer-demo-action" class="part-action" type="button" aria-label="균형추 완충기 충돌 시연" title="균형추 완충기 충돌 시연" hidden>BUF</button>
     <section id="finger-gap-panel" class="glass" aria-label="문틀 틈새 기준 설명" hidden>
       <div class="part-panel-head"><strong id="finger-gap-title">문틀 틈새 기준</strong><button id="finger-gap-dismiss" type="button" aria-label="틈새 기준 설명 닫기">×</button></div>
       <p>어린이 손끼임 방지를 위해 문턱 위 <b>1.6m</b>까지 양쪽 문틀과 문짝 사이 틈새를 <b>5mm 이하</b>로 관리합니다.</p>
@@ -1091,7 +1092,7 @@
   <script src="js/hall-emergency-guide.js"></script>
   <script src="js/pit-ladder.js"></script>
   <script src="js/ucm-demo.js"></script>
-  <script src="js/buffer-demo.js?v=20260929-buffer-1"></script>
+  <script src="js/buffer-demo.js?v=20260929-cwtbuffer-1"></script>
   <script src="js/part-actions.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/hall-inspector.js"></script>

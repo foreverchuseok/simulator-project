@@ -1782,6 +1782,22 @@
         springs: false
       });
 
+      /* 균형추 완충기 타격부(사용자 2026-09-29): 하부 빔 밑에 100mm 강재 스트라이커를 볼트로 단다.
+         부착 플랜지 12 + 블록 72 + 타격판 16 = CWT_STRIKE.h. 타격면은 userData.faceY(cwtGrp 로컬, js/buffer-demo.js). */
+      const CWT_STRIKE = { h: 0.10, flangeT: 0.012, plateT: 0.016, blockW: 0.16, plateW: 0.22, flangeW: 0.24, d: S.CWT_D - 0.01 };
+      const strike = new THREE.Group(); strike.name = 'cwtBufferStrike'; cwtGrp.add(strike);
+      const strikeMat = M.paint(0x6f8187), strikeSteel = M.ss(0x5f6870), boltMat = M.ss(0x9aa1a8);
+      const sy0 = -yH, blockH = CWT_STRIKE.h - CWT_STRIKE.flangeT - CWT_STRIKE.plateT;
+      createBox(CWT_STRIKE.flangeW, CWT_STRIKE.flangeT, CWT_STRIKE.d, strikeMat, 0, sy0 - CWT_STRIKE.flangeT / 2, 0, strike);
+      createBox(CWT_STRIKE.blockW, blockH, CWT_STRIKE.blockW, strikeMat, 0, sy0 - CWT_STRIKE.flangeT - blockH / 2, 0, strike);
+      createBox(CWT_STRIKE.plateW, CWT_STRIKE.plateT, CWT_STRIKE.d, strikeSteel, 0, sy0 - CWT_STRIKE.h + CWT_STRIKE.plateT / 2, 0, strike);
+      for (const bx of [-0.1, 0.1]) for (const bz of [-0.07, 0.07]) {
+        const nut = createCylinder(0.0095, 0.0095, 0.008, boltMat, bx, sy0 - CWT_STRIKE.flangeT - 0.004, bz, strike);
+        nut.geometry.dispose(); nut.geometry = new THREE.CylinderGeometry(0.0095, 0.0095, 0.008, 6);
+      }
+      batchStaticChildren(strike, 'cwtBufferStrike');
+      strike.userData = { type: 'cwt-buffer-strike', faceY: sy0 - CWT_STRIKE.h, height: CWT_STRIKE.h, plateHalfX: CWT_STRIKE.plateW / 2, plateHalfZ: CWT_STRIKE.d / 2 };
+
       // 최상층에서 가장 높은 완충기 상단과 160mm 확보. 로프 끝점은 그룹 위치를 추종한다.
       const cwtBottomClearance = counterweightBottomHeight();
       const carTravel = FLOOR_Y[FLOORS - 1] - FLOOR_Y[0];

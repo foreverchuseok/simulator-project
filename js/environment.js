@@ -2852,6 +2852,8 @@
 
       const startY = Y0 + chH; // 지지 채널 상단 (0.1m)
       const rh = TOTAL_H - 0.1 - chH; // 기계실 기준 바닥보다 0.1m 아래에서 끝난다.
+      // 보이는 레일 상단(숨긴 피시플레이트 제외). 균형추 완충기 시연의 가이드레일 여유거리 기준(js/buffer-demo.js).
+      railGrp.userData.carRailTopY = startY + rh;
 
       const gltfLoader = new THREE.GLTFLoader();
 
@@ -4478,7 +4480,7 @@
           createCylinder(0.08, 0.09, 0.4, M.paint(0x111827), px, plateY + 0.22, pz, bufferGrp);
           createCylinder(0.035, 0.035, BUFFER_DIM.hydraulicRodHeight, M.ss(0xd8e0e8),
             px, plateY + BUFFER_DIM.hydraulicRodCenter, pz, bufferGrp);
-          if (i === 0) bufferGrp.userData.car = { type: 'oil', urethane: null,
+          bufferGrp.userData[i === 0 ? 'car' : 'cwt'] = { type: 'oil', urethane: null,
             topY: plateY + BUFFER_DIM.hydraulicRodCenter + BUFFER_DIM.hydraulicRodHeight / 2 };
         } else {
           // [저속] 에너지 축적형 완충기
@@ -4498,7 +4500,7 @@
           createCylinder(0.09, 0.09, 0.15, urethaneMat, 0, 0.075, 0, urethane);
           // 상단 모따기 부분 (우레탄 헤드)
           createCylinder(0.08, 0.09, 0.04, urethaneMat, 0, 0.17, 0, urethane);
-          if (i === 0) bufferGrp.userData.car = { type: 'urethane', urethane,
+          bufferGrp.userData[i === 0 ? 'car' : 'cwt'] = { type: 'urethane', urethane,
             topY: plateY + 0.02 + BUFFER_DIM.urethaneHeight,
             height: BUFFER_DIM.urethaneHeight, stroke: BUFFER_DIM.urethaneStroke };
         }

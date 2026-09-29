@@ -1172,14 +1172,14 @@ function updateManualCameraNear() {
       });
       // 고장 래치 복귀 버튼 — OVS·UCM 버튼이 RST 를 표시하는 동안만 상태 카드 아래에 띄우고, 누르면 그 버튼을 누른다.
       const resetPill = document.getElementById('fault-reset');
-      const latchSources = ['btn-overspeed', 'btn-ucm', 'buffer-demo-action'].map(id => document.getElementById(id)).filter(Boolean);
+      const latchSources = ['btn-overspeed', 'btn-ucm', 'buffer-demo-action', 'cwt-buffer-demo-action'].map(id => document.getElementById(id)).filter(Boolean);
       const syncResetPill = () => {
         const src = latchSources.find(b => b.textContent.trim() === 'RST');
         resetPill.hidden = !src;
         document.body.classList.toggle('fault-latched', !!src);   // 승장문 패널을 복귀 버튼 아래로 내린다
         if (!src) return;
         resetPill.disabled = src.disabled; resetPill.dataset.src = src.id;
-        resetPill.querySelector('span').textContent = src.id === 'btn-ucm' ? '개문발차 복귀' : src.id === 'buffer-demo-action' ? '완충기 복귀' : '과속 복귀';
+        resetPill.querySelector('span').textContent = src.id === 'btn-ucm' ? '개문발차 복귀' : /buffer-demo-action$/.test(src.id) ? '완충기 복귀' : '과속 복귀';
       };
       latchSources.forEach(b => new MutationObserver(syncResetPill).observe(b, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['disabled'] }));
       resetPill.addEventListener('click', () => document.getElementById(resetPill.dataset.src)?.click());
