@@ -1123,7 +1123,8 @@
   <script src="js/ucm-demo.js"></script>
   <script src="js/buffer-demo.js?v=20260929-cwtbuffer-1"></script>
   <script src="js/part-actions.js"></script>
-  <script src="js/ui.js"></script>
+  <script src="js/overspeed-effects.js?v=20260930-ovs-1"></script>
+  <script src="js/ui.js?v=20260930-ovs-1"></script>
   <script src="js/hall-inspector.js"></script>
   <script src="js/hall-manual.js"></script>
   <script src="js/inspection-stations.js"></script>
@@ -1131,6 +1132,7 @@
   <script src="js/interlock-demo.js?v=20260928-interlock-2"></script>
   <script src="js/finger-gap.js?v=20260929-finger-gap-2"></script>
   <script src="js/emergency-lighting.js?v=20260929-emergency-light-1"></script>
+  <script src="js/ard-demo.js?v=20260930-exit-1"></script>
 
   <script>
     // 층수 및 층고 배열 (피트 1.76m, 1층 4.0m, 2층 3.65m, 3층 3.7m)
@@ -1609,6 +1611,7 @@
       UCMDemo.build(scene);     // 개문발차 시연 승객 「퉁이」(평소 숨김)
       updateBuffers();          // 동적 완충기
       BufferDemo.build();       // 카 완충기 충돌 시연 아이콘·먼지·균형추 여유거리 치수 (js/buffer-demo.js)
+      ARDDemo.build();
 
       // ?tcam(해치 케이블 행거)만 빌드 결과(travelCable.hangerY)가 있어야 잡을 수 있다
       if (travelCable.ready && location.search.includes('tcam') && !location.search.includes('tcam=2')) {
@@ -1639,6 +1642,7 @@
       Mascot.update(performance.now() / 1000);
       UCMDemo.update(performance.now() / 1000);
       BufferDemo.update();
+      ARDDemo.update();
       controls.update();
       if (camera.position.y < Y0 + 0.35) camera.position.y = Y0 + 0.35;
       PartActions.update();
