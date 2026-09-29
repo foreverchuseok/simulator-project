@@ -125,7 +125,7 @@ const DoorBypass = (() => {
     unlockAudio();stop();mode=next;clearTimeout(autoTimer);
     if(next!=='off')setInspectionMode(true);
     document.getElementById('bypass-mode').value=mode;
-    document.getElementById('bypass-status').textContent=mode==='off'?'BYPASS 해제':mode==='hall'?'BYPASS · 승장문':'BYPASS · 카문';
+    document.getElementById('bypass-status').textContent=mode==='off'?'OFF':mode==='hall'?'HD':'CD';
     if(typeof renderSegments==='function')renderSegments(); // HUD 세그먼트(시트·승장문 패널)도 같은 값을 보인다
     return true;
   }

@@ -10,9 +10,9 @@ try {
   await page.routeWebSocket('**',ws=>ws.close());
   await page.goto(process.env.SIMULATOR_URL||'http://127.0.0.1:5500/index.html',{waitUntil:'networkidle'});
   await page.waitForFunction(()=>CarDoor.state?.ready&&PitLadder.secured&&hatchDoors.every(h=>h.interlock?.ready)&&document.getElementById('loading').classList.contains('hide'));
-  // One floor at a time: the bear holds 2F fully open with its foot, then reset must relock and send it home.
+  // Independent hall opening: reset must close and relock every manual door.
   await page.evaluate(()=>{HallManual.select(1);HallManual.request(1);});
-  await page.waitForFunction(()=>HallManual.phase==='holding'&&Mascot.inspecting);
+  await page.waitForFunction(()=>HallManual.phase==='holding');
   await page.evaluate(()=>{
    HallManual.select(2);document.getElementById('hall-panel').hidden=false;
    const y=FLOOR_Y[1]+S.CAR_H/2+.35,delta=y-carGrp.position.y;

@@ -1,6 +1,9 @@
 // 승강곰의 긴 삼각키 도구. 교육용 링크이며 기하는 최초 한 번만 생성한다.
 const HallInspector=(()=>{
   const spec={poleX:.10,crankR:.060,gripY:.36,bodyZ:.27,footHalfX:.07,footOffsetX:.09,keyTurn:50*Math.PI/180};
+  // 개방 유지 자세: 문 홀면에서 발끝만 3mm 걸친다. 발 치수는 실제 메시에서 읽는다.
+  const toeOverlap=.003,footBounds=new THREE.Box3();
+  let toeReach=null;
   let tool,shaft,rod,slider,crank,socket,linkLength=1,initialX=0;
   const keyPoint=new THREE.Vector3(),a=new THREE.Vector3(),b=new THREE.Vector3(),handA=new THREE.Vector3(),handB=new THREE.Vector3(),up=new THREE.Vector3(0,1,0),delta=new THREE.Vector3();
   function keyWorld(f,out=keyPoint){
@@ -45,5 +48,20 @@ const HallInspector=(()=>{
     tool.userData.floor=f;tool.userData.inserted=p.insert>.99&&p.carry<.01;tool.userData.keyRatio=p.key;
   }
   function end(){if(tool)tool.visible=false;Mascot.endInspection();}
-  return {begin,pose,end,keyWorld,spec,get tool(){return tool;}};
+  function hold(f,amount=1){
+    Mascot.beginInspection();if(tool)tool.visible=false;
+    if(!Mascot.inspecting)return;
+    if(toeReach===null){
+      Mascot.inspectionPose(0,0,0,0,null,null,0);Mascot.root.updateMatrixWorld(true);
+      footBounds.setFromObject(Mascot.rig.feet[0]);toeReach=footBounds.max.z;
+    }
+    const h=hatchDoors[f];keyWorld(f);
+    const hallZ=keyPoint.z-.003,edge=h.right.position.x+h.right.userData.triKey.panelInnerX;
+    const foot=amount*(spec.bodyZ-toeReach+toeOverlap);
+    // Yaw=PI에서 막는 발의 +X 오프셋을 빼면 발끝 중심이 문 안쪽 모서리에 온다.
+    const x=edge+Mascot.rig.feet[0].position.x;
+    Mascot.root.visible=true;
+    Mascot.inspectionPose(x,FLOOR_Y[f],hallZ+spec.bodyZ,foot,null,null);
+  }
+  return {begin,pose,hold,end,keyWorld,spec,get tool(){return tool;}};
 })();

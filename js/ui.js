@@ -278,6 +278,7 @@ function updateManualCameraNear() {
       doorOpen: MACH.doorOpen,
       doorClose: MACH.doorClose,
       doorVoice: koreanAnnouncement('문이 닫힙니다.', 'sound/announce_close.mp3'),
+      hallWarning: koreanAnnouncement('안전에 주의. 안전에 주의.', 'sound/announce_hall_warning.mp3'),
       chime: MACH.chime,
       departUp: koreanAnnouncement('올라갑니다.', 'sound/announce_up.mp3'),
       departDown: koreanAnnouncement('내려갑니다.', 'sound/announce_down.mp3'),
@@ -295,8 +296,13 @@ function updateManualCameraNear() {
     function updateStatus(id, txt, col) {
       const e = document.getElementById(id); if (!e) return;
       e.textContent = txt;
+      e.title = txt;
       const card = document.getElementById('statusbar');
       if (id === 'v-dir') {
+        if (/점검 상승/.test(txt)) e.textContent = 'INS ↑';
+        else if (/점검 하강/.test(txt)) e.textContent = 'INS ↓';
+        else if (/점검운전|점검 정지/.test(txt)) e.textContent = 'INS';
+        else if (/^자동운전/.test(txt)) e.textContent = 'AUTO';
         if (col) e.dataset.tone = STATUS_TONE[col.toLowerCase()] || 'warn';
         if (card) card.dataset.dir = /▲|상승/.test(txt) ? 'up' : /▼|하강|낙하/.test(txt) ? 'down' : '';
       } else if (id === 'v-spd') {
@@ -324,7 +330,7 @@ function updateManualCameraNear() {
 
     function closeDoors(cb) {
       if (InterlockDemo.active) return;
-      if (HallManual.active) return; // 점검자의 발 받침은 승장문 아이콘에서 해제한다.
+      if (HallManual.busy) return; // 독립 개방한 승장문은 유지하며 카문만 닫는다.
       if (DoorBypass.mode !== 'off') return;
       if (estop) return;
       if (!doorOpen) { if (cb) cb(); return; }
@@ -490,7 +496,7 @@ function updateManualCameraNear() {
       const buttons=[...document.querySelectorAll('[data-inspection-reset]')];
       const surfaces=[document.getElementById('hud'),document.getElementById('hall-panel'),document.getElementById('pit-ladder-action'),document.getElementById('part-actions'),renderer.domElement].filter(Boolean);
       const labels=buttons.map(b=>b.textContent),inert=surfaces.map(e=>e.inert);
-      buttons.forEach(b=>{b.disabled=true;b.textContent='리셋 중…';});
+      buttons.forEach(b=>{b.disabled=true;b.textContent='RESET…';});
       surfaces.forEach(e=>e.inert=true);
       const wait=async test=>{
         const start=performance.now();

@@ -74,11 +74,15 @@ try {
     const d = ropeObjs[2].cwtDrop; d.updateMatrixWorld(true);
     const rope = Math.abs(d.localToWorld(new THREE.Vector3(0, -.5, 0)).y - (cwtGrp.position.y + S.CWT_H / 2 + .31));
     scene.updateMatrixWorld(true);
-    const shoeTop = Math.max(...carGrp.userData.guideShoes.filter(s => s.userData.isUpper).map(s => new THREE.Box3().setFromObject(s).max.y));
+    // 급유통(Oiler 하위)은 부서져도 되는 소모품 → 가이드슈 본체 윗면. 급유통 윗면은 대조용.
+    const uppers = carGrp.userData.guideShoes.filter(s => s.userData.isUpper);
+    const bodyTop = s => { let y = -Infinity; s.traverse(o => { if (!o.isMesh) return; for (let p = o; p && p !== s; p = p.parent) if (/^Oiler/.test(p.name)) return; y = Math.max(y, new THREE.Box3().setFromObject(o).max.y); }); return y; };
+    const shoeTop = Math.max(...uppers.map(bodyTop));
+    const oilerTop = Math.max(...uppers.map(s => new THREE.Box3().setFromObject(s.getObjectByName('Oiler')).max.y));
     const car = new THREE.Box3(); carGrp.traverse(o => { if (o.isMesh && o.visible) car.union(new THREE.Box3().setFromObject(o)); });
     return { mode: BufferDemo.mode, vImpact: u.vImpact, decelG: u.decel / 9.81, compression: u.compression, face: cwtGrp.position.y + f.faceY,
       bufferTopNow: h.topY - h.stroke, scaleY: h.urethane.scale.y, carScale: bufferGrp.userData.car.urethane.scale.y, rope, carY: carGrp.position.y,
-      cwtY: cwtGrp.position.y, topFloorY: FLOOR_Y[FLOORS - 1] + S.CAR_H / 2, shoeTop, railTop: railGrp.userData.carRailTopY, carTop: car.max.y, clear: { ...u.clear, box: undefined } };
+      cwtY: cwtGrp.position.y, topFloorY: FLOOR_Y[FLOORS - 1] + S.CAR_H / 2, shoeTop, oilerTop, railTop: railGrp.userData.carRailTopY, carTop: car.max.y, clear: { ...u.clear, box: undefined } };
   });
   report.run1 = { before, atRest };
   assert.equal(atRest.mode, 'cwt');
@@ -90,6 +94,7 @@ try {
   assert.ok(Math.abs(atRest.clear.shift - (atRest.carY - before.carY)) < 1e-6);
   assert.ok(Math.abs(atRest.clear.rise - (atRest.carY - atRest.topFloorY)) < 1e-6, 'overtravel above top floor');
   assert.ok(Math.abs(atRest.clear.gap - (atRest.railTop - atRest.shoeTop)) < 1e-6, 'rail clearance measured from shoe');
+  assert.ok(atRest.oilerTop > atRest.shoeTop + .01, `oiler ${atRest.oilerTop} sits above shoe body ${atRest.shoeTop} (excluded)`);
   assert.ok(atRest.clear.gap >= atRest.clear.required, 'rail clearance >= 0.1+0.035v²');
   assert.ok(atRest.carTop < before.overhead, `car top ${atRest.carTop} below overhead ${before.overhead} ${before.overheadName}`);
   await page.waitForFunction(() => !gsap.isTweening(camera.position), null, {polling: 50});

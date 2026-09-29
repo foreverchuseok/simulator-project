@@ -126,6 +126,16 @@ const BufferDemo = (() => {
       : m.key === 'cwt' && !(railGrp?.userData.carRailTopY && upperShoes().length) ? '카 가이드레일·가이드슈 준비 중' : '';
   }
   const upperShoes = () => (carGrp.userData.guideShoes || []).filter(s => s.userData.isUpper);
+  // 급유통(Oiler)은 레일 끝에 부딪혀 부서져도 되는 소모품 → 여유거리는 그 아래 가이드슈 본체 윗면부터 잰다.
+  function shoeBodyBox(shoe, out) {
+    out.makeEmpty();
+    shoe.traverse(o => {
+      if (!o.isMesh) return;
+      for (let p = o; p && p !== shoe; p = p.parent) if (/^Oiler/.test(p.name)) return;
+      out.union(new THREE.Box3().setFromObject(o));
+    });
+    return out;
+  }
   // 균형추 바로 위(평면 투영이 겹치는) 가장 낮은 고정물 하면. 로프·레일은 균형추와 함께 지나가므로 제외.
   function overheadObstacle(top) {
     _box.setFromObject(cwtGrp);
@@ -261,7 +271,7 @@ const BufferDemo = (() => {
     clearGrp.getObjectByName('clearanceArrowHigh').position.set(x, q.obstacle - .03, z);
     clearGrp.visible = true;
     labels.clear.innerHTML = isCwt()
-      ? `카 가이드레일 여유거리 <b>${q.gap.toFixed(2)} m</b><br><span style="font-weight:400;color:#f3e7c2">기준 0.1 + 0.035v² = ${q.required.toFixed(3)} m 이상 · 카 +${Math.round(q.rise * 1000)} mm 상승<br>상부 가이드슈 윗면 → 레일 끝(천장 슬래브 속 ${Math.round((q.obstacle - SHAFT_CEIL_Y) * 1000)} mm)</span>`
+      ? `카 가이드레일 여유거리 <b>${q.gap.toFixed(2)} m</b><br><span style="font-weight:400;color:#f3e7c2">기준 0.1 + 0.035v² = ${q.required.toFixed(3)} m 이상 · 카 +${Math.round(q.rise * 1000)} mm 상승<br>상부 가이드슈 윗면(급유통 제외) → 레일 끝(천장 슬래브 속 ${Math.round((q.obstacle - SHAFT_CEIL_Y) * 1000)} mm)</span>`
       : `균형추 상부 여유거리 <b>${q.gap.toFixed(2)} m</b><br><span style="font-weight:400;color:#f3e7c2">균형추 +${Math.round(q.rise * 1000)} mm 상승</span>`;
     U.anchors.clear = new THREE.Vector3(x, q.top + h / 2, z);
   }
@@ -374,8 +384,8 @@ const BufferDemo = (() => {
       // shift: 시작 위치부터 실제 이동량(형상 이동), rise: 최상층 정위치를 넘어 올라간 양(표시).
       const shift = contactY + h.stroke - y0, rise = contactY + h.stroke - (FLOOR_Y[FLOORS - 1] + S.CAR_H / 2);
       const railTop = railGrp.userData.carRailTopY, shoes = upperShoes();
-      const tops = shoes.map(s => new THREE.Box3().setFromObject(s).max.y), shoeTop = Math.max(...tops);
-      _box.setFromObject(shoes.find(s => /_R_/.test(s.name)) || shoes[0]);   // 치수는 화면 오른쪽(+X) 레일에 그린다
+      const tops = shoes.map(s => shoeBodyBox(s, new THREE.Box3()).max.y), shoeTop = Math.max(...tops);
+      shoeBodyBox(shoes.find(s => /_R_/.test(s.name)) || shoes[0], _box);   // 치수는 화면 오른쪽(+X) 레일에 그린다
       const box = _box.clone().translate(new THREE.Vector3(0, shift, 0));
       clear = { box, top: shoeTop + shift, obstacle: railTop, obstacleName: 'carGuideRailTop', rise, shift, gap: railTop - (shoeTop + shift),
         before: railTop - shoeTop, required: .1 + .035 * vRated * vRated, lineX: box.min.x - .03, lineZ: box.max.z + .03 };

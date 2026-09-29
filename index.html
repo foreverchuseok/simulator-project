@@ -894,6 +894,33 @@
     #inspection-drive button:disabled { opacity:.4; }
     @media(max-width:600px) and (orientation:portrait) { #inspection-drive { left:var(--edge); right:calc(var(--edge-r) + 70px); transform:none; bottom:calc(var(--edge-b) + 62px); } #inspection-drive button { flex:1; min-width:0; } }
     .portrait-tools-hidden #inspection-drive { visibility:hidden; pointer-events:none; }
+    /* 좁은 상태 카드와 점검 패널: 터치 높이 44px 유지. */
+    #statusbar { right:auto; width:176px; height:56px; gap:8px; padding:7px 9px; border-radius:14px; }
+    #statusbar .st-floor { min-width:42px; gap:4px; }
+    #statusbar #v-floor { font-size:26px; }
+    #statusbar .st-meta { flex:1; flex-direction:column; align-items:flex-start; gap:3px; overflow:hidden; }
+    #statusbar #v-dir { flex:none; max-width:105px; padding:3px 5px; font-size:10px; gap:4px; }
+    #statusbar #v-spd { font-size:10px; }
+    #statusbar .st-bar { display:none; }
+    #hall-panel, .fault-latched #hall-panel { top:calc(var(--edge-t) + 64px); left:var(--edge); right:auto; bottom:auto; width:154px; padding:8px; border-radius:14px; max-height:calc(100dvh - var(--edge-t) - var(--edge-b) - 132px); }
+    .fault-latched #hall-panel { top:calc(var(--edge-t) + 116px); max-height:calc(100dvh - var(--edge-t) - var(--edge-b) - 184px); }
+    #hall-panel .hall-row { margin:4px 0; gap:4px; }
+    #hall-panel .hall-row:first-child { margin-top:0; }
+    #hall-panel strong { font-size:13px; }
+    #hall-panel #hall-dismiss { flex:0 0 44px; font-size:24px; }
+    #hall-panel button { font-size:11px; padding:4px; min-height:44px; }
+    #hall-panel button[aria-pressed="true"] { background:#27658c; }
+    #hall-bypass summary { display:flex; align-items:center; justify-content:space-between; min-height:44px; padding:0 8px; border:1px solid var(--ui-line); border-radius:10px; cursor:pointer; font-weight:700; list-style:none; }
+    #hall-bypass summary::after { content:'⌄'; }
+    #hall-bypass[open] summary::after { content:'⌃'; }
+    #hall-bypass .seg { flex-direction:column; margin-top:4px; }
+    #bypass-status { font-size:10px; color:#fde68a; }
+    #hall-bypass summary output { pointer-events:none; }
+    #hall-mode { padding:5px 2px 0; font-size:11px; font-weight:800; color:#fbbf24; }
+    #hall-message, #hall-drive-note { display:block; margin:6px 2px; font-size:11px; line-height:1.4; color:#fde68a; }
+    #hall-message[hidden], #hall-drive-note[hidden] { display:none; }
+    #hall-message.warning { padding:6px; border-left:2px solid #fbbf24; background:#f59e0b18; }
+    #hall-panel .hold button { touch-action:none; user-select:none; }
   </style>
 </head>
 
@@ -1048,16 +1075,18 @@
   </div>
 
   <section id="hall-panel" aria-label="승장문 점검" hidden>
-    <div class="hall-row"><strong id="hall-title">승장문 점검</strong><button id="hall-dismiss" aria-label="점검 패널 접기">접기</button></div>
-    <div class="hall-row"><button id="hall-half">반개방</button><button id="hall-open">완전개방</button></div>
-    <div class="hall-row"><button id="hall-close">발 빼고 닫기</button><button id="hall-observe">관찰 위치</button></div>
-    <output id="hall-message" aria-live="polite"></output>
-    <div class="field">
-      <div class="field-label"><span>BYPASS · 접점 우회</span><output id="bypass-status" aria-live="polite">BYPASS 해제</output></div>
-      <select id="bypass-mode" class="seg-src" aria-label="바이패스 접점 선택" tabindex="-1"><option value="off">해제</option><option value="hall">승장문</option><option value="car">카문</option></select>
-      <div class="seg" data-for="bypass-mode"></div>
-    </div>
-    <div class="hall-row"><button id="hall-reset" data-inspection-reset>점검 전체 리셋</button></div>
+    <div class="hall-row"><strong id="hall-title">HD</strong><button id="hall-dismiss" aria-label="점검 패널 접기">‹</button></div>
+    <details id="hall-bypass"><summary>BYP <output id="bypass-status" aria-live="polite">OFF</output></summary>
+      <select id="bypass-mode" class="seg-src" aria-label="바이패스 접점 선택" tabindex="-1"><option value="off">OFF</option><option value="hall">HD</option><option value="car">CD</option></select>
+      <div class="seg" data-for="bypass-mode" aria-label="OFF 해제, HD 승장문, CD 카문 바이패스"></div>
+    </details>
+    <div class="hall-row"><button id="hall-half" aria-label="승장문 반개방">½</button><button id="hall-open" aria-label="승장문 완전개방">OPEN</button></div>
+    <div class="hall-row"><button id="hall-close" aria-label="승장문 닫기">CLOSE</button></div>
+    <output id="hall-message" aria-live="polite" hidden></output>
+    <div id="hall-mode" aria-live="polite">AUTO</div>
+    <div class="hall-row hold"><button id="hall-up" data-ins-dir="1" aria-label="누르는 동안 점검 상승" disabled>▲ UP</button><button id="hall-dn" data-ins-dir="-1" aria-label="누르는 동안 점검 하강" disabled>▼ DN</button></div>
+    <output id="hall-drive-note" hidden></output>
+    <div class="hall-row"><button id="hall-reset" data-inspection-reset>RESET</button></div>
   </section>
   <section id="inspection-drive" class="glass" aria-label="점검운전" hidden>
     <button id="btn-ins-up" data-ins-dir="1" aria-label="점검 상승" disabled>▲ UP</button>
