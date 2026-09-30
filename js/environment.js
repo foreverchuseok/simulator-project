@@ -3751,7 +3751,7 @@
         ready: false, worm: tmWormSpin, wormPerSheave: 0, cutaway: false, brakeOpen: false,
         cutPieces: [], oil: null, arms: [], contract: null
       };
-      new THREE.GLTFLoader().load('models/gltf/traction_machine.glb', gltf => {
+      new THREE.GLTFLoader().load('models/gltf/traction_machine.glb?v=20260930-brake-compare', gltf => {
         const model = gltf.scene.getObjectByName('TractionMachineModel');
         const c = model?.userData.tractionMachine;
         if (!c || c.sheaveR !== TM.sheaveR || c.wheelX !== TM.wheelX || c.wormY !== TM.wormY ||
@@ -3779,6 +3779,17 @@
         tractionState.oil = node('GearOil');
         tractionState.oil.visible = false;
         tractionState.arms = [node('BrakeArmL'), node('BrakeArmR')];
+        tractionState.model = model;
+        tractionState.compare = {
+          dual: ['BrakeFrame','DualSpringL0','DualSpringL1','DualSpringR0','DualSpringR1'].map(node),
+          single: ['SingleBrakeFrame','SingleSpring0','SingleSpring1'].map(node),
+          dualSpringL: ['DualSpringL0','DualSpringL1'].map(node),
+          singleSpring: ['SingleSpring0','SingleSpring1'].map(node)
+        };
+        if (!c.brakeCompare || [...tractionState.compare.dual,...tractionState.compare.single].some(o=>!o)) {
+          console.error('[traction glb] 주브레이크 비교 노드 누락 — 재내보내기 필요'); return;
+        }
+        tractionState.compare.single.forEach(o=>o.visible=false);
         tractionState.contract = c;
         tractionState.wormPerSheave = c.wormPerSheave;
         tmWormSpin.rotation.z = c.wormPerSheave * tmShvSpin.rotation.z;
@@ -4140,7 +4151,7 @@
       govSetLinkage(0);
 
       // ── .glb 로드 — 노드(원점=피벗)를 래퍼에 장착 ───────────────────────
-      new THREE.GLTFLoader().load('models/gltf/overspeed_governor.glb', (gltf) => {
+      new THREE.GLTFLoader().load('models/gltf/overspeed_governor.glb?v=20260930-switch75', (gltf) => {
         const g = gltf.scene;
         g.traverse(o => {
           if (o.isMesh) {
@@ -4194,7 +4205,7 @@
         if(mechanism){
           handle.mechanism=mechanism;
           Object.assign(handle.pose.trip,{pendulum:mechanism.pendulum,pawl:mechanism.pawl,
-            topArm:mechanism.releaseArm,gripArm:mechanism.gripArm,switchRot:mechanism.switchRot,ratchet:mechanism.drag});
+            topArm:mechanism.releaseArm,gripArm:mechanism.gripArm,switchRot:mechanism.switchRot,switchUpRot:mechanism.switchUpRot,ratchet:mechanism.drag});
           handle.geom.toothStep=mechanism.toothStep;
         }
         machineSafetyWiring.attachGovernor(govBodyGrp, mechanism);
@@ -4259,7 +4270,8 @@
               topArm: 0.14,        // 캐치 레버 전방 밀림 (로프 파지 및 스위치 타격 위치)
               pawl: 0.60,          // +z = 부리가 골 바닥(r≈39mm)으로. 음수는 톱니 위로 들어 올림
               switchLever: 0.016,  // 스위치 플런저 하강 (+x)
-              switchRot: -0.52,    // 스위치 레버 아래로 뚝 떨어짐 (트립 차단 각도)
+              switchRot: 0,       // ready 이전 자리값. 상·하 래치 각도는 GLB mechanism이 원본이다.
+              switchUpRot: 0,
               ratchet: 0.22,       // 휠 관성 드래그 회전량
               spring: 0.95         // 가압 스프링 압축
             }

@@ -77,7 +77,7 @@ try{
   gsap.ticker.remove(ovsProbe);
   const gov=govHandles(),m=gov.mechanism;
   const point=new THREE.Vector3(...m.padPoint).sub(gov.topArm.position).applyAxisAngle(new THREE.Vector3(0,0,1),gov.topArm.rotation.z).add(gov.topArm.position);
-  return {samples:ovsSamples,frames:ovsFrames,sounds:ovsSounds,padGap:point.x-m.ropeFaceX,phase:governorPhase,hidden:ovsDemo.hidden.length};
+  return {samples:ovsSamples,frames:ovsFrames,sounds:ovsSounds,padGap:point.x-m.ropeFaceX,switchAngle:gov.switchLever.rotation.z+m.switchRestAngle,phase:governorPhase,hidden:ovsDemo.hidden.length};
  });
  const stages=[...new Set(data.samples.map(s=>s.stage))];
  const expected=['preparing','rope-break','runaway','machine-room','centrifugal','electrical','pawl','rope-grip','rope-locked','linkage-view','linkage','safety-view','wedges'];
@@ -95,6 +95,7 @@ try{
  assert.ok(coupled.every(s=>Math.abs(s.wheel-wheel0)<1e-8),'Governor stays stopped during wedge lift');
  assert.ok(coupled.some(s=>s.safetyContact===false),'Safety contact opens');
  assert.ok(Math.abs(data.padGap)<1e-7,'Catch shoe touches rope');
+ assert.ok(Math.abs(data.switchAngle+75*Math.PI/180)<1e-5,'Downward switch latches at -75 degrees from horizontal');
  assert.ok(data.samples.every(s=>Math.abs(s.y+s.cwt-data.samples[0].y-data.samples[0].cwt)<1e-7),'Counterweight stays coupled');
  for(const [name,png] of Object.entries(data.frames))fs.writeFileSync(path.join(out,name+'.png'),Buffer.from(png,'base64'));
  delete data.frames;

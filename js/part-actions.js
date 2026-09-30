@@ -33,7 +33,7 @@ const PartActions=(()=>{
   };
   const icons=Object.fromEntries(Object.entries(paths).map(([k,v])=>[k,`url("data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+v+'</svg>')}")`]));
   const icon=(button,key)=>button.style.setProperty('--part-icon',icons[key]);
-  function close(){if(panel)panel.hidden=true;if(brake)brake.setAttribute('aria-expanded','false');if(guidePanel)guidePanel.hidden=true;if(activeGuide)activeGuide.setAttribute('aria-expanded','false');activeGuide=null;}
+  function close(){BrakeDemo.close();AscentDemo.close();if(panel)panel.hidden=true;if(brake)brake.setAttribute('aria-expanded','false');if(guidePanel)guidePanel.hidden=true;if(activeGuide)activeGuide.setAttribute('aria-expanded','false');activeGuide=null;}
   function sync(){
     const ovsReset=governor.textContent.trim()==='RST',ucmReset=source.textContent.trim()==='RST';
     icon(governor,ovsReset?'reset':'governor');icon(source,ucmReset?'reset':'play');icon(brake,ucmReset?'reset':'brake');

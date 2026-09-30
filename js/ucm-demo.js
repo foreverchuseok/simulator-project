@@ -523,5 +523,5 @@ const UCMDemo = (() => {
   }
   function toggle(button) { if (U.active) reset(button); else start(button); }
 
-  return { build, update, start, reset, toggle, get state() { return U; }, get character() { return char; }, motion: MOTION, jawTravel: RB, lean: LEAN, leanFor };
+  return { build, update, start, reset, toggle, neutral, get passengerParts() { return parts; }, get state() { return U; }, get character() { return char; }, motion: MOTION, jawTravel: RB, lean: LEAN, leanFor };
 })();

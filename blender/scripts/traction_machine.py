@@ -71,6 +71,9 @@ BODY_Y = A + 0.243             # dual brake solenoid body axis (X)
 BASE_Y0, BASE_Y1 = A + 0.171, A + 0.187   # black dual-brake base plate
 SPRING_Y = A + 0.155           # arm bolt / spring axis
 SPRING_SET = 0.116             # TK TM30B 11 kW: spring-cap inner length 116 mm (설치 치수)
+SINGLE_BODY_R, SINGLE_BODY_W = .094, .072  # manual pp.2/4: round housing, vertical plunger
+SINGLE_SPRING_SET, SINGLE_SPRING_R = .150, .029
+SINGLE_BODY_Y = BODY_Y - .010
 ARM_NUT_GAP = 0.004            # arm ↔ arm-bolt fixing nut; inspection limit ≥ 3 mm
 MOTOR_Z0, MOTOR_Z1, MOTOR_R = 0.405, 0.720, 0.168
 COWL_F = MOTOR_Z1 + 0.078      # pressed-steel fan cowl grille face (rear of motor)
@@ -741,7 +744,11 @@ def brake_frame():
         c0 = outer + s * .004; c1 = c0 + s * (.004 + SPRING_SET + .004)
         P.append(cyl('SpringCap', .036, .008, (c0, SPRING_Y, DRUM_Z), brass, (1, 0, 0), 40, bev=.0015))
         P.append(cyl('SpringCap', .036, .008, (c1, SPRING_Y, DRUM_Z), brass, (1, 0, 0), 40, bev=.0015))
-        P.append(spring_coil('BrakeSpring', c0 + s * .004, c1 - s * .004, SPRING_Y, DRUM_Z, .027, .0062, 8, spring_zn))
+        # Named half-coils preserve the intact silhouette and expose a fracture seam for comparison.
+        ends = [c0 + s * .004, (c0+c1)/2, c1 - s * .004]
+        for i in range(2):
+            join([spring_coil('BrakeSpring', ends[i], ends[i+1], SPRING_Y, DRUM_Z, .027, .0062, 4, spring_zn)],
+                 ('DualSpringL' if s < 0 else 'DualSpringR') + str(i), root)
         for dn in (.010, .022):
             P.append(cyl('SpringNut', .0145, .011, (c1 + s * dn, SPRING_Y, DRUM_Z), zinc, (1, 0, 0), 6, bev=.001))
         P.append(box('RedMark', (.020, .004, .003), (c1 + s * .016, SPRING_Y + .0145, DRUM_Z), amber_line))
@@ -758,6 +765,35 @@ def brake_frame():
         P.append(text('MS1' if s < 0 else 'MS2', (mx, BASE_Y1 + .020, DRUM_Z + .0565), .007, label_w, (0, 0, 1), (1, 0, 0), .0002))
     # brake switch box (terminal) on the stand front
     P.append(box_span('BrakeSwitch', (XW + .080, XW + .140), (PIVOT_Y - .070, PIVOT_Y - .022), (DRUM_Z + .031, DRUM_Z + .061), black, .003))
+    return P
+
+def single_brake_frame():
+    """Manual pp.2/4 old form: one vertical plunger and one common spring/tie rod.
+    Educational silhouette, not a dimensioned reproduction of a product."""
+    y = SINGLE_BODY_Y
+    P = [box_span('OldBase', (XW-.105, XW+.105), (BASE_Y0-.045, BASE_Y0-.024),
+                  (DRUM_Z-.052, DRUM_Z+.052), paint, .005)]
+    P.append(box_span('OldBaseBracket', (XW-.060,XW+.060), (A+.080,BASE_Y0-.024),
+                      (TUBE_Z+.022,TUBE_Z+.050), paint,.004))
+    P.append(cyl('OldRoundCoil', SINGLE_BODY_R, SINGLE_BODY_W, (XW,y,DRUM_Z), paint, (0,0,1), 56, bev=.004))
+    P.append(cyl('OldRoundCover', SINGLE_BODY_R*.72, .008, (XW,y,DRUM_Z+SINGLE_BODY_W/2+.004), paint_dk, (0,0,1), 48, bev=.002))
+    P += hexbolt('OldCoverBolt', (XW,y,DRUM_Z+SINGLE_BODY_W/2+.009), (0,0,1), zinc, .012, .009)
+    P.append(cyl('OldVerticalPlunger', .018, .064, (XW,y+SINGLE_BODY_R,DRUM_Z), bright, (0,1,0), 24))
+    # The yoke transmits one plunger's vertical movement to both arm tops.
+    top = y + SINGLE_BODY_R + .034
+    for s in (-1,1):
+        P.append(rod('OldYoke', (XW,top,DRUM_Z), (XW+s*ARM_X,ARM_TOP-.008,DRUM_Z), .009, paint))
+        P.append(cyl('OldYokePin', .012, .062, (XW+s*ARM_X,ARM_TOP-.008,DRUM_Z), zinc, (0,0,1), 20))
+    # A through-bolt transfers the one spring's force to the opposite arm.
+    c0 = XW-ARM_X-.024; c1 = c0-SINGLE_SPRING_SET-.008
+    P.append(rod('CommonTieRod', (c1-.034,SPRING_Y,DRUM_Z), (XW+ARM_X+.036,SPRING_Y,DRUM_Z), .0085, bright))
+    for x in (c0,c1):
+        P.append(cyl('OldSpringCap', .037, .008, (x,SPRING_Y,DRUM_Z), zinc, (1,0,0), 32, bev=.001))
+    for x in (c1-.012,c1-.024,XW+ARM_X+.024):
+        P.append(cyl('OldTieNut', .015, .011, (x,SPRING_Y,DRUM_Z), zinc, (1,0,0), 6))
+    ends=[c0-.004,(c0+c1)/2,c1+.004]
+    for i in range(2):
+        join([spring_coil('CommonSpring', ends[i],ends[i+1],SPRING_Y,DRUM_Z,SINGLE_SPRING_R,.0062,4,spring_m)],'SingleSpring'+str(i),root)
     return P
 
 # ═════════════════════ 5. Motor ═══════════════════════════════════════════
@@ -918,7 +954,13 @@ join([box_span('GearOil', (XW - H_WI + .001, XW + H_WI - .001), (H_BOT + .056, O
      'GearOil', root)
 for s, nm in ((-1, 'BrakeArmL'), (1, 'BrakeArmR')):
     join(brake_arm(s), nm, root, (XW + s * ARM_X, PIVOT_Y, DRUM_Z))
-join(brake_frame(), 'BrakeFrame', root)
+frame_parts = brake_frame()
+# Shared stand remains installed when swapping only the brake actuator/spring mechanism.
+stand_parts = [o for o in frame_parts if o.name.startswith(('BrakeStand','StandLug'))]
+mechanism_parts = [o for o in frame_parts if o not in stand_parts]
+join(stand_parts, 'BrakeStand', root)
+join(mechanism_parts, 'BrakeFrame', root)
+join(single_brake_frame(), 'SingleBrakeFrame', root)
 join(motor(), 'Motor', root)
 join(bedplate(), 'Bedplate', root)
 join(sheave_guard(), 'SheaveGuard', root)
@@ -935,6 +977,8 @@ root['tractionMachine'] = {
     'guard': {'r': GUARD_R, 'halfWidth': GUARD_X, 'ropeTanA': ROPE_TAN_A, 'tail': GUARD_TAIL, 'skirtBottom': GUARD_SKIRT_BOT},
     'dualBrake': {'sets': 2, 'springSet': SPRING_SET, 'armNutGap': ARM_NUT_GAP, 'motorKW': 11, 'springY': SPRING_Y,
                   'reference': 'TKE TM30B dual brake retrofit (검사기준 12.4.2.1)'},
+    'brakeCompare': {'version': 1, 'singleSprings': 1, 'singlePlungerAxis': 'Y',
+                     'iconY': BODY_Y + .22, 'singleSpringSet': SINGLE_SPRING_SET},
     'cableExits': {'brakeTB': [XW - .082 - .022, BODY_Y + .117, DRUM_Z],
                    'motorTB': [XW - MOTOR_R - .030, A - .049, (MOTOR_Z0 + MOTOR_Z1) / 2 - .020],
                    'encoder': [XW + math.cos(ENC_CABLE_A) * .043, A + math.sin(ENC_CABLE_A) * .043, (ENC_Z0 + ENC_Z1) / 2]},

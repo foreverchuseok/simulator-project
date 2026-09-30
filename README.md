@@ -275,7 +275,7 @@ ESTOP
 `elevatorState`의 `slowdownActive`, `limitActive`, `finalLimitActive`는 선언되어 있지만 현재 운행 FSM과 연결되지 않았다.
 `landingDevices[]`와 `carSensors`도 시각적 배치·디버그 참조이며 실제 충돌 검출로 카를 감속하거나 정지시키지는 않는다.
 
-「고장·점검」에서 실제 연결된 고장 시나리오는 OVS 과속 고장과 UCM 개문발차(`js/ucm-demo.js`)다.
+부품 아이콘에서 OVS 하강과속(`js/ui.js`), UCM 개문발차(`js/ucm-demo.js`), 상승과속(`js/ascent-demo.js`)를 실행한다. 로프브레이크 위에는 개문출발·상승과속 두 아이콘이 나란히 있고, 상승과속은 웜 구동부 파손 후 정상 파지/미설치 충돌을 비교한다. 계약은 `docs/MACHINE-ROOM-SAFETY.md`를 따른다.
 동작이 연결되지 않았던 DR·SAF·탑승자 버튼은 2026-09-26 HUD 재설계에서 뺐다.
 
 ## 기능별 수정 위치
@@ -308,6 +308,8 @@ ESTOP
 | 조속기 마운트 | `js/environment.js` | `buildMachineRoom()` 조속기 GLTFLoader 구간 |
 | 조속기 동작 | `js/elevator.js` | `governorTrip()`, `governorReset()` |
 | 과속 시퀀스·카메라 | `js/ui.js` | `startOverspeedFault()` 계열 |
+| 상승과속·로프브레이크 비교 | `js/ascent-demo.js` | `AscentDemo.start/reset`, `tools/verify_ascent.mjs` |
+| 주브레이크 싱글·더블 비교 | `js/brake-demo.js` | `BrakeDemo.start/reset`, 권상기 아이콘, `docs/TRACTION-MACHINE.md`, `tools/verify_brake_compare.mjs` |
 | 세이프티기어 형상 | `tools/build_safety_glb.mjs` | GLB 생성 |
 | 세이프티기어 마운트 | `js/archive/car.js` (현재 미로드) | `buildCarCabin()` GLTFLoader 구간 |
 | 운행·도어 UI | `js/ui.js` | `bindUIEvents()`, `moveElevator()` |

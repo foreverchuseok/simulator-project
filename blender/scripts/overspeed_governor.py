@@ -474,7 +474,10 @@ def switch_contact_angle(catch_angle):
     if abs(cosine)>1: return ACT_INITIAL_ROT
     return min(ACT_INITIAL_ROT, math.atan2(uy,ux)-math.acos(cosine)-math.atan2(vy,vx))
 
-ACT_LATCH_ROT = min(switch_contact_angle(CATCH_RELEASE*i/1000) for i in range(1001))
+# 타격 후 래치 자세는 수평 기준 ±75°. 메시에 구워진 -SW_TILT를 보정한다.
+ACT_LATCH_ANGLE = math.radians(75)
+ACT_LATCH_ROT = -ACT_LATCH_ANGLE + SW_TILT
+ACT_UP_LATCH_ROT = ACT_LATCH_ANGLE + SW_TILT
 
 # =============================================================================
 #  4-1. BaseFrame — 베이스·중앙 사각 마운트판 (★볼트 단 1개만)·뒷면 투명 커버 & 나비너트
@@ -1006,7 +1009,8 @@ _ty=_pp[1]+_dx*math.sin(TRIP_PENDULUM)+_dy*math.cos(TRIP_PENDULUM)-GWY
 SWITCH_HIT_PHASE=math.atan2(ACT_TIP[1]-GWY,ACT_TIP[0])-math.atan2(_ty,_tx)
 bpy.data.objects['BaseFrame']['mechanism']={
     'pendulum':TRIP_PENDULUM,'pawl':TRIP_PAWL,'releaseArm':CATCH_RELEASE,
-    'gripArm':CATCH_GRIP,'switchRot':ACT_LATCH_ROT,'toothStep':_STEP,'drag':0.12,
+    'gripArm':CATCH_GRIP,'switchRot':ACT_LATCH_ROT,'switchUpRot':ACT_UP_LATCH_ROT,
+    'switchRestAngle':-SW_TILT,'toothStep':_STEP,'drag':0.12,
     'switchInitialRot':ACT_INITIAL_ROT,'switchPivot':list(PLG_BASE),
     'switchRoller':[*ACT_ROLLER,SW_Z+ACT_THK/2+ACT_ROLLER_OFFSET],
     'switchRollerRadius':ACT_ROLLER_R,'switchRollerThickness':ACT_ROLLER_T,

@@ -54,7 +54,7 @@ const UCMEffects = (() => {
     dust.name = 'UCMGripDust'; dust.visible = false; dust.frustumCulled = false;
     scene.getObjectByName('RopeBrake')?.add(dust);
   }
-  function prepare() { build(); clear(); document.body.classList.add('ucm-active'); exit.hidden = false; }
+  function prepare(onExit = () => UCMDemo.reset()) { build(); clear(); exit.onclick = onExit; document.body.classList.add('ucm-active'); exit.hidden = false; }
   function hit(kind, heading, note) {
     title.textContent = heading; subtitle.textContent = note; banner.dataset.kind = kind;
     gsap.killTweensOf(banner); gsap.killTweensOf(title);

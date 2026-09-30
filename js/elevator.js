@@ -2362,8 +2362,8 @@
         gov.spring.scale.y=1-0.05*release-0.035*grip;
         // Hinged actuator rotates around its real pin; do not translate the pivot.
         const snap=unit(hitTime,hitTime+0.18,t);
-        const initialStrike=gov.mechanism.switchInitialRot*(1-Math.pow(1-snap,3));
-        // 진자가 먼저 짧게 타격하고, 내려오는 캐치 브라켓이 가로축 원형 끝을 눌러 추가 회전시킨다.
+        const initialStrike=pose.switchRot*(1-Math.pow(1-snap,3));
+        // 진자 타격 직후 수평 기준 -75°까지 스냅한다. 캐치가 움직여도 다시 들리지 않는다.
         // 복귀 전까지 래치를 유지한다. 타임라인 seek도 같은 자세를 내도록 시간에서 직접 계산한다.
         const catchPush=t<2.8?0:t<=3.25?governorSwitchContactAngle(gov,pose.topArm*release):pose.switchRot;
         gov.switchLever.rotation.z=Math.min(initialStrike,catchPush);

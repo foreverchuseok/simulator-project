@@ -149,12 +149,25 @@ function updateManualCameraNear() {
       // 로프브레이크 파지 — 강철 턱이 로프를 무는 "쾅" (UCM 시연)
       function ropeBrakeBang() { const c = ac(), t = c.currentTime; thump(c, t, 48, 0.26, 0.5); clack(c, t, 340, 0.065, 0.35); clack(c, t + 0.008, 1400, 0.045, 0.22); screech(c, t + 0.012, .22, .075); hiss(c, t + 0.02, 0.24, 0.045, 2500); }
       function ucmBrakeFailure() { const c = ac(), t = c.currentTime; thump(c, t, 42, .34, .34); clack(c, t, 260, .09, .23); clack(c, t + .045, 1100, .07, .12); }
+      // 기계실 주브레이크 비교의 경고음. 중단 시 예약된 음까지 취소한다.
+      function brakeWarning() {
+        const c=ac(),t=c.currentTime,nodes=[];
+        [0,.28,.56].forEach((delay,i)=>{
+          const o=c.createOscillator(),g=c.createGain(),at=t+delay;
+          o.frequency.value=i%2?660:880;g.gain.setValueAtTime(.0001,at);
+          g.gain.linearRampToValueAtTime(.10,at+.015);g.gain.exponentialRampToValueAtTime(.0001,at+.19);
+          o.connect(g);g.connect(effects);o.start(at);o.stop(at+.2);nodes.push(o);
+          o.onended=()=>{o.disconnect();g.disconnect();};
+        });
+        return ()=>nodes.forEach(o=>{try{o.stop();}catch(e){}});
+      }
       // 카 타격판이 우레탄 완충기를 치는 묵직한 "쿵" + 먼지 이는 쉿 소리 (완충기 충돌 시연)
       function bufferImpact() { const c = ac(), t = c.currentTime; thump(c, t, 40, 0.6, 0.65); thump(c, t + 0.01, 88, 0.28, 0.32); clack(c, t, 170, 0.16, 0.3); clack(c, t + 0.006, 950, 0.05, 0.08); hiss(c, t + 0.04, 1.1, 0.03, 800); }
       // 승객이 에이프런에 부딪히는 가벼운 "쿵"
       function bump() { const c = ac(), t = c.currentTime; thump(c, t, 110, 0.12, 0.18); clack(c, t, 260, 0.05, 0.1); }
       function overspeedImpact(kind) {
         const c=ac(),t=c.currentTime;
+        if(kind==='collision'){thump(c,t,28,1.25,.68);thump(c,t+.045,53,.85,.42);clack(c,t,135,.24,.32);hiss(c,t+.05,1.5,.07,500);}
         if(kind==='break'){
           [0,.055,.13,.21,.31,.42].forEach((d,i)=>{clack(c,t+d,850+i*230,.065,.20+i*.018);thump(c,t+d,155-i*15,.11,.10);});
           thump(c,t+.39,43,.48,.34);hiss(c,t+.1,.8,.065,1200);
@@ -237,7 +250,7 @@ function updateManualCameraNear() {
         });
       }
       function effect(play) { return { currentTime: 0, play() { try { play(); return Promise.resolve(); } catch (e) { return Promise.reject(e); } } }; }
-      return { resume, motorOn, motorOff, setDrive, brakeRelease, brakeSet, duck, ropeBrakeBang, ucmBrakeFailure, bufferImpact, bump, overspeedImpact,
+      return { resume, motorOn, motorOff, setDrive, brakeRelease, brakeSet, duck, ropeBrakeBang, ucmBrakeFailure, brakeWarning, bufferImpact, bump, overspeedImpact,
         doorOpen: effect(() => door(false)), doorClose: effect(() => door(true)), chime: effect(chime) };
     })();
 
@@ -391,7 +404,7 @@ function updateManualCameraNear() {
       if (mainSheaveGrp)      mainSheaveGrp.rotation.z      -= deltaY / (ud.mainR || 0.33);
       // 웜은 휠(=시브 축)과 25:1로 맞물린다. 절대각으로 맞춰 이물림 위상이 누적 오차 없이 유지된다.
       const tr = ud.traction;
-      if (tr && mainSheaveGrp) tr.worm.rotation.z = tr.wormPerSheave * mainSheaveGrp.rotation.z;
+      if (tr && mainSheaveGrp && !tr.driveBroken) tr.worm.rotation.z = tr.wormPerSheave * mainSheaveGrp.rotation.z;
       if (deflectorSheaveGrp) deflectorSheaveGrp.rotation.z -= deltaY / (ud.defRadius || 0.144);
     }
 
@@ -524,6 +537,8 @@ function updateManualCameraNear() {
       try {
         InterlockDemo.cancel();clearTimeout(autoTimer);insHold=0;insStop();InspectionReturn.cancel();InspectionStations.release();
         // Fault demonstrations retain their own mechanical recovery sequence.
+        if(BrakeDemo.active){BrakeDemo.reset();await wait(()=>!BrakeDemo.active);}
+        if(AscentDemo.active){AscentDemo.reset();await wait(()=>!AscentDemo.active);}
         if(UCMDemo.state.active){
           await wait(()=>!CarDoor.state.busy);
           UCMDemo.reset(document.getElementById('btn-ucm'));await wait(()=>!UCMDemo.state.active);
@@ -1198,6 +1213,8 @@ function updateManualCameraNear() {
         estopBtn.querySelector('span').textContent = portraitHUD?.isPortrait() ? (estop ? 'RESET' : 'STOP') : (estop ? '해제' : '정지');
       };
       estopBtn.addEventListener('click', e => {
+        if (BrakeDemo.active) { BrakeDemo.reset(); return; }
+        if (AscentDemo.active) { AscentDemo.reset(); return; }
         if (ARDDemo.active) { ARDDemo.halt(); return; }
         if (UCMDemo.state.active) { UCMDemo.reset(document.getElementById('btn-ucm')); return; }
         // 완충기 충돌 시연: 내려가는 중이면 그 자리 정지, 완충기 위·정지 상태면 1층 복귀 (js/buffer-demo.js)
@@ -1228,14 +1245,14 @@ function updateManualCameraNear() {
       });
       // 고장 래치 복귀 버튼 — OVS·UCM 버튼이 RST 를 표시하는 동안만 상태 카드 아래에 띄우고, 누르면 그 버튼을 누른다.
       const resetPill = document.getElementById('fault-reset');
-      const latchSources = ['btn-overspeed', 'btn-ucm', 'buffer-demo-action', 'cwt-buffer-demo-action'].map(id => document.getElementById(id)).filter(Boolean);
+      const latchSources = ['btn-overspeed', 'btn-ucm', 'btn-ascent', 'btn-brake-compare', 'buffer-demo-action', 'cwt-buffer-demo-action'].map(id => document.getElementById(id)).filter(Boolean);
       const syncResetPill = () => {
         const src = latchSources.find(b => b.textContent.trim() === 'RST');
         resetPill.hidden = !src;
         document.body.classList.toggle('fault-latched', !!src);   // 승장문 패널을 복귀 버튼 아래로 내린다
         if (!src) return;
         resetPill.disabled = src.disabled; resetPill.dataset.src = src.id;
-        resetPill.querySelector('span').textContent = src.id === 'btn-ucm' ? '개문발차 복귀' : /buffer-demo-action$/.test(src.id) ? '완충기 복귀' : '과속 시연 종료';
+        resetPill.querySelector('span').textContent = src.id === 'btn-brake-compare' ? '주브레이크 복귀' : src.id === 'btn-ascent' ? '상승과속 복귀' : src.id === 'btn-ucm' ? '개문발차 복귀' : /buffer-demo-action$/.test(src.id) ? '완충기 복귀' : '과속 시연 종료';
       };
       latchSources.forEach(b => new MutationObserver(syncResetPill).observe(b, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['disabled'] }));
       resetPill.addEventListener('click', () => document.getElementById(resetPill.dataset.src)?.click());

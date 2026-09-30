@@ -1099,7 +1099,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
   <script src="js/config.js"></script>
   <script src="js/pit-tensioner.js"></script>
-  <script src="js/environment.js"></script>
+  <script src="js/environment.js?v=20260930-brake-compare"></script>
   <script src="js/machine-room-safety.js"></script>
   <script src="js/control-panel.js"></script>
   <script src="js/machine-room-power.js"></script>
@@ -1115,17 +1115,19 @@
   <script src="js/car-panels.js"></script>
   <script src="js/leveling-sensors.js"></script>
   <script src="js/safety-device.js"></script>
-  <script src="js/elevator.js"></script>
+  <script src="js/elevator.js?v=20260930-switch75"></script>
   <script src="js/hall-finish.js"></script>
   <script src="js/hall-retention.js"></script>
   <script src="js/hall-emergency-guide.js"></script>
   <script src="js/pit-ladder.js"></script>
-  <script src="js/ucm-effects.js?v=20260930-ucm-2"></script>
-  <script src="js/ucm-demo.js?v=20260930-ucm-2"></script>
+  <script src="js/ucm-effects.js?v=20260930-ascent-1"></script>
+  <script src="js/ucm-demo.js?v=20260930-ascent-1"></script>
+  <script src="js/ascent-demo.js?v=20260930-switch75"></script>
+  <script src="js/brake-demo.js?v=20260930-brake-room"></script>
   <script src="js/buffer-demo.js?v=20260929-cwtbuffer-1"></script>
-  <script src="js/part-actions.js"></script>
+  <script src="js/part-actions.js?v=20260930-brake-compare"></script>
   <script src="js/overspeed-effects.js?v=20260930-ovs-1"></script>
-  <script src="js/ui.js?v=20260930-ucm-1"></script>
+  <script src="js/ui.js?v=20260930-brake-room"></script>
   <script src="js/hall-inspector.js"></script>
   <script src="js/hall-manual.js"></script>
   <script src="js/inspection-stations.js"></script>
@@ -1610,6 +1612,8 @@
       EmergencyLighting.build(); // 카탑 정전시 조명장치 + 카상부/카내 원형 비상등
       PitLadder.build(pitGrp);  // 좌측벽 측면 접이식 피트 사다리 (정지·조명 스위치 옆)
       UCMDemo.build(scene);     // 개문발차 시연 승객 「퉁이」(평소 숨김)
+      AscentDemo.build();
+      BrakeDemo.build();
       updateBuffers();          // 동적 완충기
       BufferDemo.build();       // 카 완충기 충돌 시연 아이콘·먼지·균형추 여유거리 치수 (js/buffer-demo.js)
       ARDDemo.build();
@@ -1647,6 +1651,8 @@
       controls.update();
       if (camera.position.y < Y0 + 0.35) camera.position.y = Y0 + 0.35;
       PartActions.update();
+      AscentDemo.update();
+      BrakeDemo.update();
       HallManual.update();
       InterlockDemo.update();
       FingerGap.update();
@@ -1659,6 +1665,7 @@
       EmergencyCall.update(performance.now() / 1000);
       EmergencyLighting.update();
       renderer.render(scene, camera);
+      AscentDemo.renderInset();
     }
 
     init();
