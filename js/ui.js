@@ -1065,6 +1065,7 @@ function updateManualCameraNear() {
       portraitHUD?.close();
       InspectionStations.dismiss();
       PartActions.close();
+      PartGlow.closeMenu();
       if(typeof HallManual!=='undefined')HallManual.dismiss();
       document.querySelectorAll('.sheet.open').forEach(d => d.classList.remove('open'));
       document.querySelectorAll('[data-menu].active').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-expanded', 'false'); });
@@ -1120,8 +1121,8 @@ function updateManualCameraNear() {
       const hint = document.getElementById('hint'); if (!hint) return;
       const touch = matchMedia('(hover: none)').matches;
       hint.textContent = touch
-        ? '부품을 두 번 탭하면 가까이 · 두 손가락 확대·이동'
-        : '드래그 회전 · 휠 확대 · 우클릭 이동 · 부품 더블클릭하면 가까이';
+        ? '빛나는 부품 탭 → 메뉴 · 두 번 탭하면 가까이 · 두 손가락 확대·이동'
+        : '빛나는 부품 클릭 → 메뉴 · 드래그 회전 · 휠 확대 · 우클릭 이동 · 더블클릭하면 가까이';
       hint.classList.add('show');
       const hide = () => hint.classList.remove('show');
       setTimeout(hide, 7000);
@@ -1148,6 +1149,7 @@ function updateManualCameraNear() {
       renderSegments();
       bindPortraitHUD();
       PartActions.bind();
+      PartGlow.init();
       showControlHint();
 
       document.getElementById('speed-select').addEventListener('change', e => {
@@ -1258,7 +1260,6 @@ function updateManualCameraNear() {
       resetPill.addEventListener('click', () => document.getElementById(resetPill.dataset.src)?.click());
 
       // 전체 보기 — 더블클릭으로 가까이 간 화면을 처음 운행 시점으로 되돌린다(부품별 카메라 프리셋은 두지 않는다).
-      document.getElementById('part-icons-toggle').addEventListener('click', () => PartActions.setIconsVisible(!PartActions.iconsVisible));
       document.getElementById('overview-home').addEventListener('click', () => {
         closeAllMenus();
         if (overspeedActive || !controls.enabled) return; // 자동 시연·복귀 카메라를 보호한다.
@@ -1301,36 +1302,8 @@ function updateManualCameraNear() {
         setDetailedBackground(!outdoorPresentation.detailed);
       });
 
-      // Click the landing triangle key: turn the cam, lift the latch, open that floor.
-      const keyRay = new THREE.Raycaster();
-      const keyNdc = new THREE.Vector2();
-      let keyPtr = null;
-      const canvas = renderer.domElement;
-      const ignoreCameraGesture = bindCameraFocus(canvas);
-      canvas.addEventListener('pointerdown', e => {
-        if (e.button !== 0) return;
-        keyPtr = { x: e.clientX, y: e.clientY };
-      });
-      canvas.addEventListener('pointerup', e => {
-        if (e.button !== 0 || !keyPtr) return;
-        const dragged = Math.hypot(e.clientX - keyPtr.x, e.clientY - keyPtr.y) > 6;
-        keyPtr = null;
-        if (dragged || moving || ignoreCameraGesture(e)) return;
-        const rect = canvas.getBoundingClientRect();
-        keyNdc.set(
-          ((e.clientX - rect.left) / rect.width) * 2 - 1,
-          -((e.clientY - rect.top) / rect.height) * 2 + 1
-        );
-        keyRay.setFromCamera(keyNdc, camera);
-        const groups = hatchDoors.map(h => h.right.userData.triKey?.group).filter(Boolean);
-        const hit = keyRay.intersectObjects(groups, true)[0];
-        if (!hit) return;
-        let grp = hit.object;
-        while (grp && grp.name !== 'EmergencyTriangleKey') grp = grp.parent;
-        const fIdx = hatchDoors.findIndex(h => h.right.userData.triKey?.group === grp);
-        if (fIdx < 0) return;
-        HallManual.pick(fIdx);
-      });
+      // 승장 삼각키 단일 탭은 PartGlow(js/part-glow.js)가 「N층 승장문 비상키」 부품 탭으로 처리한다(HallManual.pick).
+      bindCameraFocus(renderer.domElement);
     }
 
     // Tap classification is shared with the triangle key; pinch/drag must never activate it.

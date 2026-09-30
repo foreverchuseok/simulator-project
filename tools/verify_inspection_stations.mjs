@@ -7,7 +7,7 @@ try{
  const page=await browser.newPage({viewport:{width:1200,height:850},hasTouch:true});
  await page.routeWebSocket('**',ws=>ws.close());
  const errors=[];page.on('pageerror',e=>{errors.push(e.message);console.log('PAGE ERROR',e.message);});
- await page.goto('http://127.0.0.1:5500/index.html',{waitUntil:'networkidle'});
+ await page.goto('http://127.0.0.1:5500/index.html?legacyIcons',{waitUntil:'networkidle'});
  await page.waitForFunction(()=>scene.getObjectByName('carInspectionStation')?.userData.ready&&CarDoor.state?.ready&&getComputedStyle(document.getElementById('loading')).opacity==='0');
  assert.equal(await page.locator('[data-menu="dd-inst"],#dd-inst').count(),0);
  assert.equal(await page.locator('#inspection-drive button').count(),3);

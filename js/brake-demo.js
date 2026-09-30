@@ -31,6 +31,7 @@ const BrakeDemo = (() => {
     panel=document.createElement('section');panel.id='brake-compare-panel';panel.className='glass';panel.hidden=true;panel.setAttribute('aria-label','주브레이크 비교 설정');
     panel.innerHTML='<div class="part-panel-head"><strong>주브레이크 비교</strong><button id="brake-compare-dismiss" aria-label="접기">×</button></div><div class="choices"><button data-brake-mode="dual" aria-pressed="true">더블 · 기본</button><button data-brake-mode="single" aria-pressed="false">싱글 · 구형</button></div><p>가벼운 카 · 균형추가 더 무거움<br>모터 유지 토크 없음 · 웜기어 정상</p><p>보호망을 벗겨 도르래·로프 움직임을 비교합니다. 정상 브레이크는 코일 전원이 끊기면 잡힙니다.</p><button id="btn-brake-compare">고장 비교 시작</button>';
     document.getElementById('part-actions').append(button,panel);
+    PartGlow.bind(button,()=>{const t=traction();return t?.ready?[...t.arms,...t.compare.dual]:null;},'권상기 주브레이크');
     button.onclick=()=>{const open=panel.hidden;closeAllMenus();panel.hidden=!open;button.setAttribute('aria-expanded',String(open));};
     panel.querySelector('#brake-compare-dismiss').onclick=close;
     panel.querySelectorAll('[data-brake-mode]').forEach(b=>b.onclick=()=>{state.mode=b.dataset.brakeMode;panel.querySelectorAll('[data-brake-mode]').forEach(n=>n.setAttribute('aria-pressed',String(n===b)));});

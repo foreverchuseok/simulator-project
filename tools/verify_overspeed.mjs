@@ -16,7 +16,7 @@ try{
  page.on('requestfailed',r=>console.error('REQUEST FAILED',r.url(),r.failure()?.errorText));
  const cdp=await page.context().newCDPSession(page);await cdp.send('Network.setCacheDisabled',{cacheDisabled:true});
  await page.routeWebSocket('**',ws=>ws.close());
- await page.goto(process.argv.includes('--live')?'http://127.0.0.1:5500/index.html':`http://127.0.0.1:${server.address().port}/index.html`,{waitUntil:'networkidle'});
+ await page.goto(process.argv.includes('--live')?'http://127.0.0.1:5500/index.html?legacyIcons':`http://127.0.0.1:${server.address().port}/index.html?legacyIcons`,{waitUntil:'networkidle'});
  await page.waitForFunction(()=>govHandles()?.ready&&carGrp.userData.safetyGear?.wedges.length===4);
  await page.evaluate(keepShadows=>{renderer.setPixelRatio(0.8);renderer.shadowMap.enabled=keepShadows;gsap.ticker.lagSmoothing(0);},process.argv.includes('--shadows'));
  console.log('OVS models loaded');

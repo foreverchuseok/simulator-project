@@ -12,6 +12,7 @@ const InspectionStations=(()=>{
     b.setAttribute('aria-label',key==='pit'?'피트 점검운전':key==='machine'?'기계실 제어반 점검운전':'카 상부 점검운전');b.title=b.getAttribute('aria-label')+' · 리셋으로 자동 복귀';
     b.addEventListener('click',()=>toggle(key));document.getElementById('part-actions').appendChild(b);
     stations[key]={node,button:b};
+    PartGlow.bind(b,()=>node,key==='pit'?'피트 점검운전반':key==='machine'?'제어반 점검운전 스위치':'카 상부 점검운전반');
   }
   function build(){
     add('pit',shaftCableGrp.getObjectByName('pitInspectionStation'));
@@ -46,6 +47,11 @@ const InspectionStations=(()=>{
     g.userData={ready:true,type:'machine-inspection-station',
       up:.012*ky,down:-.162*ky,common:-.075*ky,
       iconX:(data.switchWidth/2+.067+.035)*kx,iconY:.100*ky};
+    // 스위치판은 CabinetInterior 메시에 합쳐져 있어 발광·탭 대상으로 보이지 않는 대리 상자를 둔다(js/part-glow.js).
+    // 판 중심 = (SW_X, SW_Y, fz). 높이 SW_H(.46)는 GLB가 아직 내보내지 않아 control_panel_sicon.py 값을 따른다.
+    const proxy=new THREE.Mesh(new THREE.BoxGeometry(data.switchWidth*kx,(data.switchHeight??.46)*ky,.04*kz),
+      new THREE.MeshBasicMaterial({colorWrite:false,depthWrite:false,transparent:true}));
+    proxy.name='machineInspectionGlowProxy';proxy.position.set(.067*kx,0,.007*kz);g.add(proxy);  // 판 앞으로 40mm 두께 — 뒷면 윤곽이 판 표면에 가려지지 않게
     root.add(g);add('machine',g);
   }
   function stop(){insHold=0;insStop();}

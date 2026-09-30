@@ -92,7 +92,8 @@ const HallManual=(()=>{
   }
   function bind(){
     const icon='url("data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.7"><path d="M4 21V3h16v18M12 3v18M8 12h1m6 0h1"/><path d="m7 17 2-2 2 2m2 0 2-2 2 2"/></svg>')+'")';
-    for(let f=0;f<FLOORS;f++){const b=document.createElement('button');b.className='part-action';b.type='button';b.id=`hall-action-${f}`;b.hidden=true;b.setAttribute('aria-label',`${f+1}층 승장문 점검`);b.setAttribute('aria-controls','hall-panel');b.setAttribute('aria-expanded','false');b.style.setProperty('--part-icon',icon);b.onclick=()=>pick(f);el('part-actions').appendChild(b);buttons.push(b);}
+    for(let f=0;f<FLOORS;f++){const b=document.createElement('button');b.className='part-action';b.type='button';b.id=`hall-action-${f}`;b.hidden=true;b.setAttribute('aria-label',`${f+1}층 승장문 점검`);b.setAttribute('aria-controls','hall-panel');b.setAttribute('aria-expanded','false');b.style.setProperty('--part-icon',icon);b.onclick=()=>pick(f);el('part-actions').appendChild(b);buttons.push(b);
+      PartGlow.bind(b,()=>hatchDoors[f]?.right.userData.triKey?.group,`${f+1}층 승장문 비상키`);}
     el('hall-dismiss').onclick=dismiss;el('hall-half').onclick=()=>request(.5);el('hall-open').onclick=()=>request(1);el('hall-close').onclick=close;refresh();
   }
   function resetAll(){

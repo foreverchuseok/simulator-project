@@ -15,7 +15,7 @@ async function open(viewport, mobile = false) {
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !/ReadPixels|GPU stall/.test(m.text())) errors.push(m.text()); });
   const cdp = await context.newCDPSession(page); await cdp.send('Network.setCacheDisabled', {cacheDisabled: true});
-  await page.goto('http://127.0.0.1:5500/index.html', {waitUntil: 'networkidle'});
+  await page.goto('http://127.0.0.1:5500/index.html?legacyIcons', {waitUntil: 'networkidle'});
   await page.waitForFunction(ready);
   return {page, errors};
 }

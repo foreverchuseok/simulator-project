@@ -7,7 +7,7 @@ const browser=await chromium.launch({args:['--enable-gpu']});
 try{
  const page=await browser.newPage({viewport:{width:1093,height:661},deviceScaleFactor:1,hasTouch:true});const errors=[];
  page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(90000);
- await page.goto('http://127.0.0.1:5500/index.html',{waitUntil:'networkidle'});
+ await page.goto('http://127.0.0.1:5500/index.html?legacyIcons',{waitUntil:'networkidle'});
  await page.waitForFunction(()=>MachineRoomPower.ready&&CarDoor.state?.ready&&getComputedStyle(document.getElementById('loading')).opacity==='0');
  await page.evaluate(()=>{controls.enableDamping=false;});
  const perf=()=>page.evaluate(async()=>{const t=[];let last=await new Promise(requestAnimationFrame);for(let i=0;i<180;i++){const n=await new Promise(requestAnimationFrame);t.push(n-last);last=n;}t.sort((a,b)=>a-b);return {median:t[90],p95:t[171],calls:renderer.info.render.calls,triangles:renderer.info.render.triangles};});

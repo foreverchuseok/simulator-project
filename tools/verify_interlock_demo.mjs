@@ -9,7 +9,7 @@ try{
  page.on('pageerror',e=>errors.push(e.stack));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
  if(baseline)await page.route('**/js/hall-interlock.js*',r=>r.fulfill({contentType:'text/javascript',body:execFileSync('git',['show','HEAD:js/hall-interlock.js'],{encoding:'utf8'})}));
  const cdp=await page.context().newCDPSession(page);await cdp.send('Network.setCacheDisabled',{cacheDisabled:true});
- await page.goto(process.env.SIMULATOR_URL||'http://127.0.0.1:5500/index.html',{waitUntil:'networkidle'});
+ await page.goto(process.env.SIMULATOR_URL||'http://127.0.0.1:5500/index.html?legacyIcons',{waitUntil:'networkidle'});
  await page.waitForFunction(()=>hatchDoors.every(h=>h.interlock?.ready)&&CarDoor.state?.ready&&getComputedStyle(document.getElementById('loading')).opacity==='0');
  const aim=async f=>page.evaluate(f=>{const h=hatchDoors[f],p=h.interlock.fixed.getWorldPosition(new THREE.Vector3());p.x+=.05;p.y+=.005;p.z-=.05;controls.target.copy(p);camera.position.copy(p).add(new THREE.Vector3(.03,.08,-.75));controls.update();},f);
  const perf=()=>page.evaluate(async()=>{const a=[];let last=await new Promise(requestAnimationFrame);for(let i=0;i<120;i++){const now=await new Promise(requestAnimationFrame);a.push(now-last);last=now;}a.sort((a,b)=>a-b);return{median:a[60],p95:a[114],calls:renderer.info.render.calls,triangles:renderer.info.render.triangles};});
@@ -45,7 +45,7 @@ try{
   await page.waitForFunction(()=>InterlockDemo.phase==='unlock'&&InterlockDemo.poseState.release>.99);await page.screenshot({path:`${out}/mobile-unlock.png`});
   const box=await page.locator('#interlock-demo-panel').boundingBox();assert.ok(box.x>=0&&box.y>=0&&box.x+box.width<=390&&box.y+box.height<=844);
   await page.tap('#interlock-demo-cancel');assert.equal(await page.evaluate(()=>!InterlockDemo.active&&DoorBypass.hallSecured()),true);
-  await page.evaluate(()=>PartActions.setIconsVisible(false));assert.equal(await page.locator('#interlock-action-1').isVisible(),false);await page.evaluate(()=>PartActions.setIconsVisible(true));
+  await page.evaluate(()=>PartGlow.setEnabled(false));assert.equal(await page.locator('#interlock-action-1').isVisible(),true);await page.evaluate(()=>PartGlow.setEnabled(true));
   await aim(1);await page.tap('#interlock-action-1');await page.waitForFunction(()=>InterlockDemo.phase==='hold');await page.screenshot({path:`${out}/mobile-half.png`});await page.keyboard.press('Escape');
   assert.equal(await page.evaluate(()=>!InterlockDemo.active&&DoorBypass.hallSecured()&&controls.enabled),true);
   // Blocked clicks must explain the current state, without changing it.

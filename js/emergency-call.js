@@ -87,6 +87,7 @@ const EmergencyCall = (() => {
       b.title = LOC[key].label + ' 비상통화 버튼';
       b.addEventListener('click', () => press(key));
       document.getElementById('part-actions').appendChild(b); buttons[key] = b;
+      PartGlow.bind(b, () => anchors[key], LOC[key].label + ' 비상통화장치', () => '비상통화 버튼 누르기');
     }
     caption = document.createElement('div');
     caption.id = 'ec-caption'; caption.className = 'glass'; caption.hidden = true;

@@ -21,6 +21,7 @@ Three.js로 승강로, 카, 도어, 기계실, 피트와 안전장치를 구성�
 - 아래 **운행바**: 도어 열림·닫힘, 층 버튼(현재 층 점등, 호출 층 파란 링), 비상정지(누르면 「해제」로 바뀜). 메뉴를 열지 않고 바로 쓴다.
 - 오른쪽 위 **레일**: 「고장·점검」 시트(운전 모드 AUT/INS·▲▼, 과속 OVS, 개문발차 UCM·로프브레이크 상태, 승장문 점검, BYPASS, 피트 사다리), 「설정」 시트, 「전체 보기」.
 - 부품별 카메라 프리셋 메뉴는 없앴다. 부품은 더블클릭·더블탭으로 다가가고, 시연(OVS·UCM 등)은 카메라가 알아서 움직인다.
+- **기능 부품 발광**(2026-09-30, `js/part-glow.js`): 떠 있는 원형 아이콘 대신 기능이 있는 부품 자체가 은은한 금색 윤곽·반짝이로 빛나고, 누르면 부품 메뉴(자체 설정창이 있으면 그 창)가 열린다. 설정 「부품 빛 효과」로 끌 수 있고, 꺼도 탭 메뉴·호버 강조는 동작한다. 각 모듈의 `.part-action` 버튼은 화면에서 숨긴 행동 핸들러이며 `PartGlow.bind(버튼, 대상, 이름)`으로 3D 부품과 잇는다. 옛 아이콘 검증용 주소 `?legacyIcons`. 검증: `node tools/verify_part_glow.mjs`.
 - 선택 항목(로프브레이크 상태·BYPASS·정격 속도)은 숨긴 `<select>` 원본의 값·change 이벤트를 그대로 쓰고, 화면에는 세그먼트 버튼으로 보인다(`renderSegments()`).
 - 세로 폰(≤600px)에서는 시트와 승장문 점검 패널이 운행바 위 바텀시트로 뜨고, 가로 폰에서는 오른쪽 패널로 뜬다. 버튼은 모두 44px 이상이다. 검증: `node tools/verify_view_modes.mjs`.
 - **모바일 컴팩트 모드**(2026-09-26, 폰 세로 ≤600px·가로 폰): PC 화면은 그대로 두고 폰에서만 적용한다.
@@ -275,7 +276,7 @@ ESTOP
 `elevatorState`의 `slowdownActive`, `limitActive`, `finalLimitActive`는 선언되어 있지만 현재 운행 FSM과 연결되지 않았다.
 `landingDevices[]`와 `carSensors`도 시각적 배치·디버그 참조이며 실제 충돌 검출로 카를 감속하거나 정지시키지는 않는다.
 
-부품 아이콘에서 OVS 하강과속(`js/ui.js`), UCM 개문발차(`js/ucm-demo.js`), 상승과속(`js/ascent-demo.js`)를 실행한다. 로프브레이크 위에는 개문출발·상승과속 두 아이콘이 나란히 있고, 상승과속은 웜 구동부 파손 후 정상 파지/미설치 충돌을 비교한다. 계약은 `docs/MACHINE-ROOM-SAFETY.md`를 따른다.
+빛나는 부품 메뉴에서 OVS 하강과속(`js/ui.js`), UCM 개문발차(`js/ucm-demo.js`), 상승과속(`js/ascent-demo.js`)를 실행한다. 로프브레이크 메뉴에는 개문발차·상승과속 두 항목이 있고, 상승과속은 웜 구동부 파손 후 정상 파지/미설치 충돌을 비교한다. 계약은 `docs/MACHINE-ROOM-SAFETY.md`를 따른다.
 동작이 연결되지 않았던 DR·SAF·탑승자 버튼은 2026-09-26 HUD 재설계에서 뺐다.
 
 ## 기능별 수정 위치
@@ -287,6 +288,7 @@ ESTOP
 | 층수·층고·피트 | `index.html` | `FLOORS`, `FLOOR_Y`, `PIT`, `OVERHEAD` |
 | 카 깊이 연동 Z 좌표 | `index.html` | `CAR_FRONT_Z`, `CAR_CTR_Z`, `SHAFT_BACK_Z` 등 |
 | HUD 모양 | `index.html` | HTML과 `<style>` |
+| 기능 부품 발광·탭 메뉴 | `js/part-glow.js` | `PartGlow.bind()`(각 모듈 버튼 생성부), 색·폭 `syncPart()`, 설정 `#part-glow-toggle` |
 | 카 실내·프레임·에이프런 | `js/elevator.js` 스텁, 원본 `js/archive/car.js` | `buildCarCabin()` |
 | 카 재공사 안내 | `docs/CAR-REBUILD.md` | 부품별 복원 규칙 |
 | 카 도어·오퍼레이터 | `js/car-door.js`, `docs/CAR-DOOR.md` | `buildCarDoors()`, `CarDoor.pose()`, `spinDoorDrive()` |

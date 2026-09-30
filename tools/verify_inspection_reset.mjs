@@ -8,7 +8,7 @@ try {
   const page=await browser.newPage({viewport:mobile?{width:390,height:844}:{width:1280,height:850},hasTouch:mobile,deviceScaleFactor:1});
   page.on('pageerror',e=>errors.push(e.message));
   await page.routeWebSocket('**',ws=>ws.close());
-  await page.goto(process.env.SIMULATOR_URL||'http://127.0.0.1:5500/index.html',{waitUntil:'networkidle'});
+  await page.goto(process.env.SIMULATOR_URL||'http://127.0.0.1:5500/index.html?legacyIcons',{waitUntil:'networkidle'});
   await page.waitForFunction(()=>CarDoor.state?.ready&&PitLadder.secured&&hatchDoors.every(h=>h.interlock?.ready)&&document.getElementById('loading').classList.contains('hide'));
   // Independent hall opening: reset must close and relock every manual door.
   await page.evaluate(()=>{HallManual.select(1);HallManual.request(1);});

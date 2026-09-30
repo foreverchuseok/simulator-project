@@ -6,7 +6,7 @@ const browser=await chromium.launch({args:['--enable-gpu']});
 try{
  const page=await browser.newPage({viewport:{width:1200,height:850},hasTouch:true});page.setDefaultTimeout(60000);
  const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.routeWebSocket('**',ws=>ws.close());
- await page.goto('http://127.0.0.1:5500/index.html',{waitUntil:'networkidle'});
+ await page.goto('http://127.0.0.1:5500/index.html?legacyIcons',{waitUntil:'networkidle'});
  await page.waitForFunction(()=>scene.getObjectByName('machineInspectionStation')&&CarDoor.state?.ready&&document.querySelector('#loading.hide'));
  const look=()=>page.evaluate(()=>{leaveCabinView();controls.enableDamping=false;gsap.killTweensOf(camera.position);gsap.killTweensOf(controls.target);const r=ControlPanel.root;controls.target.copy(r.localToWorld(new THREE.Vector3(0,.68,0)));camera.position.copy(r.localToWorld(new THREE.Vector3(.12,.85,2.2)));camera.fov=38;camera.updateProjectionMatrix();controls.update();});
  const perf=()=>page.evaluate(async()=>{const a=[];let p=await new Promise(requestAnimationFrame);for(let i=0;i<120;i++){const n=await new Promise(requestAnimationFrame);a.push(n-p);p=n;}a.sort((a,b)=>a-b);return {median:a[60],p95:a[114],calls:renderer.info.render.calls};});

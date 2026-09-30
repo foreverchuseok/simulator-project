@@ -7,7 +7,7 @@ const page=await browser.newPage({viewport:{width:1280,height:850},deviceScaleFa
 page.on('pageerror',e=>errors.push(e.stack));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
 await page.routeWebSocket('**',ws=>ws.close());
 const cdp=await page.context().newCDPSession(page);await cdp.send('Network.setCacheDisabled',{cacheDisabled:true});
-const load=async()=>{await page.goto('http://127.0.0.1:5500/index.html',{waitUntil:'networkidle'});await page.waitForFunction(()=>MachineRoomPower.ready&&EmergencyLighting.ready&&CarDoor.state?.ready&&carGrp.getObjectByName('terraceCeiling')?.userData.ready);};
+const load=async()=>{await page.goto('http://127.0.0.1:5500/index.html?legacyIcons',{waitUntil:'networkidle'});await page.waitForFunction(()=>MachineRoomPower.ready&&EmergencyLighting.ready&&CarDoor.state?.ready&&carGrp.getObjectByName('terraceCeiling')?.userData.ready);};
 const perf=()=>page.evaluate(async()=>{const samples=[];let last=await new Promise(requestAnimationFrame);for(let i=0;i<120;i++){const now=await new Promise(requestAnimationFrame);samples.push(now-last);last=now;}samples.sort((a,b)=>a-b);return {median:samples[60],p95:samples[114],calls:renderer.info.render.calls,triangles:renderer.info.render.triangles};});
 const machine=()=>page.evaluate(()=>{leaveCabinView();gsap.killTweensOf(camera.position);gsap.killTweensOf(controls.target);const p=MachineRoomPower.root.getObjectByName('ARDInstallation').getWorldPosition(new THREE.Vector3());p.y+=.8;camera.position.set(p.x+3,p.y+.3,p.z+1.25);controls.target.copy(p);controls.update();});
 const stage=async s=>{await page.waitForFunction(s=>ARDDemo.state.stage===s,s);console.log('stage',s);};

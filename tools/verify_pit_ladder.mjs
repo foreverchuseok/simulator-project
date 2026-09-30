@@ -5,7 +5,7 @@ import { chromium } from 'playwright';
 
 const out = '.shot-pit-ladder';
 fs.mkdirSync(out, { recursive: true });
-const URL = process.env.SIMULATOR_URL || 'http://127.0.0.1:5500/index.html';
+const URL = process.env.SIMULATOR_URL || 'http://127.0.0.1:5500/index.html?legacyIcons';
 const ready = () => typeof HallManual !== 'undefined' && CarDoor.state?.ready && hatchDoors.every(h => h.interlock?.ready)
   && scene.getObjectByName('pitFoldingLadder')?.userData.switchReady && document.getElementById('loading').classList.contains('hide');
 const browser = await chromium.launch({ args: ['--enable-gpu'] });

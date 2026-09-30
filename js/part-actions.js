@@ -4,14 +4,8 @@ const PartActions=(()=>{
   const point=new THREE.Vector3(),govScreen={x:0,y:0,visible:false};
   let statusBox,runBox;
   let guidePanel,activeGuide;
-  let iconsVisible=true;
-  function setIconsVisible(value){
-    iconsVisible=!!value;close();
-    document.body.classList.toggle('part-icons-hidden',!iconsVisible);
-    const b=document.getElementById('part-icons-toggle');
-    b.setAttribute('aria-pressed',String(iconsVisible));
-    b.textContent=iconsVisible?'부품 아이콘 숨기기':'부품 아이콘 보이기';
-  }
+  // 아이콘 버튼은 화면에서 숨긴 행동 핸들러다(js/part-glow.js). 빛 효과 설정과 무관하게 상호작용은 항상 켠다.
+  const iconsVisible=true;
   const guideButtons=new Map(),guideOffset=new THREE.Vector3(0,.065,-.025),guideWorld=new THREE.Vector3();
   function positionButton(button,x,y){
     x=Math.max(8,Math.min(innerWidth-52,x));y=Math.max(8,Math.min(innerHeight-52,y));
@@ -51,6 +45,8 @@ const PartActions=(()=>{
     governor=document.getElementById('btn-overspeed');brake=document.getElementById('rope-brake-action');
     panel=document.getElementById('rope-brake-panel');source=document.getElementById('btn-ucm');
     icon(document.getElementById('pit-ladder-action'),'ladder');sync();
+    PartGlow.bind(governor,()=>govHandles()?.ready?govHandles().wheel.parent:null,'조속기');
+    PartGlow.bind(brake,ropeBrakeNode,'로프브레이크',()=>UCMDemo.state.active?'개문발차 복귀':'개문발차 시연 설정');
     for(const b of [governor,source])new MutationObserver(sync).observe(b,{childList:true,characterData:true,subtree:true,attributes:true,attributeFilter:['disabled']});
     brake.addEventListener('click',()=>{
       if(UCMDemo.state.active){source.click();return;}
@@ -59,6 +55,7 @@ const PartActions=(()=>{
     document.getElementById('rope-brake-dismiss').addEventListener('click',close);
     document.addEventListener('pointerdown',e=>{if(!panel.hidden&&!panel.contains(e.target)&&e.target!==brake)close();});
   }
+  function ropeBrakeNode(){const i=scene.getObjectByName('RopeBrakeInstallation');return i?.userData.ready?i.getObjectByName('RopeBrake'):null;}
   function visible(object){for(let p=object;p;p=p.parent)if(!p.visible)return false;return !!object;}
   function place(button,object,offset){
     if(!visible(object)){button.hidden=true;return false;}
@@ -90,6 +87,7 @@ const PartActions=(()=>{
         button.setAttribute('aria-controls','emergency-guide-panel');button.setAttribute('aria-expanded','false');icon(button,'guide');
         button.addEventListener('click',()=>{const open=activeGuide!==button||guidePanel.hidden;closeAllMenus();if(open){guidePanel.innerHTML=retention?retentionContent:guideContent;guidePanel.setAttribute('aria-label',retention?'승장문 하부 이탈방지장치 설명':'승강장문 비상가이드 설명');guidePanel.querySelector('button').addEventListener('click',close);activeGuide=button;guidePanel.hidden=false;button.setAttribute('aria-expanded','true');}});
         document.getElementById('part-actions').appendChild(button);guideButtons.set(guide,button);
+        PartGlow.bind(button,()=>guide,retention?'승장문 하부 이탈방지장치':'승강장문 비상가이드',()=>'구조 설명 보기');
       }
       guide.getWorldPosition(guideWorld);
       if(camera.position.distanceToSquared(guideWorld)>9){button.hidden=true;}else place(button,guide,guideOffset);
@@ -124,5 +122,5 @@ const PartActions=(()=>{
       panel.style.top=Math.max(8,Math.min(innerHeight-panel.offsetHeight-8,parseFloat(brake.style.top)+50))+'px';
     }
   }
-  return {bind,update,close,positionButton,setIconsVisible,get iconsVisible(){return iconsVisible;}};
+  return {bind,update,close,positionButton,ropeBrakeNode,get iconsVisible(){return iconsVisible;}};
 })();

@@ -44,6 +44,7 @@ const MachineRoomPower = (() => {
     button.id = 'distribution-box-action'; button.type = 'button'; button.className = 'part-action'; button.hidden = true;
     button.style.setProperty('--part-icon', ICON);
     button.addEventListener('click', toggle);
+    PartGlow.bind(button, () => root?.getObjectByName('DistributionBoxInstallation'), '엘리베이터 분전함');
     document.getElementById('part-actions').appendChild(button);
     syncButton();
     return root;

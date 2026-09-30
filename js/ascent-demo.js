@@ -64,6 +64,7 @@ const AscentDemo = (() => {
     const svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v18m4-18v18M6 7H3v10h3m10-10h3v10h-3M3 12h4m8 0h4M20 6V2m-2 2 2-2 2 2"/></svg>';
     button.style.setProperty('--part-icon',`url("data:image/svg+xml,${encodeURIComponent(svg)}")`);
     document.getElementById('part-actions').appendChild(button);
+    PartGlow.bind(button,()=>PartActions.ropeBrakeNode(),'로프브레이크',()=>'상승과속 시연 설정');
     panel=document.createElement('section');panel.id='ascent-panel';panel.className='glass';panel.hidden=true;panel.setAttribute('aria-label','상승과속 시연 설정');
     panel.innerHTML='<div class="part-panel-head"><strong>상승과속 · 로프브레이크</strong><button id="ascent-dismiss" aria-label="접기">×</button></div><div class="ascent-options"><button data-ascent-mode="normal" aria-pressed="true">정상 작동</button><button data-ascent-mode="none" aria-pressed="false">미설치</button></div><button id="btn-ascent">상승과속 시연</button>';
     document.getElementById('part-actions').appendChild(panel);play=panel.querySelector('#btn-ascent');

@@ -8,7 +8,7 @@ try{
  page.setDefaultTimeout(90000);page.on('pageerror',e=>errors.push(e.stack));
  page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
  const cdp=await page.context().newCDPSession(page);await cdp.send('Network.setCacheDisabled',{cacheDisabled:true});
- await page.goto(process.env.SIMULATOR_URL||'http://127.0.0.1:5500/index.html',{waitUntil:'networkidle'});
+ await page.goto(process.env.SIMULATOR_URL||'http://127.0.0.1:5500/index.html?legacyIcons',{waitUntil:'networkidle'});
  await page.waitForFunction(()=>HallEmergencyGuide.guides.length===FLOORS*2&&CarDoor.state?.ready&&govHandles()?.ready&&getComputedStyle(document.getElementById('loading')).opacity==='0');
  await page.evaluate(()=>{controls.enableDamping=false;carGrp.position.y=FLOOR_Y[3]+S.CAR_H/2;refreshRopes();refreshGovernorRope();});
  const aim=async(side=1,detail=false)=>page.evaluate(({side,detail})=>{

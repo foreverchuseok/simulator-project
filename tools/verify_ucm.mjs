@@ -8,7 +8,7 @@ import { chromium } from 'playwright';
 const width = Number(process.env.UCM_WIDTH || 1280);
 const out = width === 1280 ? '.shot-ucm' : `.shot-ucm-${width}`;
 fs.mkdirSync(out, { recursive: true });
-const URL = process.env.SIMULATOR_URL || 'http://127.0.0.1:5500/index.html';
+const URL = process.env.SIMULATOR_URL || 'http://127.0.0.1:5500/index.html?legacyIcons';
 const modes = process.argv.slice(2).filter(a => ['normal', 'fail', 'none'].includes(a));
 const ready = () => typeof UCMDemo !== 'undefined' && CarDoor.state?.ready && hatchDoors.every(h => h.interlock?.ready)
   && scene.getObjectByName('RopeBrakeInstallation')?.userData.ready && document.getElementById('loading').classList.contains('hide');

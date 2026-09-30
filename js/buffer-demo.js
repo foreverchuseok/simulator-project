@@ -87,6 +87,8 @@ const BufferDemo = (() => {
         if (!U.active) start(m.key);
         else if (U.mode === m.key && (U.stage === 'done' || U.stage === 'halted')) reset();
       });
+      // 발광 대상: 같은 Z 의 지지대·받침판·완충체(속도 변경 시 bufferGrp 가 다시 만들어진다).
+      PartGlow.bind(b, () => bufferGrp?.children.filter(o => Math.abs(o.position.z - m.z()) < .01), m.key === 'car' ? '카 완충기' : '균형추 완충기');
     }
   }
 

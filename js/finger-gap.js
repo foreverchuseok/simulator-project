@@ -30,6 +30,7 @@ const FingerGap=(()=>{
     entries.push({kind:'car',floor:-1,strips,button:button('카문','finger-gap-car'),
       anchor:new THREE.Vector3(edge-STRIP_W/2,d.floor+REACH_H+.14,d.jambFaceZ),parent:carGrp,owner:carDoorR,
       facing:()=>{local.copy(camera.position);carGrp.worldToLocal(local);return local.z<d.jambFaceZ&&Math.abs(local.x)<S.CAR_W/2&&Math.abs(local.y)<S.CAR_H/2;}});
+    for(const e of entries)PartGlow.bind(e.button,()=>e.strips,`${e.kind==='car'?'카문':e.floor+1+'층 승강장문'} 손끼임 방지 틈새`);
     built=true;
   }
   function button(label,id){

@@ -71,6 +71,7 @@ const EmergencyLighting=(()=>{
         [entry[0]+.07,entry[1]-.07,entry[2]],entry]);
       button=document.createElement('button');button.type='button';button.id='emergency-light-action';button.className='part-action';button.hidden=true;
       button.style.setProperty('--part-icon',ICON);button.addEventListener('click',toggle);document.getElementById('part-actions').appendChild(button);
+      PartGlow.bind(button,()=>power,'비상조명 전원장치');
       power.userData.ready=true;ready=true;apply();
     }catch(e){console.error('[emergency lighting] build failed',e);}
   }

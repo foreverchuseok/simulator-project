@@ -12,7 +12,7 @@ try{
  page.on('pageerror',e=>errors.push(e.stack));
  page.on('console',m=>{if(m.type()==='error')(/Interlock QA (setup|frame) failure/.test(m.text())?expectedErrors:errors).push(m.text());});
  await page.route('**/favicon.ico',r=>r.fulfill({status:204}));
- await page.goto(process.env.SIMULATOR_URL||'http://127.0.0.1:5500/',{waitUntil:'networkidle'});
+ await page.goto(process.env.SIMULATOR_URL||'http://127.0.0.1:5500/?legacyIcons',{waitUntil:'networkidle'});
  await page.waitForFunction(()=>CarDoor.state?.ready&&hatchDoors.every(h=>h.interlock?.ready)&&getComputedStyle(document.getElementById('loading')).opacity==='0');
  const environment=await page.evaluate(()=>{
   const gl=renderer.getContext(),ext=gl.getExtension('WEBGL_debug_renderer_info');

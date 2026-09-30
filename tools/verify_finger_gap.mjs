@@ -8,7 +8,7 @@ try{
  const page=await browser.newPage({viewport:{width:1280,height:800},deviceScaleFactor:1,hasTouch:true});page.setDefaultTimeout(60000);
  page.on('pageerror',e=>errors.push(e.stack));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
  const cdp=await page.context().newCDPSession(page);await cdp.send('Network.setCacheDisabled',{cacheDisabled:true});
- await page.goto(process.env.SIMULATOR_URL||'http://127.0.0.1:5500/index.html',{waitUntil:'networkidle'});
+ await page.goto(process.env.SIMULATOR_URL||'http://127.0.0.1:5500/index.html?legacyIcons',{waitUntil:'networkidle'});
  await page.waitForFunction(()=>hatchDoors.every(h=>h.interlock?.ready)&&CarDoor.state?.ready&&FingerGap.entries.length===FLOORS+1&&getComputedStyle(document.getElementById('loading')).opacity==='0');
  await page.waitForTimeout(800);
  // Measured from rendered meshes, not from the FingerGap inputs.
@@ -76,8 +76,8 @@ try{
  await page.keyboard.press('Escape');assert.equal(await page.evaluate(()=>FingerGap.active),null);
  await page.evaluate(()=>closeDoors());await page.waitForFunction(()=>currentState===ELEVATOR_STATE.IDLE&&!doorOpen);
  // Hiding icons leaves the permanent jamb strips visible.
- await page.evaluate(()=>PartActions.setIconsVisible(false));await page.waitForTimeout(200);
- assert.equal(await page.locator('#finger-gap-car').isVisible(),false);assert.deepEqual((await state()).shown,Array(FLOORS_N()+1).fill(2));await page.evaluate(()=>PartActions.setIconsVisible(true));
+ await page.evaluate(()=>PartGlow.setEnabled(false));await page.waitForTimeout(200);
+ assert.deepEqual((await state()).shown,Array(FLOORS_N()+1).fill(2));await page.evaluate(()=>PartGlow.setEnabled(true));
  // 390px touch.
  await page.setViewportSize({width:390,height:844});await page.evaluate(([f])=>{const q=hatchDoors[f].fingerGap;controls.target.set(-.35,q.floorY+1.0,q.faceZ);camera.position.set(-.3,q.floorY+1.45,q.faceZ+2.3);controls.update();},[other]);await page.waitForTimeout(400);
  await page.tap(`#finger-gap-hall-${other}`);await page.waitForTimeout(300);

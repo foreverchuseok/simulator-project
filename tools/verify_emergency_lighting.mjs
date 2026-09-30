@@ -9,7 +9,7 @@ try{
  if(before)await page.route('**/js/emergency-lighting.js*',route=>route.fulfill({contentType:'text/javascript',body:'const EmergencyLighting={build(){},update(){}};'}));
  page.on('pageerror',e=>errors.push(e.stack));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
  const cdp=await page.context().newCDPSession(page);await cdp.send('Network.setCacheDisabled',{cacheDisabled:true});
- await page.goto(process.env.SIMULATOR_URL||'http://127.0.0.1:5500/index.html',{waitUntil:'networkidle'});
+ await page.goto(process.env.SIMULATOR_URL||'http://127.0.0.1:5500/index.html?legacyIcons',{waitUntil:'networkidle'});
  await page.waitForFunction(()=>CarDoor.state?.ready&&carGrp.getObjectByName('terraceCeiling')?.userData.ready&&getComputedStyle(document.getElementById('loading')).opacity==='0');
  if(!before)await page.waitForFunction(()=>EmergencyLighting.ready);
  const look=async mode=>{await page.evaluate(mode=>{gsap.killTweensOf(camera.position);gsap.killTweensOf(controls.target);controls.enableDamping=false;
@@ -48,7 +48,7 @@ try{
   localBefore.forEach((a,i)=>a.forEach((v,j)=>assert.ok(Math.abs(v-localAfter[i][j])<1e-6)));report.travel=true;
   await page.setViewportSize({width:390,height:844});await look('top');await page.tap('#emergency-light-action');assert.equal((await state()).on,true);
   await page.screenshot({path:`${out}/mobile-top-on.png`});await page.tap('#emergency-light-action');assert.equal((await state()).on,false);
-  await page.evaluate(()=>PartActions.setIconsVisible(false));assert.equal(await button.isVisible(),false);await page.evaluate(()=>PartActions.setIconsVisible(true));await page.waitForTimeout(100);assert.equal(await button.isVisible(),true);
+  await page.evaluate(()=>PartGlow.setEnabled(false));await page.waitForTimeout(100);assert.equal(await button.isVisible(),true);await page.evaluate(()=>PartGlow.setEnabled(true));
   await page.tap('#emergency-light-action');await look('inside');await page.screenshot({path:`${out}/mobile-inside-on.png`});
  }else{await look('inside');report.insideOff=await perf();}
  report.errors=errors;assert.deepEqual(errors,[]);

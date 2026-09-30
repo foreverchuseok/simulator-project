@@ -13,7 +13,7 @@ const shot=name=>page.screenshot({path:`${out}/${name}.png`});
 try{
  page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
  const cdp=await page.context().newCDPSession(page);await cdp.send('Network.setCacheDisabled',{cacheDisabled:true});await page.routeWebSocket('**',ws=>ws.close());
- await page.goto(process.env.SIMULATOR_URL||'http://127.0.0.1:5500/index.html',{waitUntil:'networkidle'});
+ await page.goto(process.env.SIMULATOR_URL||'http://127.0.0.1:5500/index.html?legacyIcons',{waitUntil:'networkidle'});
  await until(()=>mrGrp.userData.traction.ready&&govHandles()?.ready&&CarDoor.secured()&&hatchDoors.every(h=>h.interlock?.ready));
  await page.evaluate(()=>{
   gsap.ticker.lagSmoothing(0);

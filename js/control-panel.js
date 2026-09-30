@@ -47,6 +47,7 @@ const ControlPanel = (() => {
     button.hidden = true;
     button.style.setProperty('--part-icon', ICON);
     button.addEventListener('click', toggle);
+    PartGlow.bind(button, () => ready ? root : null, '제어반');
     document.getElementById('part-actions').appendChild(button);
     return root;
   }

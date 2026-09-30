@@ -7,7 +7,7 @@ try {
  const page=await browser.newPage({viewport:{width:1280,height:850},deviceScaleFactor:1,hasTouch:true});
  const errors=[];page.on('pageerror',e=>errors.push(e.stack));page.setDefaultTimeout(30000);
  await page.routeWebSocket('**',ws=>ws.close());
- await page.goto('http://127.0.0.1:5500/index.html',{waitUntil:'networkidle'});
+ await page.goto('http://127.0.0.1:5500/index.html?legacyIcons',{waitUntil:'networkidle'});
  await page.waitForFunction(()=>CarDoor.state?.ready&&hatchDoors.every(h=>h.interlock?.ready)&&getComputedStyle(document.getElementById('loading')).opacity==='0');
  await page.evaluate(()=>{controls.enableDamping=false;HallManual.select(1);HallManual.observe();});
  const performance=await page.evaluate(async()=>{const t=[];let last=await new Promise(requestAnimationFrame);for(let i=0;i<180;i++){const n=await new Promise(requestAnimationFrame);t.push(n-last);last=n;}t.sort((a,b)=>a-b);return {median:t[90],p95:t[171],calls:renderer.info.render.calls,triangles:renderer.info.render.triangles};});

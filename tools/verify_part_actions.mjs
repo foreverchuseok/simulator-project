@@ -7,7 +7,7 @@ try{
  for(const mobile of [false,true]){
   const page=await browser.newPage({viewport:mobile?{width:390,height:844}:{width:1280,height:850},hasTouch:mobile});
   page.on('pageerror',e=>errors.push(e.message));
-  await page.goto(process.env.SIMULATOR_URL||'http://127.0.0.1:5500/index.html',{waitUntil:'networkidle'});
+  await page.goto(process.env.SIMULATOR_URL||'http://127.0.0.1:5500/index.html?legacyIcons',{waitUntil:'networkidle'});
   await page.waitForFunction(()=>govHandles()?.ready&&scene.getObjectByName('RopeBrakeInstallation')?.userData.ready&&PitLadder.secured&&CarDoor.state?.ready&&document.getElementById('loading').classList.contains('hide'));
   const click=async selector=>mobile?page.tap(selector):page.click(selector);
   await click('[data-menu="dd-inst"]');

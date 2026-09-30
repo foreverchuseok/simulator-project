@@ -146,7 +146,8 @@ const InterlockDemo=(()=>{
     document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!panel.hidden)finish();});
     const icon='url("data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 11V7a5 5 0 0 1 9-3M4 11h11v10H4Z"/><path d="m18 10 5 4-5 4Z"/></svg>')+'")';
     for(let f=0;f<FLOORS;f++){const b=document.createElement('button');b.className='part-action';b.type='button';b.id=`interlock-action-${f}`;b.hidden=true;b.style.setProperty('--part-icon',icon);
-      b.setAttribute('aria-label',`${f+1}층 인터록 열림·닫힘 시연`);b.title=b.getAttribute('aria-label');b.setAttribute('aria-controls','interlock-demo-panel');b.setAttribute('aria-pressed','false');b.onclick=()=>start(f);document.getElementById('part-actions').appendChild(b);buttons.push(b);}
+      b.setAttribute('aria-label',`${f+1}층 인터록 열림·닫힘 시연`);b.title=b.getAttribute('aria-label');b.setAttribute('aria-controls','interlock-demo-panel');b.setAttribute('aria-pressed','false');b.onclick=()=>start(f);document.getElementById('part-actions').appendChild(b);buttons.push(b);
+      PartGlow.bind(b,()=>{const i=hatchDoors[f]?.interlock;return i?.ready?[i.fixed,i.moving,i.opposite]:null;},`${f+1}층 승장문 인터록`);}
   }
   return {bind,update,start,pause,cancel:finish,allowed,get active(){return floor>=0;},get floor(){return floor;},get phase(){return phase;},get poseState(){return poseState;},get paused(){return paused;}};
 })();

@@ -114,6 +114,7 @@ const BuildingLights = (() => {
     if (!node) { console.warn('[lights] switch not found', key); return; }
     const rocker = node.getObjectByName('lightRocker');
     switches[key] = { node, rocker, q0: rocker ? rocker.quaternion.clone() : null, button: makeButton(key, label), offset };
+    PartGlow.bind(switches[key].button, () => node, label);
   }
 
   function build() {

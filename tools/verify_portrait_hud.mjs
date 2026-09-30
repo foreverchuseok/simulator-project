@@ -4,7 +4,7 @@ const server=http.createServer((req,res)=>{const f=path.resolve(root,'.'+new URL
 const browser=await chromium.launch({args:['--enable-gpu']});const context=await browser.newContext({viewport:{width:390,height:844},deviceScaleFactor:1,isMobile:true,hasTouch:true});const page=await context.newPage();page.setDefaultTimeout(90000);const errors=[];page.on('pageerror',e=>errors.push(e.message));
 const check=async()=>{await page.waitForTimeout(400);const bad=await page.evaluate(()=>{const visible=[...document.querySelectorAll('#hud button')].filter(e=>e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden');return visible.flatMap(e=>{const b=e.getBoundingClientRect();return b.width<43.5||b.height<43.5||b.x<0||b.y<0||b.right>innerWidth+1||b.bottom>innerHeight+1?[{id:e.id||e.textContent,x:b.x,y:b.y,w:b.width,h:b.height}]:[]})});assert.deepEqual(bad,[],'Visible controls fit viewport and touch targets');};
 try{
-await page.goto(`http://127.0.0.1:${server.address().port}/index.html`,{waitUntil:'networkidle'});await page.waitForFunction(()=>govHandles()?.ready&&document.querySelector('#loading.hide'));await page.waitForTimeout(7500);
+await page.goto(`http://127.0.0.1:${server.address().port}/index.html?legacyIcons`,{waitUntil:'networkidle'});await page.waitForFunction(()=>govHandles()?.ready&&document.querySelector('#loading.hide'));await page.waitForTimeout(7500);
 for(const viewport of [{width:390,height:844},{width:360,height:740},{width:320,height:568},{width:412,height:915}]){
  await page.setViewportSize(viewport);await page.waitForTimeout(250);await check();
  await page.tap('[data-menu="dd-view"]');await check();assert.equal(await page.locator('#dd-inst').count(),0);

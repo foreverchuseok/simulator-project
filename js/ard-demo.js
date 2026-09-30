@@ -41,6 +41,7 @@ const ARDDemo = (() => {
     button.title='ARD 자동구출운전 시연';button.setAttribute('aria-label',button.title);
     button.style.setProperty('--part-icon','url("data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linejoin="round"><rect x="4" y="5" width="15" height="15" rx="2"/><path d="M9 2h5M20 10h2v5h-2M13 8l-4 5h4l-2 4"/></svg>')+'")');
     button.addEventListener('click',start);document.getElementById('part-actions').appendChild(button);
+    PartGlow.bind(button,()=>MachineRoomPower.root?.getObjectByName('ARDInstallation'),'ARD 자동구출장치');
     panel=document.createElement('section');panel.id='ard-panel';panel.hidden=true;panel.setAttribute('aria-label','자동구출운전 시연');
     panel.innerHTML='<strong id="ard-title" role="status"></strong><div id="ard-detail"></div><div id="ard-count"></div><button id="ard-restore">전원 복구</button>';
     document.body.appendChild(panel);title=panel.querySelector('strong');detail=panel.querySelector('#ard-detail');count=panel.querySelector('#ard-count');

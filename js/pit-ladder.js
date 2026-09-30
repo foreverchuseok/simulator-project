@@ -170,6 +170,7 @@ const PitLadder = (() => {
       if (!toggle()) updateStatus('v-dir', '카를 사다리보다 높이 올려 정지한 후 조작', '#f0883e');
     });
     document.body.appendChild(actionButton);
+    PartGlow.bind(actionButton, () => root, '피트 사다리');
     syncButton();
   }
 
