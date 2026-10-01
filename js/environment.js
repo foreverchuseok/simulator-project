@@ -3751,7 +3751,7 @@
         ready: false, worm: tmWormSpin, wormPerSheave: 0, cutaway: false, brakeOpen: false,
         cutPieces: [], oil: null, arms: [], contract: null
       };
-      new THREE.GLTFLoader().load('models/gltf/traction_machine.glb?v=20261002-manual-rescue', gltf => {
+      new THREE.GLTFLoader().load('models/gltf/traction_machine.glb?v=20261002-dual-release', gltf => {
         const model = gltf.scene.getObjectByName('TractionMachineModel');
         const c = model?.userData.tractionMachine;
         if (!c || c.sheaveR !== TM.sheaveR || c.wheelX !== TM.wheelX || c.wormY !== TM.wormY ||

@@ -22,7 +22,7 @@ const ControlPanel = (() => {
     root.rotation.y = rotY;
     root.userData = { type: 'control-panel', spec: S0, ready: false };
     parent.add(root);
-    new THREE.GLTFLoader().load('models/gltf/control_panel.glb', gltf => {
+    new THREE.GLTFLoader().load('models/gltf/control_panel.glb?v=20261002-choreography', gltf => {
       const model = gltf.scene;
       model.name = 'ControlPanelModel';
       const extras = model.getObjectByName('ControlPanel')?.userData || {};
@@ -107,6 +107,12 @@ const ControlPanel = (() => {
     if (shown) PartActions.positionButton(button, (anchor.x + 1) * innerWidth / 2 - 22, (1 - anchor.y) * innerHeight / 2 - 22);
   }
 
-  return { build, toggle, update, get open() { return open; }, get busy() { return busy; }, get ready() { return ready; },
+  function restoreOpen(value){
+    if(!ready)return;
+    open=value;busy=false;
+    for(const d of [doorL,doorR]){gsap.killTweensOf(d.rotation);d.rotation.y=value?(d===doorL?-1:1)*THREE.MathUtils.degToRad(S0.doorOpenDeg):0;}
+    interior.visible=value;syncButton();
+  }
+  return { build, toggle, update, restoreOpen, get open() { return open; }, get busy() { return busy; }, get ready() { return ready; },
     get root() { return root; } };
 })();

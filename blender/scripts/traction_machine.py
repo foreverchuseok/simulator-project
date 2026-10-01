@@ -677,7 +677,7 @@ def brake_arm(side):
     P.append(box_span('ShoeHingeLug', (min(XW + s * (DRUM_R + .020), x), max(XW + s * (DRUM_R + .020), x)),
                       (A - .016, A + .016), (DRUM_Z - .020, DRUM_Z + .020), paint, .003))
     # release lug (fork of the wall-stored release lever engages here)
-    P.append(cyl('ReleaseLug', .010, .030, (x, ARM_TOP - .030, DRUM_Z + .040), yellow, (0, 0, 1), 16))
+    P.append(cyl('ReleaseLug', .010, .040, (x, BODY_Y, DRUM_Z), yellow, (1, 0, 0), 16))
     return P
 
 def spring_coil(name, x0, x1, y, z, r, wire, turns, mat):
@@ -988,7 +988,8 @@ root['tractionMachine'] = {
                      'iconY': BODY_Y + .22, 'singleSpringSet': SINGLE_SPRING_SET},
     'manualRescue': {'shaftCenter': [XW,A,(MANUAL_SHAFT_Z0+MANUAL_SHAFT_Z1)/2],
                      'shaftRadius': MANUAL_SHAFT_R, 'shaftEndZ': MANUAL_SHAFT_Z1,
-                     'releaseLug': [XW+ARM_X,ARM_TOP-.030,DRUM_Z+.040],
+                     'releaseLug': [XW+ARM_X,BODY_Y,DRUM_Z],
+                     'releaseLugs': [[XW-ARM_X,BODY_Y,DRUM_Z],[XW+ARM_X,BODY_Y,DRUM_Z]],
                      'armIndex': 1, 'releaseAngle': .012},
     'cableExits': {'brakeTB': [XW - .082 - .022, BODY_Y + .117, DRUM_Z],
                    'motorTB': [XW - MOTOR_R - .030, A - .049, (MOTOR_Z0 + MOTOR_Z1) / 2 - .020],

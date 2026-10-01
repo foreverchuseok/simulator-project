@@ -291,7 +291,9 @@ for sy in (1, -1):
         box(IN, INK, (poles[j], yt + sy * .004, z1 + .0026), (.006, .0012, .0003))
         if j: box(IN, MC_DARK, (mx - mw / 2 + j * mw / 4, yt, z1 + .003), (.003, .026, .008))
 box(IN, MC_DARK, (mx - .006, my - .004, z1 + .002), (.03, .05, .006))
-box(IN, MC_TGL, (mx - .006, my + .006, z1 + .008), (.018, .022, .01))
+# Independent toggle pivot: local coordinates; animation does not move the breaker body.
+MCCB_PIVOT = Vector((mx - .006, my + .006, z1 + .008))
+box('MainBreakerToggle', MC_TGL, (0, 0, 0), (.018, .022, .01))
 box(IN, WHITE, (mx - .006, my - .022, z1 + .0052), (.016, .007, .0004))
 text(IN, INK, '50A', (mx - .006, my - .022, z1 + .0056), .0045, .014, BOLD)
 box(IN, RED, (mx + .015, my - .024, z1 + .0015), (.004, .006, .002))
@@ -396,7 +398,7 @@ box(SW, mat('SwitchShade', '#dcdcd6', 0, .45), (0, -.016, .0126), (.030, .026, .
 # ══ 4. 메시 · 내보내기 ═══════════════════════════════════════════════════
 def to_blender(v): return (v.x, -v.z, v.y)
 PIVOT = {'ARD': Vector((0, 0, 0)), 'BoxBody': Vector((0, 0, 0)), 'BoxInterior': Vector((0, 0, 0)),
-         'BoxDoor': Vector((HX, BH / 2, BD)), 'LightSwitch': Vector((0, 0, 0))}
+         'BoxDoor': Vector((HX, BH / 2, BD)), 'LightSwitch': Vector((0, 0, 0)), 'MainBreakerToggle': MCCB_PIVOT}
 # 문 부품은 피벗 기준 좌표로 적었으므로 월드(로컬) 좌표 = 피벗 + 부품
 def export(groups, dest, root_name, extras):
     bpy.ops.object.select_all(action='DESELECT')
@@ -406,7 +408,7 @@ def export(groups, dest, root_name, extras):
     for gname in groups:
         e = bpy.data.objects.new(gname, None); bpy.context.collection.objects.link(e); e.parent = root; made.append(e)
         piv = PIVOT[gname]
-        if gname == 'BoxDoor': e.location = to_blender(piv)
+        if gname in ('BoxDoor', 'MainBreakerToggle'): e.location = to_blender(piv)
         for (g, mname), d in BUCKETS.items():
             if g != gname: continue
             me = bpy.data.meshes.new(f'{g}_{mname}')
@@ -419,4 +421,4 @@ def export(groups, dest, root_name, extras):
     bpy.ops.export_scene.gltf(filepath=str(dest), export_format='GLB', use_selection=True, export_extras=True, export_yup=True)
     print('Exported', dest)
 export(['ARD'], ROOT / 'models/gltf/ard.glb', 'AutoRescueDevice', SPEC['ard'])
-export(['BoxBody', 'BoxDoor', 'BoxInterior', 'LightSwitch'], ROOT / 'models/gltf/elevator_distribution_box.glb', 'ElevatorDistributionBox', SPEC['db'])
+export(['BoxBody', 'BoxDoor', 'BoxInterior', 'LightSwitch', 'MainBreakerToggle'], ROOT / 'models/gltf/elevator_distribution_box.glb', 'ElevatorDistributionBox', SPEC['db'])

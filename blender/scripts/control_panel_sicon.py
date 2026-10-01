@@ -586,12 +586,14 @@ def push(x,y,col,lab,mush=False):
     textz(I,INK,lab,x,y-.027,fz+.0024,.0062,.054,True)
 push(left,SW_Y+.185,RED,'E-STOP',True)
 textz(I,INK,'정상    비상',left,SW_Y+.134,fz+.0024,.0055,.055)
-def selector(x,y,r=.014):
+def selector(x,y,r=.014,animated=False):
     cyl(I,STEEL,(x,y,fz+.003),r+.002,.006,'z',24)
     cyl(I,DARK,(x,y,fz+.009),r,.008,'z',24)
-    box(I,DARK,(x,y,fz+.018),(.009,r*2.1,.014),R=rz(-.6),keep=True)
-    box(I,WHITE,(x-.002,y+.006,fz+.0255),(.002,.010,.001),R=rz(-.6),keep=True)
-selector(left,SW_Y+.100)
+    group = 'ManualModeSelector' if animated else I
+    if animated: PIVOT[group] = Vector((x,y,fz+.018))
+    box(group,DARK,(x,y,fz+.018),(.009,r*2.1,.014),R=rz(-.6),keep=True)
+    box(group,WHITE,(x-.002,y+.006,fz+.0255),(.002,.010,.001),R=rz(-.6),keep=True)
+selector(left,SW_Y+.100,animated=True)
 textz(I,INK,'AUTO/EOP',left,SW_Y+.068,fz+.0024,.006,.057)
 push(left,SW_Y+.012,WHITE,'상승 (UP)')
 push(left,SW_Y-.075,BLUE,'공통 (RUN)')
@@ -760,6 +762,7 @@ groups = {}
 for gname, piv in PIVOT.items():
     e = bpy.data.objects.new(gname, None); bpy.context.collection.objects.link(e)
     e.location = to_blender(piv); e.parent = root; groups[gname] = e
+groups['ManualModeSelector'].parent = groups['CabinetInterior']
 for (gname, mname), data in BUCKETS.items():
     piv = PIVOT[gname]
     me = bpy.data.meshes.new(f'{gname}_{mname}')

@@ -32,10 +32,12 @@ const MachineRoomPower = (() => {
     let pending = 2;
     const done = () => { if (--pending === 0) { ready = true; root.userData.ready = true; syncButton(); } };
     load('models/gltf/ard.glb', s => { ard.add(s); done(); });
-    load('models/gltf/elevator_distribution_box.glb', s => {
+    load('models/gltf/elevator_distribution_box.glb?v=20261002-choreography', s => {
       const swNode = s.getObjectByName('LightSwitch');
       if (swNode) { swNode.position.set(0, 0, 0); sw.add(swNode); }
       door = s.getObjectByName('BoxDoor'); interior = s.getObjectByName('BoxInterior');
+      const breaker = s.getObjectByName('MainBreakerToggle');
+      if (interior && breaker) interior.attach(breaker);
       if (interior) interior.visible = false;
       db.add(s); done();
     });
@@ -109,5 +111,9 @@ const MachineRoomPower = (() => {
     button.hidden = !shown;
     if (shown) PartActions.positionButton(button, (anchor.x + 1) * innerWidth / 2 - 22, (1 - anchor.y) * innerHeight / 2 - 22);
   }
-  return { build, toggle, update, get open() { return open; }, get ready() { return ready; }, get root() { return root; }, layout: LAYOUT };
+  function restoreOpen(value){
+    if(!ready)return;
+    gsap.killTweensOf(door.rotation);open=value;busy=false;door.rotation.y=value?THREE.MathUtils.degToRad(P.doorOpenDeg):0;interior.visible=value;syncButton();
+  }
+  return { build, toggle, update, restoreOpen, get open() { return open; }, get busy() { return busy; }, get ready() { return ready; }, get root() { return root; }, layout: LAYOUT };
 })();

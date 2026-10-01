@@ -166,5 +166,28 @@ const Mascot = (() => {
     }
     return {root:copy,rig,inspectionPose:pose,beginInspection(){copy.visible=true;},endInspection(){copy.visible=false;},get inspecting(){return copy.visible;}};
   }
-  return { build, update, setVisible, isVisible,beginInspection,inspectionPose,endInspection,createWorker,get inspecting(){return !!inspectionHome;},get rig(){return parts;},get root() { return root; } };
+  // 구출 연출 전용 두 관절. 길이는 고정하고 팔꿈치만 굽힌다.
+  // 기존 점검 시연의 자세 계약에는 영향을 주지 않는다.
+  function rescueRig(worker,armLength=.22){
+    const rig=worker.rig,L=armLength,down=new THREE.Vector3(0,-1,0),end=new THREE.Vector3(),elbow=new THREE.Vector3(),bend=new THREE.Vector3(),dir=new THREE.Vector3();
+    const arms=[rig.holdArm,rig.waveArm].map(arm=>{const fore=arm.userData.rig.upper.clone();fore.name='RescueForearm';fore.visible=false;arm.add(fore);return {arm,fore};});
+    function pose(a,b){
+      worker.root.updateMatrixWorld(true);
+      arms.forEach(({arm,fore},i)=>{
+        const target=i===0?a:b,q=arm.userData.rig;
+        arm.rotation.set(0,0,0);fore.visible=true;
+        if(target){end.copy(target);rig.body.worldToLocal(end);end.sub(arm.position);}else end.set(i===0?.025:-.025,-.30,.075);
+        const d=Math.min(2*L-.001,Math.max(.02,end.length()));end.setLength(d);dir.copy(end).normalize();
+        bend.set(i===0?1:-1,-.35,-.4).addScaledVector(dir,-bend.dot(dir)).normalize();
+        elbow.copy(end).multiplyScalar(.5).addScaledVector(bend,Math.sqrt(L*L-d*d/4));
+        q.upper.position.copy(elbow).multiplyScalar(.5);q.upper.scale.y=L/2;q.upper.quaternion.setFromUnitVectors(down,dir.copy(elbow).normalize());
+        fore.position.copy(elbow).add(end).multiplyScalar(.5);fore.scale.y=L/2;fore.quaternion.setFromUnitVectors(down,dir.copy(end).sub(elbow).normalize());
+        q.paw.position.copy(end);
+        arm.userData.rescueReach=target?target.distanceTo(q.paw.getWorldPosition(dir)):0;
+      });
+    }
+    function reset(){rig.feet.forEach(f=>{f.position.y=0;f.position.z=0;});arms.forEach(({arm,fore})=>{fore.visible=false;const q=arm.userData.rig;q.upper.quaternion.identity();q.upper.position.set(0,-.07,0);q.upper.scale.y=.09;q.paw.position.set(0,-.15,0);delete arm.userData.rescueReach;});}
+    return {pose,reset};
+  }
+  return { build, update, setVisible, isVisible,beginInspection,inspectionPose,endInspection,createWorker,rescueRig,get inspecting(){return !!inspectionHome;},get rig(){return parts;},get root() { return root; } };
 })();
