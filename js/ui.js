@@ -339,6 +339,7 @@ function updateManualCameraNear() {
     }
 
     function openDoors(cb) {
+      if (ManualRescueDemo.active) return;
       if (ARDDemo.blocksCommands) return;
       if (DoorBypass.mode !== 'off') return;
       // 점검 운전 중에는 도어 오퍼레이터 회로가 차단된다 (착상 위치가 아닐 수 있음)
@@ -356,6 +357,7 @@ function updateManualCameraNear() {
     }
 
     function closeDoors(cb) {
+      if (ManualRescueDemo.active) return;
       if (ARDDemo.blocksCommands) return;
       if (InterlockDemo.active) return;
       if (HallManual.busy) return; // 독립 개방한 승장문은 유지하며 카문만 닫는다.
@@ -536,6 +538,7 @@ function updateManualCameraNear() {
         }
       };
       try {
+        if(ManualRescueDemo.active)ManualRescueDemo.reset();
         InterlockDemo.cancel();clearTimeout(autoTimer);insHold=0;insStop();InspectionReturn.cancel();InspectionStations.release();
         // Fault demonstrations retain their own mechanical recovery sequence.
         if(BrakeDemo.active){BrakeDemo.reset();await wait(()=>!BrakeDemo.active);}
@@ -772,18 +775,21 @@ function updateManualCameraNear() {
     }
 
     function startOverspeedFault(btn) {
+      if (ManualRescueDemo.active) return;
       if (ARDDemo.active) return;
       if (InterlockDemo.active) return;
       if (!PitLadder.secured) { updateStatus('v-dir', '피트 사다리 펼침 — 운행 차단', '#f85149'); return; }
       const gov = mrGrp.userData.governor;
       if (insMode) { updateStatus('v-dir', '점검운전 중 — 자동 시연 불가 (AUT 전환)', '#f0883e'); return; }
-      if (!gov?.ready || !carGrp.userData.safetyGear || moving || doorOpen || estop || gsap.isTweening(carDoorL.position)) return;
-
-      // 낙하 과속 시연은 3층 이상에서만 (아래로 떨어지며 속도가 붙을 거리 필요). 1·2층 불가.
-      if (curFloor < 2) {
-        updateStatus('v-dir', '⚠ 3층 이상에서만 시연 (낙하 거리 부족)', '#f0883e');
-        return;
-      }
+      if (!gov?.ready || !carGrp.userData.safetyGear || moving || estop || CarDoor.state.busy) return;
+      if (doorOpen) { clearTimeout(autoTimer); closeDoors(()=>startOverspeedFault(btn)); return; }
+      // 시연에 필요한 낙하 거리는 자동 준비한다. 사용자가 먼저 3층을 호출할 필요가 없다.
+      const startFloor=Math.max(curFloor,Math.min(2,FLOORS-1));
+      const setupY=FLOOR_Y[startFloor]+S.CAR_H/2,setupDelta=setupY-carGrp.position.y;
+      carGrp.position.y=setupY;cwtGrp.position.y-=setupDelta;spinSheaves(setupDelta);
+      curFloor=startFloor;refreshRopes();refreshGovernorRope();syncAllIndicators(startFloor+1,'');
+      const light=scene.getObjectByName('carLight');if(light)light.position.y=setupY+S.CAR_H*.75;
+      closeAllMenus();
 
       const spinDir = 1;                              // 하강 폭주 (휠 rotation.z 증가)
       const ty = FLOOR_Y[0] + S.CAR_H / 2;           // 최하층 방향으로 낙하(도중 트립)
@@ -992,6 +998,7 @@ function updateManualCameraNear() {
     }
 
     function moveElevator(fIdx) {
+      if (ManualRescueDemo.active) return;
       if (ARDDemo.active) return;
       if (UCMDemo.state.active) return;
       if (InterlockDemo.active) return;
@@ -1223,6 +1230,7 @@ function updateManualCameraNear() {
         estopBtn.querySelector('span').textContent = portraitHUD?.isPortrait() ? (estop ? 'RESET' : 'STOP') : (estop ? '해제' : '정지');
       };
       estopBtn.addEventListener('click', e => {
+        if (ManualRescueDemo.active) { ManualRescueDemo.reset(); return; }
         if (BrakeDemo.active) { BrakeDemo.reset(); return; }
         if (AscentDemo.active) { AscentDemo.reset(); return; }
         if (ARDDemo.active) { ARDDemo.halt(); return; }

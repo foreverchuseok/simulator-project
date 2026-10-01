@@ -4,7 +4,7 @@ const HallInspector=(()=>{
   // 개방 유지 자세: 문 홀면에서 발끝만 3mm 걸친다. 발 치수는 실제 메시에서 읽는다.
   const toeOverlap=.003,footBounds=new THREE.Box3();
   let toeReach=null;
-  let tool,shaft,rod,slider,crank,socket,linkLength=1,initialX=0;
+  let tool,shaft,rod,slider,crank,socket,linkLength=1,initialX=0,actor;
   const keyPoint=new THREE.Vector3(),a=new THREE.Vector3(),b=new THREE.Vector3(),handA=new THREE.Vector3(),handB=new THREE.Vector3(),up=new THREE.Vector3(0,1,0),delta=new THREE.Vector3();
   function keyWorld(f,out=keyPoint){
     const h=hatchDoors[f],t=h.right.userData.triKey;h.right.updateWorldMatrix(true,true);
@@ -32,9 +32,9 @@ const HallInspector=(()=>{
     createBox(.10,.018,.024,steel,.05,-.035,.15,tool);
     tool.traverse(o=>{if(o.isMesh){o.castShadow=false;o.receiveShadow=true;}});
   }
-  function begin(f){build();Mascot.beginInspection();tool.visible=true;keyWorld(f);initialX=keyPoint.x+spec.poleX+.185;linkLength=keyPoint.y-FLOOR_Y[f]-spec.gripY;}
+  function begin(f,worker=Mascot){build();actor=worker;actor.beginInspection();tool.visible=true;keyWorld(f);initialX=keyPoint.x+spec.poleX+.185;linkLength=keyPoint.y-FLOOR_Y[f]-spec.gripY;}
   function pose(f,p){
-    if(!tool||!Mascot.inspecting)return;
+    if(!tool||!actor?.inspecting)return;
     const h=hatchDoors[f],floorY=FLOOR_Y[f];keyWorld(f);
     const edge=h.right.position.x+h.right.userData.triKey.panelInnerX,targetX=edge-spec.footOffsetX-spec.footHalfX,hallZ=keyPoint.z-.003;
     const x=THREE.MathUtils.lerp(initialX+.40*(1-p.approach),targetX,p.walk),z=hallZ+spec.bodyZ;
@@ -44,10 +44,10 @@ const HallInspector=(()=>{
     slider.position.set(spec.crankR,sy,.15);
     segment(shaft,a.set(spec.poleX,-linkLength-.14,.15),b.set(spec.poleX,.025,.15));segment(rod,a.set(spec.crankR,sy,.15),b.set(cx,cy,.15));
     tool.updateMatrixWorld(true);handA.copy(slider.position);tool.localToWorld(handA);handB.set(x+.185,floorY+.38,z-.13);
-    Mascot.inspectionPose(x,floorY,z,p.foot*(spec.bodyZ-.03+HALL_FINISH.panelT/2),handA,handB);
+    actor.inspectionPose(x,floorY,z,p.foot*(spec.bodyZ-.03+HALL_FINISH.panelT/2),handA,handB);
     tool.userData.floor=f;tool.userData.inserted=p.insert>.99&&p.carry<.01;tool.userData.keyRatio=p.key;
   }
-  function end(){if(tool)tool.visible=false;Mascot.endInspection();}
+  function end(){if(tool)tool.visible=false;(actor||Mascot).endInspection();actor=null;}
   function hold(f,amount=1){
     Mascot.beginInspection();if(tool)tool.visible=false;
     if(!Mascot.inspecting)return;

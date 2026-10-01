@@ -213,7 +213,7 @@ const PartGlow = (() => {
   const bodyHas = c => document.body.classList.contains(c);
   function suppressed(e) {
     if (typeof overspeedActive !== 'undefined' && overspeedActive) return true;
-    if (bodyHas('ucm-active') || bodyHas('ard-active') || bodyHas('portrait-tools-hidden')) return true;
+    if (bodyHas('ucm-active') || bodyHas('ard-active') || bodyHas('manual-rescue-active') || bodyHas('portrait-tools-hidden')) return true;
     if (bodyHas('buffer-demo-active') && !/buffer-demo-action$/.test(e.button.id)) return true;
     return false;
   }

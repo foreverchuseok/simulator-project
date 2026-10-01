@@ -42,9 +42,7 @@ try{
  assert.equal(linkage.faces,4);assert.ok(linkage.maxPinY<1e-7);assert.ok(linkage.minSlotClearance>0.001);
  console.log('Pin/fork sweep passed',linkage);
  await page.evaluate(()=>{
-  const btn=document.getElementById('btn-overspeed');startOverspeedFault(btn);
-  if(overspeedActive)throw new Error('OVS must refuse floors below 3');
-  const dy=FLOOR_Y[2]+S.CAR_H/2-carGrp.position.y;carGrp.position.y+=dy;cwtGrp.position.y-=dy;curFloor=2;refreshRopes();
+  const btn=document.getElementById('btn-overspeed');
   window.ovsSamples=[];window.ovsFrames={};window.ovsLastStage='';
   window.ovsOriginalMaterials=[];carGrp.traverse(o=>{if(o.material)ovsOriginalMaterials.push([o,o.material,o.visible,o.castShadow,o.renderOrder]);});
   window.ovsSounds=[];const sound=MACH.overspeedImpact;MACH.overspeedImpact=(kind,...args)=>{ovsSounds.push({kind,stage:ovsDemo.stage,shot:ovsDemo.shot});sound(kind,...args);};
@@ -72,7 +70,9 @@ try{
   };gsap.ticker.add(ovsProbe);
  });
  const press=selector=>process.argv.includes('--mobile')?page.tap(selector):page.click(selector);
+ assert.equal(await page.evaluate(()=>curFloor),0,'Initial first floor needs no prior call');
  await press('#btn-overspeed');
+ assert.equal(await page.evaluate(()=>overspeedActive&&curFloor===2&&Math.abs(carGrp.position.y-FLOOR_Y[2]-S.CAR_H/2)<1e-6),true,'Click automatically supplies the fall distance');
  assert.equal(await page.evaluate(()=>document.querySelector('.sheet.open')),null,'fault sheet closes while the demo runs');
  console.log('OVS clicked');
  await page.waitForFunction(()=>ovsDemo.stage==='stopped'&&!document.getElementById('btn-overspeed').disabled);

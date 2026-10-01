@@ -13,7 +13,7 @@ const EmergencyCall = (() => {
     pit: { label: '피트', passenger: false }
   };
   const COLOR = { yellow: 0xff9a00, green: 0x00d23c, red: 0xff1400 };   // sRGB 출력에서 옅어지므로 채도를 높게
-  let built = false, active = null, phase = 'idle', seq = 0, blinkT = 0;
+  let built = false, active = null, phase = 'idle', seq = 0, blinkT = 0, manualLink=false;
   let mrLed = null, caption = null, audioCtx = null, filterIn = null;
   const leds = {}, anchors = {}, buttons = {}, playing = new Set();
   const v = new THREE.Vector3(), local = new THREE.Vector3();
@@ -208,7 +208,8 @@ const EmergencyCall = (() => {
       }
     }
     if (mrLed) {
-      if (phase === 'connecting') { const on = Math.floor(t * 2.5) % 2 === 0; setLed(mrLed, on ? COLOR.red : null); if (!on) mrLed.color.setHex(0x4a1512); }
+      if (manualLink) setLed(mrLed,COLOR.green);
+      else if (phase === 'connecting') { const on = Math.floor(t * 2.5) % 2 === 0; setLed(mrLed, on ? COLOR.red : null); if (!on) mrLed.color.setHex(0x4a1512); }
       else if (phase === 'idle') { setLed(mrLed, null); mrLed.color.setHex(0x4a1512); mrLed.metalness = 0; }
     }
     carGrp.worldToLocal(local.copy(camera.position));
@@ -225,5 +226,6 @@ const EmergencyCall = (() => {
       if (shown) PartActions.positionButton(b, (v.x + 1) * innerWidth / 2 + 16, (1 - v.y) * innerHeight / 2 - 18);
     }
   }
-  return { build, update, press, hangUp, get state() { return { active, phase }; } };
+  function setManualLink(on){manualLink=!!on;setLed(leds.carMain,on?COLOR.green:null);}
+  return { build, update, press, hangUp,setManualLink, get state() { return { active, phase,manualLink }; } };
 })();

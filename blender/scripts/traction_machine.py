@@ -12,7 +12,7 @@ Mount interface is read from js/environment.js (TRACTION_MACHINE_MOUNT) and
 rope positions from js/elevator.js buildWireRopes(); the same numbers are
 written back to glTF extras so the loader can check them.
 """
-import bpy, math, re, json
+import bpy, math, re, json, ast
 from pathlib import Path
 from mathutils import Vector, Matrix
 import numpy as np
@@ -78,6 +78,11 @@ ARM_NUT_GAP = 0.004            # arm ↔ arm-bolt fixing nut; inspection limit �
 MOTOR_Z0, MOTOR_Z1, MOTOR_R = 0.405, 0.720, 0.168
 COWL_F = MOTOR_Z1 + 0.078      # pressed-steel fan cowl grille face (rear of motor)
 ENC_Z0, ENC_Z1 = COWL_F + 0.007, COWL_F + 0.047   # hollow-shaft rotary encoder body
+TOOLS_SOURCE = (ROOT / 'blender/scripts/machine_room_accessories.py').read_text(encoding='utf-8')
+HANDLE_HUB = ast.literal_eval(re.search(r'^HND_HUB = (\([^\n]+?\))',TOOLS_SOURCE,re.M)[1])
+MANUAL_SHAFT_Z0 = ENC_Z1 + .015
+MANUAL_SHAFT_Z1 = MANUAL_SHAFT_Z0 + HANDLE_HUB[2] + .006
+MANUAL_SHAFT_R = HANDLE_HUB[1]/2 - .0005  # 0.5 mm radial fitting clearance
 ENC_R = 0.031
 ENC_CABLE_A = math.radians(150)                   # cable gland direction (upper -X side)
 CRANK_Z = -0.330
@@ -467,7 +472,7 @@ def worm_rotor():
         ph = k * math.pi / 3
         cyl('CouplingBolt', .006, .012, (XW + math.cos(ph) * .048, A + math.sin(ph) * .048, DRUM_Z + DRUM_W / 2 + .036),
             zinc, (0, 0, 1), 6)
-    # crank end: hex for the wall-stored turning handle, yellow marking
+    # opposite worm end hex; manual rescue uses the motor/encoder shaft end
     cyl('CrankHex', .024, .038, (XW, A, CRANK_Z + .004), yellow, (0, 0, 1), 6, bev=.0015)
     # motor rear: cooling fan behind the cowl grille, shaft end through the hollow-shaft encoder
     fz = MOTOR_Z1 + .034
@@ -480,7 +485,9 @@ def worm_rotor():
         bpy.context.view_layer.objects.active = bl; bl.select_set(True)
         bpy.ops.object.transform_apply(location=False, rotation=True, scale=False); bl.select_set(False)
         bl.rotation_euler = (0, -ph, 0)
-    cyl('MotorShaftEnd', .0118, ENC_Z1 + .006 - (MOTOR_Z1 + .02), (XW, A, (ENC_Z1 + .006 + MOTOR_Z1 + .02) / 2), machined, (0, 0, 1), 24)
+    cyl('MotorShaftEnd', .0118, MANUAL_SHAFT_Z1 - (MOTOR_Z1 + .02), (XW, A, (MANUAL_SHAFT_Z1 + MOTOR_Z1 + .02) / 2), machined, (0, 0, 1), 24)
+    cyl('ManualHandleShaft', MANUAL_SHAFT_R, MANUAL_SHAFT_Z1-MANUAL_SHAFT_Z0,
+        (XW,A,(MANUAL_SHAFT_Z0+MANUAL_SHAFT_Z1)/2),machined,(0,0,1),32)
     lathe('EncoderHollowShaft', [(-.004, .0118), (-.004, .0172), (.005, .0172), (.005, .0118)], 'z', (XW, A, ENC_Z1 + .001), [brass], segs=32)
     lathe('EncoderClamp', [(-.003, .0172), (-.003, .0205), (.003, .0205), (.003, .0172)], 'z', (XW, A, ENC_Z1 + .008), [alu], segs=32)
     cyl('ClampScrew', .0022, .006, (XW + .0205, A, ENC_Z1 + .008), zinc, (1, 0, 0), 6)
@@ -979,6 +986,10 @@ root['tractionMachine'] = {
                   'reference': 'TKE TM30B dual brake retrofit (검사기준 12.4.2.1)'},
     'brakeCompare': {'version': 1, 'singleSprings': 1, 'singlePlungerAxis': 'Y',
                      'iconY': BODY_Y + .22, 'singleSpringSet': SINGLE_SPRING_SET},
+    'manualRescue': {'shaftCenter': [XW,A,(MANUAL_SHAFT_Z0+MANUAL_SHAFT_Z1)/2],
+                     'shaftRadius': MANUAL_SHAFT_R, 'shaftEndZ': MANUAL_SHAFT_Z1,
+                     'releaseLug': [XW+ARM_X,ARM_TOP-.030,DRUM_Z+.040],
+                     'armIndex': 1, 'releaseAngle': .012},
     'cableExits': {'brakeTB': [XW - .082 - .022, BODY_Y + .117, DRUM_Z],
                    'motorTB': [XW - MOTOR_R - .030, A - .049, (MOTOR_Z0 + MOTOR_Z1) / 2 - .020],
                    'encoder': [XW + math.cos(ENC_CABLE_A) * .043, A + math.sin(ENC_CABLE_A) * .043, (ENC_Z0 + ENC_Z1) / 2]},

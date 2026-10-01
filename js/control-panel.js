@@ -56,7 +56,7 @@ const ControlPanel = (() => {
      GLB 로컬 +Z 앞면·z=0 뒷면이므로 -90° 돌려 뒷면을 옆판에 붙인다. 실물 크기(축척 없음). */
   const INTERCOM = { y: 0.80, fromFront: 0.075 };
   function mountIntercom() {
-    new THREE.GLTFLoader().load('models/gltf/intercom_phone.glb', gltf => {
+    new THREE.GLTFLoader().load('models/gltf/intercom_phone.glb?v=20261002-manual-rescue', gltf => {
       const phone = gltf.scene;
       phone.name = 'ControlPanelIntercom';
       phone.rotation.y = -Math.PI / 2;

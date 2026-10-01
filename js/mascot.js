@@ -144,5 +144,27 @@ const Mascot = (() => {
     for(const arm of [parts.waveArm,parts.holdArm]){arm.rotation.set(0,0,0);arm.userData.rig.upper.position.y=-.07;arm.userData.rig.upper.scale.y=.09;arm.userData.rig.paw.position.y=-.15;}
     inspectionHome=null;
   }
-  return { build, update, setVisible, isVisible,beginInspection,inspectionPose,endInspection,get inspecting(){return !!inspectionHome;},get rig(){return parts;},get root() { return root; } };
+  // 구출 동료는 원본 메시·재질을 공유하고 독립 피벗/팔 자세만 가진다.
+  function createWorker(name){
+    const copy=root.clone(true),map=new Map();
+    function pair(a,b){map.set(a,b);a.children.forEach((c,i)=>pair(c,b.children[i]));}pair(root,copy);
+    const rig=Object.fromEntries(Object.entries(parts).map(([k,v])=>[k,Array.isArray(v)?v.map(o=>map.get(o)):map.get(v)]));
+    for(const arm of [rig.waveArm,rig.holdArm]){
+      const original=arm===rig.waveArm?parts.waveArm:parts.holdArm;
+      arm.userData.rig={upper:map.get(original.userData.rig.upper),paw:map.get(original.userData.rig.paw)};
+    }
+    copy.name=name;copy.visible=false;scene.add(copy);rig.wrench.visible=false;rig.eyes.forEach(e=>e.scale.y=.032);
+    function pose(x,y,z,foot,handA,handB,yaw=Math.PI){
+      copy.position.set(x,y,z);copy.rotation.set(0,yaw,0);rig.body.position.set(0,0,0);rig.body.rotation.set(0,0,0);rig.head.rotation.set(0,0,0);
+      rig.feet[0].position.z=foot;copy.updateMatrixWorld(true);
+      for(const [arm,target] of [[rig.holdArm,handA],[rig.waveArm,handB]]){
+        const q=arm.userData.rig;
+        if(!target){arm.rotation.set(-.25,0,arm===rig.holdArm?.25:-.25);q.upper.position.y=-.07;q.upper.scale.y=.09;q.paw.position.y=-.15;continue;}
+        handPoint.copy(target);rig.body.worldToLocal(handPoint);direction.copy(handPoint).sub(arm.position);const length=direction.length();
+        arm.quaternion.setFromUnitVectors(down,direction.normalize());q.upper.position.y=-length/2;q.upper.scale.y=length/2;q.paw.position.y=-length;
+      }
+    }
+    return {root:copy,rig,inspectionPose:pose,beginInspection(){copy.visible=true;},endInspection(){copy.visible=false;},get inspecting(){return copy.visible;}};
+  }
+  return { build, update, setVisible, isVisible,beginInspection,inspectionPose,endInspection,createWorker,get inspecting(){return !!inspectionHome;},get rig(){return parts;},get root() { return root; } };
 })();

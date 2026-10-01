@@ -1057,7 +1057,7 @@
       <p>평상시에는 간극을 두고 문과 함께 이동합니다. 마모·부식·화재 등으로 기존 가이드가 기능을 잃었을 때 문이 제 위치에서 이탈하지 않도록 붙잡는 보조 장치입니다.</p>
       <p class="guide-detail">참고 형식: SUS304 · 두께 2mm 절곡판. 현재 승장문에 맞춘 교육용 형상입니다.</p>
     </section>
-    <button id="btn-overspeed" class="part-action governor-icon" aria-label="조속기 과속 시연" title="조속기 과속 시연 · 3층 이상" hidden>OVS</button>
+    <button id="btn-overspeed" class="part-action governor-icon" aria-label="조속기 과속 시연" title="조속기 과속 시연 · 시작 위치 자동 준비" hidden>OVS</button>
     <button id="rope-brake-action" class="part-action brake-icon" aria-label="로프브레이크 시연 설정" aria-expanded="false" aria-controls="rope-brake-panel" hidden></button>
     <section id="rope-brake-panel" class="glass" aria-label="로프브레이크 시연" hidden>
       <div class="part-panel-head"><span>로프브레이크</span><button id="rope-brake-dismiss" aria-label="접기">×</button></div>
@@ -1097,15 +1097,15 @@
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
   <script src="js/config.js"></script>
-  <script src="js/part-glow.js?v=20260930-glow-soft"></script>
+  <script src="js/part-glow.js?v=20261002-manual-rescue"></script>
   <script src="js/pit-tensioner.js"></script>
-  <script src="js/environment.js?v=20261001-contact"></script>
+  <script src="js/environment.js?v=20261002-manual-rescue"></script>
   <script src="js/machine-room-safety.js"></script>
-  <script src="js/control-panel.js?v=20260930-glow-1"></script>
+  <script src="js/control-panel.js?v=20261002-manual-rescue"></script>
   <script src="js/machine-room-power.js?v=20260930-glow-1"></script>
   <script src="js/building-lights.js?v=20260930-glow-1"></script>
-  <script src="js/emergency-call.js?v=20260930-glow-1"></script>
-  <script src="js/mascot.js"></script>
+  <script src="js/emergency-call.js?v=20261002-manual-rescue"></script>
+  <script src="js/mascot.js?v=20261002-manual-rescue"></script>
   <script src="js/hall-interlock.js?v=20260928-interlock-2"></script>
   <script src="js/car-door-transmission.js"></script>
   <script src="js/car-terrace.js"></script>
@@ -1127,8 +1127,8 @@
   <script src="js/buffer-demo.js?v=20260930-glow-1"></script>
   <script src="js/part-actions.js?v=20260930-glow-1"></script>
   <script src="js/overspeed-effects.js?v=20260930-ovs-1"></script>
-  <script src="js/ui.js?v=20261001-pacing"></script>
-  <script src="js/hall-inspector.js"></script>
+  <script src="js/ui.js?v=20261002-manual-rescue"></script>
+  <script src="js/hall-inspector.js?v=20261002-manual-rescue"></script>
   <script src="js/hall-manual.js?v=20260930-glow-1"></script>
   <script src="js/inspection-stations.js?v=20260930-glow-1"></script>
   <script src="js/inspection-return.js"></script>
@@ -1136,6 +1136,7 @@
   <script src="js/finger-gap.js?v=20260930-glow-1"></script>
   <script src="js/emergency-lighting.js?v=20260930-glow-1"></script>
   <script src="js/ard-demo.js?v=20260930-glow-1"></script>
+  <script src="js/manual-rescue-demo.js?v=20261002-1"></script>
 
   <script>
     // 층수 및 층고 배열 (피트 1.76m, 1층 4.0m, 2층 3.65m, 3층 3.7m)
@@ -1617,6 +1618,7 @@
       updateBuffers();          // 동적 완충기
       BufferDemo.build();       // 카 완충기 충돌 시연 아이콘·먼지·균형추 여유거리 치수 (js/buffer-demo.js)
       ARDDemo.build();
+      ManualRescueDemo.build();
 
       // ?tcam(해치 케이블 행거)만 빌드 결과(travelCable.hangerY)가 있어야 잡을 수 있다
       if (travelCable.ready && location.search.includes('tcam') && !location.search.includes('tcam=2')) {
@@ -1654,6 +1656,7 @@
       AscentDemo.update();
       BrakeDemo.update();
       HallManual.update();
+      ManualRescueDemo.update();
       InterlockDemo.update();
       FingerGap.update();
       PitLadder.update();

@@ -3751,7 +3751,7 @@
         ready: false, worm: tmWormSpin, wormPerSheave: 0, cutaway: false, brakeOpen: false,
         cutPieces: [], oil: null, arms: [], contract: null
       };
-      new THREE.GLTFLoader().load('models/gltf/traction_machine.glb?v=20260930-brake-compare', gltf => {
+      new THREE.GLTFLoader().load('models/gltf/traction_machine.glb?v=20261002-manual-rescue', gltf => {
         const model = gltf.scene.getObjectByName('TractionMachineModel');
         const c = model?.userData.tractionMachine;
         if (!c || c.sheaveR !== TM.sheaveR || c.wheelX !== TM.wheelX || c.wormY !== TM.wormY ||
@@ -3942,13 +3942,14 @@
       turnHndGrp.userData = { type: 'turning-handle' };
       turnHndGrp.position.set(pegX, hookY + 0.018, hndHookZ);
       mrGrp.add(turnHndGrp);
-      new THREE.GLTFLoader().load('models/gltf/machine_room_tools.glb', gltf => {
+      new THREE.GLTFLoader().load('models/gltf/machine_room_tools.glb?v=20261002-manual-rescue', gltf => {
         const lever = gltf.scene.getObjectByName('ReleaseLever'), handle = gltf.scene.getObjectByName('TurningHandle');
         for (const [src, dst] of [[lever, relLevGrp], [handle, turnHndGrp]]) {
           if (!src) continue;
           src.position.set(0, 0, 0);
           src.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
           dst.add(src);
+          dst.userData.manualRescue=gltf.scene.getObjectByName('MachineRoomTools').userData.manualRescue;
         }
         relLevGrp.userData.ready = turnHndGrp.userData.ready = true;
       }, undefined, e => console.error('[machine room tools] GLB load failed', e));

@@ -49,6 +49,7 @@ Three.js로 승강로, 카, 도어, 기계실, 피트와 안전장치를 구성�
 - `docs/PIT-SCREEN.md`: 후면 균형추 앞 노란색 철제 피트 스크린·Blender 원본·장착과 검증.
 - `docs/MACHINE-ROOM-SAFETY.md`: 로프브레이크 볼트식 받침·각도 조절 측판·조속기와 브레이크의 바닥 덕트 배선.
 - `docs/GOVERNOR-DESIGN.md`: 조속기 스위치·쐐기·진자 형상과 기존 작동점 유지·검증.
+- `docs/MANUAL-RESCUE.md`: 개방레버·핸들 수동 구출 시연. `js/manual-rescue-demo.js`의 고장 정지·브레이크/핸들 연동·인터폰·긴 삼각키·두 문 개방과 복귀 계약.
 - `docs/LEVELING-SENSORS.md`: 레벨링 센서.
 - `docs/TRAVEL-CABLE-TERMINAL.md`: 이동케이블·종단 리미트 스위치(파이널·리미트·강제감속, 스위치 방식) (MR_설계.pdf 137~138p, 부품설계.pdf 184~204p).
 

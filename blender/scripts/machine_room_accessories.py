@@ -248,6 +248,7 @@ box(P, PH_S, (.031, -.068, zf + .0015), (.010, .022, .003))              # 벨 �
 text(P, PH_W, '벨', (.031, -.084, zf + .0002), (1, 0, 0), (0, 1, 0), .003, .01)
 # 수화기 — 왼쪽으로 12mm 비켜 놓여 오른쪽 번호 한 줄이 드러난다(사진 133136)
 hx, hz0, HW_, HL_, HD_ = -.012, zf + .005, .054, .214, .030
+P = 'IntercomHandset'
 cyl(P, PH_W, (hx, HL_ / 2 - HW_ / 2, hz0 + HD_ / 2), HW_ / 2, HD_, 'z', 36)
 cyl(P, PH_W, (hx, -HL_ / 2 + HW_ / 2, hz0 + HD_ / 2), HW_ / 2, HD_, 'z', 36)
 box(P, PH_W, (hx, 0, hz0 + HD_ / 2 - .004), (HW_ * .9, HL_ - HW_, HD_ - .008))
@@ -258,12 +259,14 @@ for k in range(6):                                                         # 송
     a = k * math.pi / 3
     cyl(P, PH_K, (hx + math.cos(a) * .006, -HL_ / 2 + HW_ / 2 + math.sin(a) * .006, hz0 + HD_ + .0002), .0012, .001, 'z', 8)
 # 코일 줄: 수화기 아래 → 아래로 늘어졌다 → 본체 밑으로
+P = 'IntercomCord'
 coil = []
 for k in range(260):
     a = k * .42; t = k / 259
     coil.append((hx + .004 + math.cos(a) * .0085, -HL_ / 2 - .012 - t * .20, hz0 + .012 + math.sin(a) * .0085))
 tube(P, PH_W, [(hx, -HL_ / 2 + .004, hz0 + .012)] + coil + [(hx + .02, -HL_ / 2 - .225, hz0 + .006), (.024, -BH_ / 2 - .02, .018), (.024, -BH_ / 2 + .006, .018)], .0021, 6)
 # 라인 코드 → 캐비닛 옆면 고무 부싱
+P = 'IntercomPhone'
 tube(P, PH_W, rounded([(.012, -BH_ / 2 + .004, .012), (.012, -BH_ / 2 - .03, .012), (.012, -BH_ / 2 - .05, .002)], .012), .0026, 8)
 cyl(P, PH_G, (.012, -BH_ / 2 - .05, .002), .0065, .004, 'z', 16)
 
@@ -288,6 +291,11 @@ def export(groups, dest, root_name, extras):
     bpy.ops.export_scene.gltf(filepath=str(dest), export_format='GLB', use_selection=True, export_extras=True, export_yup=True)
     print('Exported', dest)
 export(['ReleaseLever', 'TurningHandle'], ROOT / 'models/gltf/machine_room_tools.glb', 'MachineRoomTools',
-       {'pegHalf': PEG_HALF, 'leverLength': round(eye_y + eo - bot, 4), 'handleLength': round(hub_y + hod / 2 - (grip_y - god / 2), 4)})
-export(['IntercomPhone'], ROOT / 'models/gltf/intercom_phone.glb', 'IntercomPhoneRoot',
-       {'width': BW_, 'height': BH_, 'depth': round(hz0 + HD_, 4)})
+       {'pegHalf': PEG_HALF, 'leverLength': round(eye_y + eo - bot, 4), 'handleLength': round(hub_y + hod / 2 - (grip_y - god / 2), 4),
+        'manualRescue': {'leverSeat':[px_,bot+sd,0], 'leverGrip':[0,p_top-.10,0],
+                         'handleHub':[0,hub_y,0], 'handleGrip':[bt/2+gl/2,grip_y,0],
+                         'handleBoreR':hid/2, 'handleHubDepth':hth}})
+export(['IntercomPhone','IntercomHandset','IntercomCord'], ROOT / 'models/gltf/intercom_phone.glb', 'IntercomPhoneRoot',
+       {'width': BW_, 'height': BH_, 'depth': round(hz0 + HD_, 4),
+        'handsetCenter':[hx,0,hz0+HD_/2], 'handsetCord':[hx,-HL_/2+.004,hz0+.012],
+        'bodyCord':[.024,-BH_/2+.006,.018]})
