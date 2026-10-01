@@ -47,15 +47,15 @@ try{
   const dy=FLOOR_Y[2]+S.CAR_H/2-carGrp.position.y;carGrp.position.y+=dy;cwtGrp.position.y-=dy;curFloor=2;refreshRopes();
   window.ovsSamples=[];window.ovsFrames={};window.ovsLastStage='';
   window.ovsOriginalMaterials=[];carGrp.traverse(o=>{if(o.material)ovsOriginalMaterials.push([o,o.material,o.visible,o.castShadow,o.renderOrder]);});
-  window.ovsSounds=[];const sound=MACH.overspeedImpact;MACH.overspeedImpact=kind=>{ovsSounds.push({kind,stage:ovsDemo.stage,shot:ovsDemo.shot});sound(kind);};
+  window.ovsSounds=[];const sound=MACH.overspeedImpact;MACH.overspeedImpact=(kind,...args)=>{ovsSounds.push({kind,stage:ovsDemo.stage,shot:ovsDemo.shot});sound(kind,...args);};
   window.ovsProbe=()=>{
    const g=govHandles(),sg=carGrp.userData.safetyGear;
-   ovsSamples.push({stage:ovsDemo.stage,shot:ovsDemo.shot,broken:ovsDemo.broken,
+   ovsSamples.push({stage:ovsDemo.stage,shot:ovsDemo.shot,broken:ovsDemo.broken,breakProgress:ovsDemo.breakProgress,
      mainVisible:ropeObjs.every(r=>r.carDrop.visible),governorRopes:govRopeSegs.every(r=>r.visible),sparks:!!ovsDemo.sparks?.visible,scissor:renderer.getScissorTest(),
      t:performance.now(),y:carGrp.position.y,cwt:cwtGrp.position.y,wheel:g.wheel.rotation.z,
      ratchet:g.ratchet.rotation.z,clampY:carGrp.position.y+carGrp.userData.govClamp.y,
      p:sg.shaft.rotation.x/SG_TRIP_ROT,ropeLocked:g.ropeLocked||false,
-     contact:g.switchLever.userData.contactClosed,safetyContact:carGrp.getObjectByName('safetyLimitSwitch').userData.contactClosed});
+     contact:g.switchLever.userData.contactClosed,state:currentState,safetyContact:carGrp.getObjectByName('safetyLimitSwitch').userData.contactClosed});
    if(ovsDemo.sparks?.visible&&!window.ovsSparkFrame){window.ovsSparkFrame=true;setTimeout(()=>{
      renderer.render(scene,camera);ovsFrames.impact=renderer.domElement.toDataURL('image/png').split(',')[1];
    },120);}
@@ -65,6 +65,9 @@ try{
       renderer.render(scene,camera);
       ovsFrames[stage]=renderer.domElement.toDataURL('image/png').split(',')[1];
      });
+   }
+   if(ovsDemo.stage==='rope-break'&&ovsDemo.breakProgress===1&&!ovsFrames['rope-separated']){
+     renderer.render(scene,camera);ovsFrames['rope-separated']=renderer.domElement.toDataURL('image/png').split(',')[1];
    }
   };gsap.ticker.add(ovsProbe);
  });
@@ -82,6 +85,14 @@ try{
  const stages=[...new Set(data.samples.map(s=>s.stage))];
  const expected=['preparing','rope-break','runaway','machine-room','centrifugal','electrical','pawl','rope-grip','rope-locked','linkage-view','linkage','safety-view','wedges'];
  assert.deepEqual(stages.filter(s=>expected.includes(s)),expected);
+ const rupture=data.samples.filter(s=>s.stage==='rope-break'&&s.shot==='rope');
+ const separated=rupture.filter(s=>s.breakProgress===1);
+ assert.ok(separated.length>5,'Severed ends stay visible for several rendered frames');
+ assert.ok(separated.at(-1).t-separated[0].t>=1800,'Cut ends get a two-second observation interval');
+ assert.ok(separated[0].t-rupture[0].t>=2250,'Rupture animation lasts at least 2.25 seconds');
+ const electrical=data.samples.filter(s=>s.stage==='electrical');
+ assert.ok(electrical.at(-1).t-electrical[0].t>=1500,'Striker push and latch are shown slowly');
+ assert.ok(electrical.every(s=>s.contact?s.state==='MOVING':s.state==='ESTOP'),'Electrical stop follows the actual switch contact');
  assert.ok(data.samples.every(s=>!s.scissor),'No split-screen rendering');
  assert.ok(data.samples.every(s=>s.governorRopes),'Governor rope remains connected and visible');
  assert.ok(data.samples.filter(s=>s.stage==='runaway').every(s=>s.shot==='shaft'&&s.broken&&!s.mainVisible),'Fall is visible from shaft with broken main ropes');
@@ -126,13 +137,26 @@ try{
  if(process.argv.includes('--mobile'))await page.setViewportSize({width:320,height:740});
  await page.evaluate(()=>{
    const dy=FLOOR_Y[3]+S.CAR_H/2-carGrp.position.y;carGrp.position.y+=dy;cwtGrp.position.y-=dy;curFloor=3;refreshRopes();
-   window.ovsGeometryCount=renderer.info.memory.geometries;
+   window.ovsEffectGeometries=[];
+   for(const o of [ovsDemo.ropeGroup,ovsDemo.sparks,scene.getObjectByName('OVSCorrodedStrands'),...Array.from({length:3},(_,i)=>scene.getObjectByName('OVSDust'+i))]){
+     o.traverse(n=>{if(n.geometry)ovsEffectGeometries.push([n,n.geometry]);});
+   }
    startOverspeedFault(document.getElementById('btn-overspeed'));
  });
  await page.waitForFunction(()=>ovsDemo.stage==='stopped');await page.screenshot({path:path.join(out,'repeat.png')});
- assert.equal(await page.evaluate(()=>renderer.info.memory.geometries),await page.evaluate(()=>ovsGeometryCount),'Repeat reuses effect geometries');
+ assert.equal(await page.evaluate(()=>ovsEffectGeometries.every(([o,g])=>o.geometry===g)),true,'Repeat reuses effect geometries');
  await press('#ovs-exit');await page.waitForFunction(()=>!overspeedActive&&!moving&&currentState===ELEVATOR_STATE.DOOR_OPEN);
  assert.equal(await page.evaluate(()=>ovsOriginalMaterials.every(([o,m])=>o.material===m)),true);
+ // Cancel during the new observation interval and during physical striker contact.
+ for(const stage of ['preparing','separated','electrical']){
+   await page.evaluate(()=>closeDoors());await page.waitForFunction(()=>!CarDoor.state.busy&&CarDoor.secured()&&!doorOpen);
+   await page.evaluate(()=>{const dy=FLOOR_Y[3]+S.CAR_H/2-carGrp.position.y;carGrp.position.y+=dy;cwtGrp.position.y-=dy;curFloor=3;refreshRopes();startOverspeedFault(document.getElementById('btn-overspeed'));});
+   if(stage!=='preparing')await page.waitForFunction(stage=>stage==='separated'?ovsDemo.stage==='rope-break'&&ovsDemo.breakProgress===1:ovsDemo.stage===stage,stage);
+   await page.evaluate(()=>resetGovernorFault(document.getElementById('btn-overspeed')));
+   await page.waitForFunction(()=>!overspeedActive&&!moving&&currentState===ELEVATOR_STATE.DOOR_OPEN);
+   await page.waitForTimeout(2200);
+   assert.equal(await page.evaluate(()=>governorPhase==='rest'&&ovsDemo.stage==='rest'&&!overspeedActive&&controls.enabled&&ropeObjs.every(r=>r.carDrop.visible)),true,`Cancel ${stage} cannot restart from a camera or delayed callback`);
+ }
  assert.deepEqual(errors,[]);
  fs.writeFileSync(path.join(out,'report.json'),JSON.stringify({linkage,stages,data,reset,rescue,errors},null,2));
  console.log(JSON.stringify({linkage,stages,padGap:data.padGap,lockedSamples:coupled.length,reset,rescue,errors}));

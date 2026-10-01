@@ -4151,7 +4151,7 @@
       govSetLinkage(0);
 
       // ── .glb 로드 — 노드(원점=피벗)를 래퍼에 장착 ───────────────────────
-      new THREE.GLTFLoader().load('models/gltf/overspeed_governor.glb?v=20260930-switch75', (gltf) => {
+      new THREE.GLTFLoader().load('models/gltf/overspeed_governor.glb?v=20261001-contact', (gltf) => {
         const g = gltf.scene;
         g.traverse(o => {
           if (o.isMesh) {

@@ -34,8 +34,16 @@ try{
   const icons=await page.evaluate(()=>['rope-brake-action','ascent-action'].map(id=>{const r=document.getElementById(id).getBoundingClientRect();return{x:r.x,y:r.y,w:r.width,h:r.height};}));
   assert.ok(icons[1].x>=icons[0].x+icons[0].w+4,'two separate icons');
   await press('#ascent-action');await press(`[data-ascent-mode="${mode}"]`);await press('#btn-ascent');
-  await until(()=>AscentDemo.state.stage==='failure');await shot(`${mode}-failure`);
+  await until(()=>AscentDemo.state.stage==='failure');const failureStart=Date.now();await shot(`${mode}-failure`);
+  await page.waitForTimeout(1800);assert.equal(await page.evaluate(()=>AscentDemo.state.view),'gear');await shot(`${mode}-broken-gear`);
+  const gearView=await page.evaluate(()=>{
+   const worm=mrGrp.userData.traction.worm.getWorldPosition(new THREE.Vector3()),ray=new THREE.Raycaster(camera.position,worm.clone().sub(camera.position).normalize(),0,camera.position.distanceTo(worm));
+   const walls=ray.intersectObject(wallGrp,true).filter(h=>{let o=h.object;while(o){if(!o.visible)return false;o=o.parent;}return true;});
+   return {wallHits:walls.length,wallGap:camera.position.x-(-S.SHAFT_W/2+MR_LINING_T)};
+  });
+  assert.ok(gearView.wallGap>.05&&gearView.wallHits===0,`gear is visible inside machine room: ${JSON.stringify(gearView)}`);
   await until(()=>AscentDemo.state.view==='drive');await page.waitForTimeout(850);await shot(`${mode}-drive-shock`);
+  assert.ok(Date.now()-failureStart>=5000,'Fracture and damaged gear remain in view before drive shock');
   await until(()=>AscentDemo.state.stage==='runaway');await page.waitForTimeout(3900);await shot(`${mode}-bear-ascent`);
   await until(()=>AscentDemo.state.view==='governor');
   const ascentSeconds=await page.evaluate(()=>(performance.now()-AscentDemo.state.runStart)/1000);

@@ -2323,59 +2323,61 @@
       return Math.min(m.switchInitialRot,Math.atan2(uy,ux)-Math.acos(cosine)-Math.atan2(vy,vx));
     }
 
-    /* 과속 트립 — 2단계 (16:10 육성 지시: "떡판이 로프를 홈에 눌러 잡아준다")
-       ① 진자 원심 개방과 휠 관성 주행을 시작
-       ② 낙하: 쇄기 물림 + 캐치 암(+CCW) + 스위치 플런저 타격 = 같은 시각
-       ③ 파지: 물린 발톱을 휠이 끌고 가며 레버를 반대(-CW)로 돌린다 →
+    /* 과속 트립: 진자 개방 → 타격 뭉치가 전기 스위치를 누름 → 쇄기/캐치 암 작동.
+       파지: 물린 발톱을 휠이 끌고 가며 레버를 반대(-CW)로 돌린다 →
               레버 우단에서 내려온 떡판(캐치슈)이 로프를 시브 홈에 눌러 잡는다.
               이때 휠·라체트가 함께 끌리다 멈춘다 = 로프 정지. */
-    /* 과속 트립 — 실사 4단계 정밀 물리 연동 시퀀스
-       Step 1 (0.0s ~ 0.50s): 원심 진자(Flyweights) 서서히 개방 + 쐐기(Pawl)가 캠 톱날 홈에 '철컥!' 깊숙이 결착
-       Step 2 (0.50s ~ 1.00s): 쐐기가 물린 채 휠 관성 회전(드래그) → 일체형 캐치 레버를 앞으로 힘차게 밀어올림
-       Step 3 (0.90s ~ 1.25s): 캐치 레버 좌단이 스위치를 강하게 타격 → 스위치 레버가 아래로 '툭!' 떨어지며 래칭(OFF)
-       Step 4 (1.00s ~ 1.35s): 캐치슈(떡판)가 조속기 로프를 시브 홈에 강하게 압착하여 휠 및 로프 완전 정지 → 카 ESTOP */
+    // GLB 원본의 실제 타격면에서 계산한 접촉 곡선. 런타임에는 보간만 한다.
+    function governorStrikeRotation(curve, travel) {
+      const index=Math.max(0,Math.min(curve.angles.length-1,travel/curve.step));
+      const lo=Math.floor(index),hi=Math.min(lo+1,curve.angles.length-1);
+      return curve.angles[lo]+(curve.angles[hi]-curve.angles[lo])*(index-lo);
+    }
+
+    /* 교육용 확대: 접근 → 뭉치의 실제 면 접촉/밀기 → 래치 → 톱니/캐치슈.
+       상·하 접촉 위상은 GLB에서 따로 읽는다. 카/로프는 휠 이동량에 연동한다. */
     function governorTrip(spinDir, onLocked, observer = {}) {
       const gov=govHandles();if(!gov?.ready||governorPhase!=='rest')return null;
       governorPhase='tripping';govSpinDir=spinDir;
       const g=gov.geom,pose=gov.pose.trip,w0=gov.wheel.rotation.z;
       const step=g.toothStep;
-      const hitPhase=gov.mechanism.switchHitPhase,tau=Math.PI*2;
-      const hit=spinDir>0?hitPhase+Math.ceil((w0+Math.PI*1.3-hitPhase)/tau)*tau:
-        hitPhase+Math.floor((w0-Math.PI*1.3-hitPhase)/tau)*tau;
-      const contact=spinDir>0?Math.ceil((hit+0.16)/step)*step:Math.floor((hit-0.16)/step)*step;
-      const hitTime=2.8*(hit-w0)/(contact-w0);
+      const curve=spinDir>0?gov.mechanism.switchStrikeDown:gov.mechanism.switchStrikeUp;
+      const hitPhase=curve.phase,tau=Math.PI*2;
+      // 다음 첫 접촉만 향한다. 여분 한 바퀴를 돌며 이미 열린 진자가 암을 통과하지 않는다.
+      const hit=spinDir>0?hitPhase+Math.ceil((w0+.001-hitPhase)/tau)*tau:
+        hitPhase+Math.floor((w0-.001-hitPhase)/tau)*tau;
+      const cleared=hit+spinDir*curve.travel;
+      const contact=spinDir>0?Math.ceil((cleared+0.04)/step)*step:Math.floor((cleared-0.04)/step)*step;
       const initialOpen=gov.pendulums[0].rotation.z-g.pendRot0[0];
       const phase={t:0};let previousStage='';
       const unit=(a,b,t)=>Math.max(0,Math.min(1,(t-a)/(b-a)));
       const smooth=t=>t*t*(3-2*t);
       function apply(){
         const t=phase.t;
-        const open=initialOpen+(pose.pendulum-initialOpen)*smooth(unit(0,1.5,t));
+        const open=initialOpen+(pose.pendulum-initialOpen)*smooth(unit(0,1.2,t));
         gov.pendulums.forEach((p,i)=>p.rotation.z=g.pendRot0[i]+open);gov.setLinkage(open);
         // One owner for each transform: no overlapping wheel tweens.
-        const run=unit(0,2.8,t),drag=smooth(unit(2.8,4.6,t));
-        gov.wheel.rotation.z=w0+(contact-w0)*run+spinDir*pose.ratchet*drag;
+        const push=unit(2.2,3.3,t),engage=smooth(unit(3.9,4.35,t)),drag=smooth(unit(4.85,6.2,t));
+        gov.wheel.rotation.z=w0+(hit-w0)*unit(0,2.2,t)+spinDir*curve.travel*push+(contact-cleared)*engage+spinDir*pose.ratchet*drag;
         gov.ratchet.rotation.z=spinDir*pose.ratchet*drag;
-        gov.pawl.rotation.z=g.pawlRot0+pose.pawl*smooth(unit(2.45,2.8,t));
-        const release=smooth(unit(2.8,3.25,t)),grip=smooth(unit(3.25,4.6,t));
+        gov.pawl.rotation.z=g.pawlRot0+pose.pawl*engage;
+        const release=smooth(unit(4.35,4.85,t)),grip=drag;
         gov.topArm.rotation.z=g.armRot0+pose.topArm*release+(pose.gripArm-pose.topArm)*grip;
         gov.spring.scale.y=1-0.05*release-0.035*grip;
         // Hinged actuator rotates around its real pin; do not translate the pivot.
-        const snap=unit(hitTime,hitTime+0.18,t);
-        const initialStrike=pose.switchRot*(1-Math.pow(1-snap,3));
-        // 진자 타격 직후 수평 기준 -75°까지 스냅한다. 캐치가 움직여도 다시 들리지 않는다.
-        // 복귀 전까지 래치를 유지한다. 타임라인 seek도 같은 자세를 내도록 시간에서 직접 계산한다.
-        const catchPush=t<2.8?0:t<=3.25?governorSwitchContactAngle(gov,pose.topArm*release):pose.switchRot;
-        gov.switchLever.rotation.z=Math.min(initialStrike,catchPush);
+        const pressed=governorStrikeRotation(curve,curve.travel*push);
+        const latched=spinDir>0?pose.switchRot:pose.switchUpRot;
+        // 뭉치가 빠져나간 뒤 래치 스냅. 떨어진 뭉치에서 레버가 먼저 움직이지 않는다.
+        gov.switchLever.rotation.z=pressed+(latched-pressed)*smooth(unit(3.3,3.9,t));
         gov.switchLever.position.x=g.plungerX0;
-        gov.switchLever.userData.contactClosed=t<hitTime+0.05;
-        gov.ropeLocked=t>=4.6;
-        const stage=t<hitTime?'centrifugal':t<2.8?'electrical':t<3.25?'pawl':'rope-grip';
+        gov.switchLever.userData.contactClosed=t<2.2||Math.abs(gov.switchLever.rotation.z)<Math.abs(gov.mechanism.switchInitialRot);
+        gov.ropeLocked=t>=6.2;
+        const stage=t<2.2?'centrifugal':t<3.9?'electrical':t<4.85?'pawl':'rope-grip';
         if(stage!==previousStage){previousStage=stage;observer.onStage?.(stage);}
         observer.onUpdate?.(t);
       }
       const tl=gsap.timeline();
-      tl.to(phase,{t:4.6,duration:4.6,ease:'none',onUpdate:apply});
+      tl.to(phase,{t:6.2,duration:6.2,ease:'none',onUpdate:apply});
       tl.add(()=>{apply();governorPhase='tripped';gov.ropeLocked=true;onLocked?.();});
       gov.tripTimeline=tl;return tl;
     }

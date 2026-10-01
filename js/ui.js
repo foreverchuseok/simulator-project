@@ -165,12 +165,13 @@ function updateManualCameraNear() {
       function bufferImpact() { const c = ac(), t = c.currentTime; thump(c, t, 40, 0.6, 0.65); thump(c, t + 0.01, 88, 0.28, 0.32); clack(c, t, 170, 0.16, 0.3); clack(c, t + 0.006, 950, 0.05, 0.08); hiss(c, t + 0.04, 1.1, 0.03, 800); }
       // 승객이 에이프런에 부딪히는 가벼운 "쿵"
       function bump() { const c = ac(), t = c.currentTime; thump(c, t, 110, 0.12, 0.18); clack(c, t, 260, 0.05, 0.1); }
-      function overspeedImpact(kind) {
+      function overspeedImpact(kind, playbackSeconds=.58) {
         const c=ac(),t=c.currentTime;
         if(kind==='collision'){thump(c,t,28,1.25,.68);thump(c,t+.045,53,.85,.42);clack(c,t,135,.24,.32);hiss(c,t+.05,1.5,.07,500);}
         if(kind==='break'){
-          [0,.055,.13,.21,.31,.42].forEach((d,i)=>{clack(c,t+d,850+i*230,.065,.20+i*.018);thump(c,t+d,155-i*15,.11,.10);});
-          thump(c,t+.39,43,.48,.34);hiss(c,t+.1,.8,.065,1200);
+          const stretch=playbackSeconds/.58;
+          [0,.055,.13,.21,.31,.42].forEach((d,i)=>{clack(c,t+d*stretch,850+i*230,.065,.20+i*.018);thump(c,t+d*stretch,155-i*15,.11,.10);});
+          thump(c,t+.39*stretch,43,.48,.34);hiss(c,t+.1,Math.max(.8,playbackSeconds),.065,1200);
         }
         if(kind==='fall'){hiss(c,t,.6,.12,650);thump(c,t,35,.38,.18);}
         if(kind==='pawl'){clack(c,t,1900,.09,.32);thump(c,t,120,.23,.24);}
@@ -706,7 +707,7 @@ function updateManualCameraNear() {
       ovsDemo.shot=shot;gsap.killTweensOf(camera.position);gsap.killTweensOf(controls.target);
       const d=_deviceWorld(),g=_govWorld(),target=new THREE.Vector3(),offset=new THREE.Vector3();
       if(shot==='shaft'){target.set(0,carGrp.position.y+.5,CAR_CTR_Z);offset.set(5.2,.8,3.8);}
-      if(shot==='rope'){target.set(ropeObjs[2].hx,ovsDemo.breakY,CAR_CTR_Z);offset.set(1.25,.30,1.35);}
+      if(shot==='rope'){target.set(ropeObjs[2].hx,ovsDemo.breakY,CAR_CTR_Z+ropeObjs[2].hz);offset.set(.48,.08,.68);}
       if(shot==='governor'){target.copy(g).add(new THREE.Vector3(-.02,.02,0));offset.set(.70,.15,.35);}
       if(shot==='linkage'){target.copy(d).add(new THREE.Vector3(-.45,.08,0));offset.set(-.15,.80,-2.55);}
       if(shot==='safety'){target.copy(d).add(new THREE.Vector3(-.06,.04,0));offset.set(-.50,-.18,-.62);}
@@ -806,9 +807,10 @@ function updateManualCameraNear() {
       const ACCEL = 9.81;
       let tripped = false;
       const fallTick = (time, deltaMs) => {
-        const dt = Math.min((deltaMs || 16.7) / 1000, 0.05);
+        // GSAP과 같은 경과 시간. 50ms 상한으로 낮은 FPS의 PC만 느려지지 않게 한다.
+        const dt = Math.max(0,(deltaMs || 16.7) / 1000);
+        const deltaY = -Math.min(v*dt+.5*ACCEL*dt*dt,Math.max(0,carGrp.position.y-yFloor1-.8));
         v += ACCEL * dt;
-        const deltaY = -Math.min(v*dt,Math.max(0,carGrp.position.y-yFloor1-.8));
         carGrp.position.y += deltaY;
         spinSheaves(deltaY);
         cwtGrp.position.y -= deltaY;
@@ -829,24 +831,28 @@ function updateManualCameraNear() {
         // 트립: 정격 130% 도달
         if (!tripped && (v >= vTripMs || carGrp.position.y <= yFloor1 + 0.25)) {
           tripped = true;
-          ovsDemo.pending=gsap.delayedCall(.20,()=>{OVSEffects.capture('fall');onGovernorOverspeed(spinDir,btn);});
+          ovsDemo.pending=gsap.delayedCall(.20,()=>onGovernorOverspeed(spinDir,btn));
         }
       };
-      ovsCamera('rope',.7,()=>{
-        ovsDemo.pending=gsap.delayedCall(.45,()=>{
-        ovsDemo.stage='rope-break';ovsDemo.broken=true;ovsDemo.ropeGroup.visible=true;
-        ropeObjs.forEach(r=>r.carDrop.visible=false);refreshOVSRopeBreak();
-        MACH.overspeedImpact('break');ovsStage('① 부식된 가닥이 연속 파열합니다.');
-        OVSEffects.hit('주로프 파단','부식 · 가닥 연속 파열');OVSEffects.burst(new THREE.Vector3(ropeObjs[2].hx,ovsDemo.breakY,CAR_CTR_Z),.45,0,true);
-        ovsDemo.breakTween=gsap.to(ovsDemo,{breakProgress:1,duration:.58,ease:'none',onUpdate:refreshOVSRopeBreak});
-        ovsDemo.pending=gsap.delayedCall(.60,()=>{
-          ovsCamera('shaft',.32,()=>{
-            ovsDemo.stage='runaway';ovsStage('② 카 자유낙하 · 조속기 휠이 급가속합니다.');
-            OVSEffects.hit('자유낙하','과속 감지');MACH.overspeedImpact('fall');
-            OVSEffects.burst(new THREE.Vector3(0,carGrp.position.y+S.CAR_H/2,CAR_CTR_Z),1.7,0);
-            gsap.ticker.add(fallTick);ovsDemo.fallTick=fallTick;
-          });
-        });
+      ovsCamera('rope',.8,()=>{
+        ovsDemo.pending=gsap.delayedCall(1.2,()=>{
+          ovsDemo.stage='rope-break';ovsDemo.broken=true;ovsDemo.ropeGroup.visible=true;
+          ropeObjs.forEach(r=>r.carDrop.visible=false);refreshOVSRopeBreak();
+          const ruptureSeconds=2.4;
+          MACH.overspeedImpact('break',ruptureSeconds);ovsStage('① 부식된 가닥이 연속 파열합니다.');
+          OVSEffects.hit('주로프 파단','부식 · 가닥 연속 파열');OVSEffects.burst(new THREE.Vector3(ropeObjs[2].hx,ovsDemo.breakY,CAR_CTR_Z),.45,0,true);
+          ovsDemo.breakTween=gsap.to(ovsDemo,{breakProgress:1,duration:ruptureSeconds,ease:'none',onUpdate:refreshOVSRopeBreak,onComplete:()=>{
+            ovsStage('① 주로프 절단 완료 · 벌어진 로프 끝을 확인하세요.');
+            OVSEffects.capture('fall');
+            ovsDemo.pending=gsap.delayedCall(2,()=>{
+              ovsCamera('shaft',.65,()=>{
+                ovsDemo.stage='runaway';ovsStage('② 카 자유낙하 · 조속기 휠이 급가속합니다.');
+                OVSEffects.hit('자유낙하','과속 감지');MACH.overspeedImpact('fall');
+                OVSEffects.burst(new THREE.Vector3(0,carGrp.position.y+S.CAR_H/2,CAR_CTR_Z),1.7,0);
+                gsap.ticker.add(fallTick);ovsDemo.fallTick=fallTick;
+              });
+            });
+          }});
         });
       });
     }
@@ -859,8 +865,8 @@ function updateManualCameraNear() {
 
     function runGovernorSequence(spinDir,btn){
       if(ovsDemo.fallTick){gsap.ticker.remove(ovsDemo.fallTick);ovsDemo.fallTick=null;}
-      // 기존 접촉 각도·피벗을 유지한 채 트립 타임라인만 빠르게 재생한다.
-      let previousWheel=govHandles().wheel.rotation.z;
+      // 접촉과 래치가 보이도록 GLB 접촉 곡선을 원래 교육용 시간으로 재생한다.
+      let previousWheel=govHandles().wheel.rotation.z,powerCut=false;
       ovsDemo.trip=governorTrip(spinDir,()=>{
         estop=true;moving=false;currentState=ELEVATOR_STATE.ESTOP;
         ovsDemo.stage='rope-locked';MACH.overspeedImpact('grip');
@@ -885,9 +891,9 @@ function updateManualCameraNear() {
             'rope-grip':'캐치슈가 조속기 로프를 눌러 고정합니다.'};
           ovsStage(captions[stage]);
           if(stage==='pawl'){MACH.overspeedImpact('pawl');OVSEffects.hit('조속기 작동','톱니 결착');}
-          if(stage==='electrical'){MACH.motorOff();estop=true;currentState=ELEVATOR_STATE.ESTOP;}
         },
         onUpdate:()=>{
+          if(!powerCut&&!govHandles().switchLever.userData.contactClosed){powerCut=true;MACH.motorOff();estop=true;currentState=ELEVATOR_STATE.ESTOP;}
           const w=govHandles().wheel.rotation.z,deltaY=-(w-previousWheel)*mrGrp.userData.govR;previousWheel=w;
           carGrp.position.y+=deltaY;cwtGrp.position.y-=deltaY;
           spinTractionSheaves(deltaY);
@@ -895,7 +901,6 @@ function updateManualCameraNear() {
           refreshRopes();refreshGovernorRope();
         }
       });
-      ovsDemo.trip?.timeScale(3.2);
     }
 
     function engageDeviceStop(spinDir, btn, options={}) {
@@ -938,8 +943,11 @@ function updateManualCameraNear() {
       if(ovsDemo.sparks)ovsDemo.sparks.visible=false;
       restoreOVSRopes();
       const caption=document.getElementById('ovs-stage');if(caption)caption.hidden=true;
+      gsap.killTweensOf(camera.position);gsap.killTweensOf(controls.target);
       _restoreCam(1.0); // 디바이스 클로즈업 중 즉시 복귀 눌러도 카메라 원위치
       updateStatus('v-dir', '조속기 복귀 중…', '#f0883e');
+      // 파단 관찰/타격 도중에도 현재 기구 자세에서 같은 복귀 시퀀스로 정리한다.
+      governorPhase='tripped';
       governorReset(() => {
         estop = false; overspeedActive = false;
         ovsDemo.stage='rest';

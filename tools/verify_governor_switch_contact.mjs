@@ -41,7 +41,35 @@ try{
    samples.push({a,b,overlap,meshGap:surfaceDistance(pad)-m.catchContactRadius});
   }
   g.topArm.rotation.z=0;g.switchLever.rotation.z=0;scene.updateMatrixWorld(true);
-  return {normalGap,strikeDistance,strikeZ:strikeLocal.z,switchZ:m.switchTip[2],samples};
+  function rotate(p,pivot,angle){const c=Math.cos(angle),s=Math.sin(angle),x=p[0]-pivot[0],y=p[1]-pivot[1];return[pivot[0]+x*c-y*s,pivot[1]+x*s+y*c];}
+  function nearestContact(a,b){
+   let best={distance:Infinity};
+   function pointEdge(p,x,y){const dx=y[0]-x[0],dy=y[1]-x[1],t=Math.max(0,Math.min(1,((p[0]-x[0])*dx+(p[1]-x[1])*dy)/(dx*dx+dy*dy))),q=[x[0]+t*dx,x[1]+t*dy],distance=Math.hypot(p[0]-q[0],p[1]-q[1]);if(distance<best.distance)best={distance,point:[(p[0]+q[0])/2,(p[1]+q[1])/2]};}
+   for(let i=0;i<a.length;i++)for(let j=0;j<b.length;j++){pointEdge(a[i],b[j],b[(j+1)%b.length]);pointEdge(b[j],a[i],a[(i+1)%a.length]);}
+   return best;
+  }
+  // Check the contact point against actual exported triangles, including bevels.
+  const strikes=[];
+  for(const direction of [1,-1]){
+   const curve=direction>0?m.switchStrikeDown:m.switchStrikeUp;
+   let maxGap=0,count=0;
+   for(let i=2;i<curve.angles.length-7;i+=2){
+    const travel=i*curve.step,w=curve.phase+direction*travel,angle=governorStrikeRotation(curve,travel);
+    g.wheel.rotation.z=w;g.switchLever.rotation.z=angle;g.pendulums.forEach(p=>p.rotation.z=m.pendulum);g.setLinkage(m.pendulum);scene.updateMatrixWorld(true);
+    const pivot=g.pendulums[0].position.clone().add(g.wheel.position);
+    const head=m.strikeOutline.map(p=>rotate(rotate(p,[pivot.x,pivot.y],m.pendulum),[g.wheel.position.x,g.wheel.position.y],w));
+    const arm=m.actuatorOutline.map(p=>rotate(p,m.switchPivot,angle));
+    const near=nearestContact(head,arm);
+    if(Math.abs(curve.angles[i]-curve.angles[i-1])>1e-8){maxGap=Math.max(maxGap,surfaceDistance(new V(...near.point,m.strikePoint[2])));count++;}
+   }
+   strikes.push({direction,maxGap,count});
+  }
+  // Real timeline: no movement before contact, then a visible push, then the latch.
+  g.wheel.rotation.z=0;g.pendulums.forEach(p=>p.rotation.z=0);g.setLinkage(0);g.switchLever.rotation.z=0;
+  const timeline=governorTrip(1).pause(),sweep=[];
+  for(const time of [2.1,2.2,2.4,2.7,3.0,3.3,3.9,6.2]){timeline.time(time);sweep.push({time,wheel:g.wheel.rotation.z,angle:g.switchLever.rotation.z,closed:g.switchLever.userData.contactClosed});}
+  timeline.kill();governorPhase='rest';g.ropeLocked=false;g.wheel.rotation.z=0;g.pendulums.forEach(p=>p.rotation.z=0);g.setLinkage(0);g.switchLever.rotation.z=0;g.switchLever.userData.contactClosed=true;g.topArm.rotation.z=0;g.pawl.rotation.z=0;g.ratchet.rotation.z=0;g.spring.scale.y=1;
+  return {normalGap,strikeDistance,strikeZ:strikeLocal.z,switchZ:m.switchTip[2],samples,strikes,sweep};
  });
  assert.ok(report.strikeDistance<.0044,`actual striker cube misses GLB actuator: ${report.strikeDistance}`);
  assert.ok(report.normalGap>Math.sqrt(2)*.0044,`normal-speed striker hits actuator: ${report.normalGap}`);
@@ -49,6 +77,11 @@ try{
  const contact=report.samples.filter(s=>s.b<-.08001);
  assert.ok(contact.length>20);
  assert.ok(contact.every(s=>s.overlap>0&&Math.abs(s.meshGap)<.00015),JSON.stringify(contact));
+ assert.ok(report.strikes.every(s=>s.count>20&&s.maxGap<.00065),JSON.stringify(report.strikes));
+ assert.ok(Math.abs(report.sweep[0].angle)<1e-10,'Actuator stays at rest before the square head reaches it');
+ assert.ok(report.sweep[2].angle<0&&report.sweep[2].angle>-.2,'First contact pushes the actuator without an instant latch');
+ assert.ok(report.sweep[3].closed===false,'Electrical contact opens during physical push');
+ assert.ok(Math.abs(report.sweep[6].angle+Math.PI/3)<1e-5,'Down latch still reaches requested horizontal -75 degrees');
  await page.evaluate(()=>{
   document.querySelectorAll('#ui,#hud,#hint,#loading,.panel').forEach(e=>e.style.display='none');scene.fog=null;wallGrp.visible=false;controls.enableDamping=false;
   const b=govHandles().wheel.parent;
@@ -58,6 +91,13 @@ try{
  await page.screenshot({path:`${out}/rest.png`});
  await page.evaluate(()=>{const g=govHandles();g.topArm.rotation.z=g.mechanism.releaseArm;g.switchLever.rotation.z=governorSwitchContactAngle(g,g.mechanism.releaseArm);});
  await page.screenshot({path:`${out}/catch-contact.png`});
+ for(const direction of [1,-1]){
+  await page.evaluate(direction=>{
+   const g=govHandles(),curve=direction>0?g.mechanism.switchStrikeDown:g.mechanism.switchStrikeUp,travel=curve.travel*.55;
+   g.topArm.rotation.z=0;g.wheel.rotation.z=curve.phase+direction*travel;g.pendulums.forEach(p=>p.rotation.z=g.mechanism.pendulum);g.setLinkage(g.mechanism.pendulum);g.switchLever.rotation.z=governorStrikeRotation(curve,travel);
+  },direction);
+  await page.screenshot({path:`${out}/${direction>0?'down':'up'}-striker-contact.png`});
+ }
  assert.deepEqual(errors,[]);fs.writeFileSync(`${out}/report.json`,JSON.stringify({...report,errors},null,2));
- console.log({strikeDistance:report.strikeDistance,contactSamples:contact.length,maxMeshGap:Math.max(...contact.map(s=>Math.abs(s.meshGap))),errors});
+ console.log({strikeDistance:report.strikeDistance,contactSamples:contact.length,maxMeshGap:Math.max(...contact.map(s=>Math.abs(s.meshGap))),strikes:report.strikes,errors});
 }finally{await browser.close();}

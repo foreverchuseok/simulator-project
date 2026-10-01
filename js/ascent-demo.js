@@ -111,7 +111,10 @@ const AscentDemo = (() => {
     state.view=kind;gsap.killTweensOf(camera.position);gsap.killTweensOf(controls.target);
     let c,t;const portrait=Math.max(1,.85/camera.aspect);
     if(kind==='gear'){
-      t=tr().worm.getWorldPosition(new THREE.Vector3());c=t.clone().add(new THREE.Vector3(-1.05,.65,.72).multiplyScalar(portrait));
+      t=tr().worm.getWorldPosition(new THREE.Vector3());
+      // 세로 화면 거리 보정으로 X까지 늘리면 좌측 기계실 벽 밖에서 벽만 보인다.
+      c=t.clone().add(new THREE.Vector3(-.8,.45*portrait,.65*portrait));
+      c.x=Math.max(c.x,-S.SHAFT_W/2+MR_LINING_T+.08);
     }else if(kind==='drive'){
       t=mainSheaveGrp.getWorldPosition(new THREE.Vector3());c=t.clone().add(new THREE.Vector3(1.45,.6,.9).multiplyScalar(portrait));
     }else if(kind==='brake'){
@@ -165,21 +168,24 @@ const AscentDemo = (() => {
   }
   function breakDrive(){
     state.stage='failure';tr().driveBroken=true;setTractionBrake(false,true);
-    fractures.forEach(f=>{f.mesh.geometry=f.broken;f.pieces.forEach(({mesh:p,home,k})=>{p.visible=true;own(gsap.to(p.position,{x:home.x-.26-.035*k,y:home.y+.16-.035*k,z:home.z+Math.sin(k*2)*.25,duration:.85,ease:'power3.out'}));own(gsap.to(p.rotation,{x:p.rotation.x+k*.3,z:p.rotation.z+k*.4,duration:.85}));});});
-    MACH.overspeedImpact('break');UCMEffects.hit('failure','웜기어 구동부 파손','');shock();burst(tr().worm.getWorldPosition(new THREE.Vector3()),.38);say('웜기어 구동부 파손');
-    later(2.4,()=>{shot('drive',.7);later(.75,()=>{
+    const fractureSeconds=1.6;
+    fractures.forEach(f=>{f.mesh.geometry=f.broken;f.pieces.forEach(({mesh:p,home,k})=>{p.visible=true;own(gsap.to(p.position,{x:home.x-.26-.035*k,y:home.y+.16-.035*k,z:home.z+Math.sin(k*2)*.25,duration:fractureSeconds,ease:'power2.out'}));own(gsap.to(p.rotation,{x:p.rotation.x+k*.3,z:p.rotation.z+k*.4,duration:fractureSeconds}));});});
+    MACH.overspeedImpact('break',fractureSeconds);UCMEffects.hit('failure','웜기어 구동부 파손','');shock();burst(tr().worm.getWorldPosition(new THREE.Vector3()),.38);say('웜기어 구동부 파손 · 슬로모션');
+    later(fractureSeconds,()=>say('웜기어 파손 완료 · 분리된 파편과 파손 부위를 확인하세요.'));
+    later(4.4,()=>{shot('drive',.7);later(.75,()=>{
       MACH.overspeedImpact('grip');shock(.65);say('구동축 충격');
       for(const [o,home] of [[mainSheaveGrp,saved.mainP],[deflectorSheaveGrp,saved.defP],[cwtGrp,saved.cwtP]]){
         const q={t:0};own(gsap.to(q,{t:1,duration:1.3,onUpdate:()=>{o.position.x=home.x+Math.sin(q.t*45)*.028*(1-q.t);},onComplete:()=>o.position.x=home.x}));
       }
     });});
-    later(5.3,()=>{shot('car',.65);later(.8,()=>{state.stage='runaway';state.runStart=performance.now();state.alarm=1;say('▲ 급상승');MACH.overspeedImpact('fall');shock(.45);gsap.ticker.add(tick);});});
+    later(7.3,()=>{shot('car',.65);later(.8,()=>{state.stage='runaway';state.runStart=performance.now();state.alarm=1;say('▲ 급상승');MACH.overspeedImpact('fall');shock(.45);gsap.ticker.add(tick);});});
   }
   function openPendulum(p){const g=govHandles();g.pendulums.forEach((o,i)=>o.rotation.z=g.geom.pendRot0[i]+p);g.setLinkage(p);}
   function tick(time,delta){
     if(!state.active||!['runaway','unprotected'].includes(state.stage))return;
     // 3~4층 추적 장면을 종전보다 1.3배 빠르게 재생한다. 검출속도와 이동 경로는 유지한다.
-    let dt=Math.min((delta||16.7)/1000,.05),a=state.stage==='runaway'?state.runAccel:motion.accel;
+    // 경과 시간을 버리지 않는다. 낮은 FPS에서도 PC/모바일의 재생 시간이 같다.
+    let dt=Math.max(0,(delta||16.7)/1000),a=state.stage==='runaway'?state.runAccel:motion.accel;
     if(state.stage==='runaway')dt*=state.runTimeScale;
     if(state.stage==='runaway')dt=Math.min(dt,(state.tripSpeed-state.v)/a);
     const next=carGrp.position.y+state.v*dt+.5*a*dt*dt;state.v+=a*dt;
@@ -195,19 +201,28 @@ const AscentDemo = (() => {
     const g=govHandles(),p={open:g.pendulums[0].rotation.z-g.geom.pendRot0[0]};
     own(gsap.to(p,{open:g.pose.trip.pendulum,duration:.9,onUpdate:()=>openPendulum(p.open)}));
     later(1.2,()=>{
-        // 같은 strikePoint/switchTip의 접촉 위상을 역방향으로 통과한다. 로프/휠은 카 이동량과 일치한다.
-        const w=g.wheel.rotation.z,tau=2*Math.PI,phase=g.mechanism.switchHitPhase;
+        // 상승은 뭉치가 암의 아랫면에 처음 닿는 별도 위상을 사용한다.
+        const curve=g.mechanism.switchStrikeUp,w=g.wheel.rotation.z,tau=2*Math.PI,phase=curve.phase;
         const hit=phase+Math.floor((w-.12-phase)/tau)*tau;
         const q={y:carGrp.position.y},end=q.y+(w-hit)*mrGrp.userData.govR;
         own(gsap.to(q,{y:end,duration:2.4,ease:'power1.out',onUpdate:()=>setCar(q.y),onComplete:()=>{
           state.stage='switch';state.switchY=carGrp.position.y;state.switchSpeed=state.v;
-          g.switchLever.userData.contactClosed=false;governorPhase='tripped';g.ropeLocked=false;
-          own(gsap.to(g.switchLever.rotation,{z:g.pose.trip.switchUpRot,duration:.65,ease:'power3.out'}));
-          MACH.bump();say('스위치 상향 타격');
-          // 타격을 큰 화면에서 끝까지 보여준 뒤, 같은 순간의 로프브레이크 작동으로 컷 전환한다.
-          later(1.15,()=>{shot('brake',.45);later(.6,()=>{
-            if(state.mode==='normal')grip();else{say('로프브레이크 없음 · 제동 불가');later(1.1,()=>{shot('car',.45);later(.5,()=>{state.stage='unprotected';gsap.ticker.add(tick);});});}
-          });});
+          MACH.bump();say('뭉치가 스위치 아랫면을 밀어 올립니다.');
+          const push={y:carGrp.position.y},start=push.y;
+          own(gsap.to(push,{y:start+curve.travel*mrGrp.userData.govR,duration:1.1,ease:'none',onUpdate:()=>{
+            setCar(push.y);
+            g.switchLever.rotation.z=governorStrikeRotation(curve,(push.y-start)/mrGrp.userData.govR);
+            g.switchLever.userData.contactClosed=Math.abs(g.switchLever.rotation.z)<Math.abs(g.mechanism.switchInitialRot);
+          },onComplete:()=>{
+            g.switchLever.userData.contactClosed=false;governorPhase='tripped';g.ropeLocked=false;
+            own(gsap.to(g.switchLever.rotation,{z:g.pose.trip.switchUpRot,duration:.6,ease:'power2.inOut',onComplete:()=>{
+              say('스위치 상향 타격 · 전기 접점 차단');
+              // 눌림과 래치를 큰 화면에서 확인한 뒤 같은 사건의 로프브레이크로 전환한다.
+              later(1.4,()=>{shot('brake',.55);later(.7,()=>{
+                if(state.mode==='normal')grip();else{say('로프브레이크 없음 · 제동 불가');later(1.1,()=>{shot('car',.45);later(.5,()=>{state.stage='unprotected';gsap.ticker.add(tick);});});}
+              });});
+            }}));
+          }}));
         }}));
     });
   }

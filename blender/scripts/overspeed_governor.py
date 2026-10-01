@@ -301,6 +301,7 @@ CATCH_GRIP=(_lo+_hi)/2
 
 BASE_L    = -0.175
 STRIKE_Z = 0.034  # 진자 네모 타격 뭉치와 스위치 암의 공통 앞뒤 평면
+STRIKE_HEAD_SIZE = 0.0088
 SW_X, SW_Y, SW_Z = -0.145, 0.220, STRIKE_Z
 SW_W, SW_H, SW_D = 0.032, 0.106, 0.028
 SW_TILT   = math.radians(15)
@@ -455,6 +456,9 @@ _ACT_AXT  = (ACT_TIP[0] - ACT_NRM[0] * ACT_HT, ACT_TIP[1] - ACT_NRM[1] * ACT_HT)
 _ACT_FACE = SWP(SW_X + SW_W / 2 - 0.001, SW_Y)
 ACT_LEN   = ((_ACT_AXT[0] - _ACT_FACE[0]) * ACT_DIR[0] + (_ACT_AXT[1] - _ACT_FACE[1]) * ACT_DIR[1])
 ACT_ROOT  = (_ACT_AXT[0] - ACT_DIR[0] * ACT_LEN, _ACT_AXT[1] - ACT_DIR[1] * ACT_LEN)
+ACT_OUTLINE = [(ACT_ROOT[0] + ACT_NRM[0]*ACT_HR, ACT_ROOT[1] + ACT_NRM[1]*ACT_HR),
+               ACT_TIP, (ACT_TIP[0] - ACT_NRM[0]*2*ACT_HT, ACT_TIP[1] - ACT_NRM[1]*2*ACT_HT),
+               (ACT_ROOT[0] - ACT_NRM[0]*ACT_HR, ACT_ROOT[1] - ACT_NRM[1]*ACT_HR)]
 PLG_BASE  = (ACT_ROOT[0], ACT_ROOT[1], SW_Z)
 ACT_ROLLER = (_ACT_AXT[0] - ACT_DIR[0] * 0.003, _ACT_AXT[1] - ACT_DIR[1] * 0.003)
 ACT_ROLLER_R, ACT_ROLLER_OFFSET, ACT_ROLLER_T = 0.004, 0.014, 0.006
@@ -767,7 +771,7 @@ def build_pendulum(name, pivot_ang, release_tab=False, tie_cx=0.0, spr_cx=0.0):
         p_head = (dx + ux * r_head, dy + uy * r_head)
         global RELEASE_TAB_POINT
         RELEASE_TAB_POINT=(p_head[0],p_head[1],ztab)
-        p.append(add_box((0.0088, 0.0088, 0.0088), T(p_head[0], p_head[1], ztab),
+        p.append(add_box((STRIKE_HEAD_SIZE,)*3, T(p_head[0], p_head[1], ztab),
                          MAT_STEEL, rot=(0, -ang, 0)))
     # ── 피벗 볼트 — 휠을 관통해 뒤로 (앞: 육각 머리 / 뒤: 링크·스프링) ────────
     #   z 상한 0.042 — 캐치 레버(0.048~)와 날(0.0425~0.0465)이 피벗 원 위를 지난다.
@@ -969,17 +973,11 @@ def build_spring():
 #  4-7. Plunger — 실사형 액추에이터
 # =============================================================================
 def build_plunger():
-    R, K = ACT_ROOT, ACT_TIP
-    ux, uy = ACT_DIR
-    nx, ny = ACT_NRM
+    R = ACT_ROOT
     p = []
     p.append(add_cyl(SECT_R, ACT_THK - 0.001, T(R[0], R[1], SW_Z), MAT_STEEL, rot=AX, verts=40))
     p.append(add_cyl(0.0035, ACT_THK + 0.010, T(R[0], R[1], SW_Z), MAT_CHROME, rot=AX, verts=16))
-    tipAx = (K[0] - nx * ACT_HT, K[1] - ny * ACT_HT)
-    arm = [(R[0] + nx * ACT_HR, R[1] + ny * ACT_HR), K,
-           (tipAx[0] - nx * ACT_HT, tipAx[1] - ny * ACT_HT),
-           (R[0] - nx * ACT_HR, R[1] - ny * ACT_HR)]
-    p.append(add_plate(arm, ACT_THK, MAT_STEEL, loc=(0, -SW_Z, 0), bevel_w=0.0006, name="actArm"))
+    p.append(add_plate(ACT_OUTLINE, ACT_THK, MAT_STEEL, loc=(0, -SW_Z, 0), bevel_w=0.0006, name="actArm"))
     hx, hy = ACT_ROLLER
     rear_z=SW_Z-ACT_THK/2-ACT_ROLLER_BACK_OFFSET
     front_z=SW_Z+ACT_THK/2+ACT_ROLLER_OFFSET
@@ -1007,6 +1005,61 @@ _dx,_dy=RELEASE_TAB_POINT[0]-_pp[0],RELEASE_TAB_POINT[1]-_pp[1]
 _tx=_pp[0]+_dx*math.cos(TRIP_PENDULUM)-_dy*math.sin(TRIP_PENDULUM)
 _ty=_pp[1]+_dx*math.sin(TRIP_PENDULUM)+_dy*math.cos(TRIP_PENDULUM)-GWY
 SWITCH_HIT_PHASE=math.atan2(ACT_TIP[1]-GWY,ACT_TIP[0])-math.atan2(_ty,_tx)
+
+def rotate_xy(point, pivot, angle):
+    c,s=math.cos(angle),math.sin(angle)
+    x,y=point[0]-pivot[0],point[1]-pivot[1]
+    return (pivot[0]+x*c-y*s,pivot[1]+x*s+y*c)
+
+_head_angle=math.atan2(RELEASE_TAB_POINT[1]-GWY,RELEASE_TAB_POINT[0])
+_half=STRIKE_HEAD_SIZE/2
+STRIKE_OUTLINE=[rotate_xy((RELEASE_TAB_POINT[0]+x*_half,RELEASE_TAB_POINT[1]+y*_half),
+                         RELEASE_TAB_POINT,_head_angle) for x,y in [(-1,-1),(1,-1),(1,1),(-1,1)]]
+
+def polygon_overlap(a,b):
+    # Separating-axis test of the actual square head and the actuator plate outline.
+    for polygon in (a,b):
+        for p,q in zip(polygon,polygon[1:]+polygon[:1]):
+            nx,ny=-(q[1]-p[1]),q[0]-p[0]
+            aa=[nx*x+ny*y for x,y in a];bb=[nx*x+ny*y for x,y in b]
+            if max(aa)<=min(bb) or max(bb)<=min(aa): return False
+    return True
+
+def switch_strike_curve(direction):
+    opened=[rotate_xy(p,_pp,TRIP_PENDULUM) for p in STRIKE_OUTLINE]
+    def head(w): return [rotate_xy(p,(0,GWY),w) for p in opened]
+    start=SWITCH_HIT_PHASE-direction*.4
+    # First surface contact, separately for downward and upward rotation.
+    for i in range(1,801):
+        end=start+direction*.001
+        if polygon_overlap(head(end),ACT_OUTLINE): break
+        start=end
+    else: raise RuntimeError('Governor striker misses actuator')
+    for _ in range(40):
+        mid=(start+end)/2
+        if polygon_overlap(head(mid),ACT_OUTLINE): end=mid
+        else: start=mid
+    phase=(start+end)/2
+    step=.001;angles=[];angle=0;last_push=0
+    for i in range(241):
+        square=head(phase+direction*i*step)
+        def blocked(a): return polygon_overlap(square,[rotate_xy(p,ACT_ROOT,-direction*a) for p in ACT_OUTLINE])
+        if blocked(abs(angle)):
+            lo=hi=abs(angle)
+            while hi<abs(ACT_UP_LATCH_ROT) and blocked(hi): hi+=.002
+            if blocked(hi): raise RuntimeError('Governor switch contact jams')
+            for _ in range(30):
+                mid=(lo+hi)/2
+                if blocked(mid): lo=mid
+                else: hi=mid
+            next_angle=-direction*hi
+            if abs(next_angle-angle)>1e-8:last_push=i
+            angle=next_angle
+        angles.append(angle)
+    # A short clear interval separates cam contact from the switch's latch snap.
+    angles=angles[:last_push+6]
+    return {'phase':phase,'step':step,'travel':step*(len(angles)-1),'angles':angles}
+
 bpy.data.objects['BaseFrame']['mechanism']={
     'pendulum':TRIP_PENDULUM,'pawl':TRIP_PAWL,'releaseArm':CATCH_RELEASE,
     'gripArm':CATCH_GRIP,'switchRot':ACT_LATCH_ROT,'switchUpRot':ACT_UP_LATCH_ROT,
@@ -1019,7 +1072,10 @@ bpy.data.objects['BaseFrame']['mechanism']={
     'ropeFaceX':0.100+ROPE_RADIUS_LOCAL,'switchHitPhase':SWITCH_HIT_PHASE,
     'switchCableExit':[*SWP(SW_X, SW_Y-SW_H/2), SW_Z],
     'strikePoint':list(RELEASE_TAB_POINT),'switchTip':[ACT_TIP[0],ACT_TIP[1],SW_Z],
-    'strikeRadialGap':math.hypot(_tx,_ty)-math.hypot(ACT_TIP[0],ACT_TIP[1]-GWY)}
+    'strikeRadialGap':math.hypot(_tx,_ty)-math.hypot(ACT_TIP[0],ACT_TIP[1]-GWY),
+    'strikeOutline':[list(p) for p in STRIKE_OUTLINE], 'actuatorOutline':[list(p) for p in ACT_OUTLINE],
+    'strikeHeadSize':STRIKE_HEAD_SIZE,'switchStrikeDown':switch_strike_curve(1),
+    'switchStrikeUp':switch_strike_curve(-1)}
 
 def export_glb(path):
     os.makedirs(os.path.dirname(path), exist_ok=True)
