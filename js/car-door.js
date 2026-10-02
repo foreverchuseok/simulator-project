@@ -47,7 +47,8 @@ const CarDoor = (() => {
     const clutchMetal=M.ss(0x514a2c), linkMetal=M.ss(0x343a3d);
     clutchMetal.metalness=.48;clutchMetal.roughness=.43;
     linkMetal.metalness=.55;linkMetal.roughness=.36;
-    const skin=M.silverHairline(0xc8d0d8), wire=M.ss(0x9b9b92), green=M.paint(0x284c3b);
+    const skin=M.ss(0x9aa1a5), wire=M.ss(0x9b9b92), damping=M.paint(0x747b80);
+    skin.roughness=.65;skin.metalness=.65;damping.roughness=.96;damping.clearcoat=0;
     const box=(name,w,h,t,mat,x,y,z,p=root)=>{const m=createBox(w,h,t,mat,x,y,z,p);m.name=name;return m;};
     const group=(name,x,y,z,p=root)=>{const g=new THREE.Group();g.name=name;g.position.set(x,y,z);p.add(g);return g;};
     const cyl=(name,r,len,mat,x,y,z,p=root,n=20)=>{
@@ -98,13 +99,16 @@ const CarDoor = (() => {
       sticker.position.set(side>0?-d.width/2+meetInset:d.width/2-meetInset,d.floor+1.55,d.doorZ-spec.panelT/2-.0006);sticker.rotation.y=Math.PI;
       sticker.userData={type:'car-door-safety-sticker'};g.add(sticker);
       for(const x of [-d.width/2+0.001,d.width/2-0.001]) {
-        box('carDoorFold',0.002,h,spec.panelT,zinc,x,mid,d.doorZ,g);
-        box('carDoorReturn',0.017,h,0.002,zinc,x-Math.sign(x)*0.0075,mid,d.doorZ+spec.panelT/2-0.001,g);
+        box('carDoorFold',0.002,h,spec.panelT,skin,x,mid,d.doorZ,g);
+        box('carDoorReturn',0.017,h,0.002,skin,x-Math.sign(x)*0.0075,mid,d.doorZ+spec.panelT/2-0.001,g);
       }
-      for(const y of [d.bottom+0.001,d.top-0.001])box('carDoorEndFold',d.width,0.002,spec.panelT,zinc,0,y,d.doorZ,g);
+      for(const y of [d.bottom+0.001,d.top-0.001])box('carDoorEndFold',d.width,0.002,spec.panelT,skin,0,y,d.doorZ,g);
+      // Hoistway face: thin vibration-damping pads inside the original folded door envelope.
+      const bays=[[-d.width/2+.022,-d.width*.28-.023],[-d.width*.28+.023,d.width*.28-.023],[d.width*.28+.023,d.width/2-.022]];
+      for(const [a,b] of bays)box('carDoorDampingSheet',b-a,h-.14,.0008,damping,(a+b)/2,mid,d.doorZ-spec.panelT/2+.0024,g);
       for(const x of [-d.width*0.28,d.width*0.28]) {
-        box('doorReinforcementWeb',0.032,h-0.06,0.002,zinc,x,mid,d.doorZ+0.007,g);
-        for(const dx of [-0.016,0.016])box('doorReinforcementFold',0.002,h-0.06,0.017,zinc,x+dx,mid,d.doorZ-0.001,g);
+        box('doorReinforcementWeb',0.032,h-0.06,0.002,skin,x,mid,d.doorZ+0.007,g);
+        for(const dx of [-0.016,0.016])box('doorReinforcementFold',0.002,h-0.06,0.017,skin,x+dx,mid,d.doorZ-0.001,g);
         const shoe=group('doorGuideShoeAssembly',x,0,0,g);
         plate('doorGuideShoeBracket',[[-.039,d.bottom+.012],[.039,d.bottom+.012],[.039,d.bottom+.069],
           [.027,d.bottom+.078],[-.027,d.bottom+.078],[-.039,d.bottom+.069]],.003,linkMetal,d.doorZ+.018,shoe,
@@ -133,16 +137,13 @@ const CarDoor = (() => {
       cyl('eccentricTread',0.016,0.014,rubber,0,0,0,e);cyl('eccentricAxle',0.006,0.044,steel,0,0,0.008,e);
       rollers.push({r:e,side,radius:0.016});
       const edgeX=-side*(d.width/2-0.003);
-      // SE600M multibeam option (p235), Tx/Rx inner faces 8 mm apart at closure.
-      const beamX=-side*(d.cx-0.004-0.006);
-      box('multiBeam'+(side<0?'Tx':'Rx'),0.012,h-0.04,0.018,rubber,beamX,mid,d.doorZ+0.026,g)
-        .userData={type:'door-light-curtain',visualOnly:true};
-      for(let y=d.bottom+0.07;y<d.top-0.06;y+=0.10)cyl('beamLens',0.003,0.001,green,beamX,y,d.doorZ+0.0355,g,8);
+      // Field-reference Tx/Rx with inward optical windows; retain the 8 mm closed gap.
+      const photo=CarDoorPhoto.mount(g,side,d),beamX=photo.position.x;
       box('doorMeetingRubber',0.003,h-0.012,0.008,rubber,edgeX,mid,d.doorZ,g);
       // User reference 0015461: leads leave the TOP of the edge and hide behind the header.
-      const leadZ=d.doorZ+.030,backZ=d.doorZ-.065;
+      const leadZ=photo.position.z,backZ=d.doorZ-.065;
       const lead=CarWiring.run(g,'edgeCable',[
-        [beamX,d.top-.16,leadZ],[beamX,d.top-.025,leadZ],
+        [beamX,d.top-CAR_DOOR_PHOTO.endInset+CAR_DOOR_PHOTO.glandHeight,leadZ],[beamX,d.top+.002,leadZ],
         [beamX+side*.045,d.top+.015,leadZ],[side*.15,d.top+.015,leadZ],
         [side*.15,d.top+.015,backZ],[side*.15,d.trackY+.12,backZ]
       ],{radius:spec.edgeWireR,bend:.012,supports:false});
@@ -434,7 +435,7 @@ const CarDoor = (() => {
 
   }
   function canOpen() {
-    return !!drive?.ready&&!drive.busy&&alignedFloor()===curFloor&&hatchDoors[curFloor]?.interlock?.ready&&!hatchDoors.some(h=>h.manualActive);
+    return !!drive?.ready&&(!drive.busy||drive.operation==='close')&&alignedFloor()===curFloor&&hatchDoors[curFloor]?.interlock?.ready&&!hatchDoors.some(h=>h.manualActive);
   }
   // Reuse the project's merger only within each rigid parent. Dynamic meshes and
   // sensors stay separate; sourceRanges retains each bolt/panel's part name.
@@ -456,6 +457,7 @@ const CarDoor = (() => {
   function open(done) {
     if(!canOpen())return false;
     const q=drive;q.busy=true;q.operation='open';q.coupledFloor=curFloor;
+    q.timeline?.kill();q.closeCallbacks=[];
     gsap.killTweensOf(hatchDoors[curFloor].hook.rotation);
     q.timeline=gsap.timeline({onComplete:()=>{q.busy=false;done?.();}});
     q.timeline.to(q,{release:1,duration:.24,ease:'power1.inOut',onUpdate:pose});

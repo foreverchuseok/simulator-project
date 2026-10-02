@@ -12,6 +12,14 @@
 
 ## 좌표·형상 계약
 
+### 카문 바깥면·광전센서 현장형 (2026-10-02).
+
+- `js/car-door.js`의 승강로측 문짝은 회색 금속 절곡판·보강대·얇은 방진 시트로 표시한다. `js/car-terrace.js`는 문짝 BoxGeometry의 −Z 면에만 기존 실내 마감을 적용하며 스티커와 실내 장식을 유지한다.
+- `blender/scripts/car_door_photo_sensor.py` → `models/gltf/car_door_photo_sensor.glb`, 로더는 `js/car-door-photo.js`다. 현장 사진 식별자는 20260929_132815/132819/132840이며 치수는 기존 문에 맞춘 재구성이다. `CAR_DOOR_PHOTO` JSON을 Python과 JS가 공유하고 높이는 `S.DOOR_H`·`CarDoor.spec.bottomGap`에서 파생한다.
+- `CarDoorPhotoModel` 아래 `PhotoTx`/`PhotoRx`를 문짝의 `multiBeamTx`/`multiBeamRx`에 각각 장착한다. 광학창은 서로 마주 보고, 닫힘 간격은 8mm, 폭 24mm·몸체 깊이 18mm·높이 2.055m다. 상단 스트레인 릴리프에서 기존 배선으로 연결한다. 각 센서는 재질별 7개 메시이며 스케일은 1이다.
+- 센서는 기존처럼 `visualOnly`다. 장애물 감지나 운행 FSM의 안전 입력을 새로 구현한 것은 아니다. `S`, 문짝 행정·피벗·카/승장 결합은 유지한다.
+- 재개 검증: Blender 5.2 내보내기 성공(14개 메시), `verify_car_door_field.mjs`의 101개 자세에서 최소 간격 약 8mm·추종 오차 1.12e−16m, 실내/외 재질 분리·PC 및 390px 터치 운행/개폐 통과. 기존 `verify_car_door.mjs`의 잠금·층별 결합·비상정지/재개·터치 개폐도 통과했다. 캐시를 비운 로컬 HTTP 화면의 정면·센서 확대·실내 캡처와 수치는 `.shot-car-door-field/`에 있다. 실제 모바일 기기 조작·성능은 미검증이다.
+
 - `CarDoor.dimensions()`가 카/승장문의 닫힘 중심과 행정을 공유한다. `cx=0.391`, `ox=1.145`, 한쪽 행정은 0.754m. `const S`는 변경하지 않는다.
 - 카문은 `carGrp` 자식이며 카 그룹 위치, 로프·균형추 연동은 유지한다. 카문 중앙 간격은 3.5mm, 실 상면과 하단은 5mm다. 문 안쪽과 기존 입구 주의 외측 간격은 5mm다.
 - 카 실의 폭은 완전 개방 문짝에서 역산한 3.092m다. 가이드슈가 개방 중에도 실 홈 안에 남는다. 첫 홈은 `doorZ`, 가이드슈가 들어가는 기존 앞쪽 홈은 `CarDoor.dimensions().guideZ`를 공유하며 카/승장 실 수평 간극 30mm와 바닥 높이를 유지한다.

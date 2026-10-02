@@ -47,7 +47,10 @@ const CarTerrace = (() => {
     materials={wall,door,gold,charcoal,silver,white,light,floor};return materials;
   }
   function dressDoor(skin,group,side,d) {
-    skin.material=getMaterials().door;
+    // BoxGeometry: +X/-X/+Y/-Y/+Z are unfinished steel; only -Z faces the passenger.
+    skin.material=[skin.material,getMaterials().door];
+    skin.geometry.clearGroups();skin.geometry.addGroup(0,30,0);skin.geometry.addGroup(30,6,1);
+    skin.userData={type:'car-door-skin',interiorFace:'-Z',exteriorFace:'+Z'};
     // Inlays project 0.15 mm past the skin, behind stickers (0.6 mm), inside the 5 mm running gap.
     const x=-side*(d.width/2-.065),y=(d.top+d.bottom)/2,z=d.doorZ-CarDoor.spec.panelT/2+.00005;
     for(const [offset,width] of [[0,.033],[.028,.004]]){

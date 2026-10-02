@@ -344,7 +344,13 @@ function updateManualCameraNear() {
       if (DoorBypass.mode !== 'off') return;
       // 점검 운전 중에는 도어 오퍼레이터 회로가 차단된다 (착상 위치가 아닐 수 있음)
       if (insMode) { updateStatus('v-door', '점검운전 중 — 도어 조작 불가', '#f0883e'); return; }
-      if (doorOpen || moving || estop || !CarDoor.canOpen()) return;
+      if (moving || estop) return;
+      if (currentState === ELEVATOR_STATE.DOOR_OPEN) {
+        PassengerControls.hold();
+        clearTimeout(autoTimer);autoTimer=setTimeout(()=>closeDoors(),3500);return;
+      }
+      if ((doorOpen && currentState !== ELEVATOR_STATE.DOOR_CLOSING) || !CarDoor.canOpen()) return;
+      PassengerControls.hold();
       currentState = ELEVATOR_STATE.DOOR_OPENING;
       doorOpen = true; updateStatus('v-door', '열리는 중', '#f0883e'); clearTimeout(autoTimer);
       snd.doorOpen.currentTime = 0; snd.doorOpen.play().catch(e=>console.log(e));
@@ -1007,7 +1013,7 @@ function updateManualCameraNear() {
       if (DoorBypass.mode !== 'off') return;
       if(overspeedActive)return;
       if (insMode) { updateStatus('v-dir', '점검운전 중 — 자동 호출 무효', '#f0883e'); return; }
-      if (moving || estop || fIdx === curFloor) return;
+      if (moving || estop || (fIdx === curFloor && CarDoor.alignedFloor() === fIdx)) return;
       if (doorOpen || gsap.isTweening(carDoorL.position)) { closeDoors(() => moveElevator(fIdx)); return; }
       if (!CarDoor.secured() || !DoorBypass.hallSecured()) { updateStatus('v-door', '카문·승장문 닫힘 및 잠금 확인 대기', '#f0883e'); return; }
 
@@ -1175,16 +1181,7 @@ function updateManualCameraNear() {
       document.getElementById('fbtns').addEventListener('click', e => {
         const btn = e.target.closest('.c-btn');
         if (!btn) return;
-        moveElevator(parseInt(btn.dataset.f));
-        // 호출 등록 표시 — 도착(또는 정지)하면 꺼진다. 도착층 점등(active)은 moveElevator 가 한다.
-        if (!btn.classList.contains('active') && (moving || gsap.isTweening(carDoorL.position))) {
-          document.querySelectorAll('#fbtns .c-btn.called').forEach(b => b.classList.remove('called'));
-          btn.classList.add('called');
-          const clear = setInterval(() => {
-            if (moving || gsap.isTweening(carDoorL.position)) return;
-            btn.classList.remove('called'); clearInterval(clear);
-          }, 250);
-        }
+        PassengerControls.request(parseInt(btn.dataset.f));
       });
       document.getElementById('btn-open').addEventListener('click', () => { if (!moving && !estop) openDoors(); });
       document.getElementById('btn-close').addEventListener('click', () => { if (!moving && !UCMDemo.state.active) closeDoors(); });
@@ -1364,6 +1361,8 @@ function updateManualCameraNear() {
         // Preserve the existing immediate single-tap emergency-key action.
         const keys = hatchDoors.map(h => h.right.userData.triKey?.group).filter(Boolean);
         if (ray.intersectObjects(keys, true).length) { lastTap = null; return; }
+        const part=PartGlow.pickAt(e.clientX,e.clientY);
+        if(part?.entries.some(entry=>entry.direct)){lastTap=null;return;}
         const previous = lastTap;
         lastTap = { x: e.clientX, y: e.clientY, time: now, type: e.pointerType };
         if (!previous || previous.type !== e.pointerType || now - previous.time > 350 ||

@@ -127,9 +127,9 @@ const PartGlow = (() => {
 
   /* ── 등록 ── */
   // resolve: () => Object3D | Object3D[] | null. 같은 대상에 묶인 버튼들은 한 부품 메뉴로 합친다.
-  function bind(button, resolve, name, label) {
+  function bind(button, resolve, name, label, options = {}) {
     if (!button || entries.some(e => e.button === button)) return;
-    entries.push({ button, resolve, name, label, part: null });
+    entries.push({ button, resolve, name, label, ...options, part: null });
   }
   const list = o => (Array.isArray(o) ? o : [o]).filter(Boolean);
   // 대상이 다시 만들어지는 경우(속도 변경 시 완충기 재생성 등)를 위해 주기적으로 다시 확인한다.
@@ -212,6 +212,7 @@ const PartGlow = (() => {
   /* ── 상태 ── */
   const bodyHas = c => document.body.classList.contains(c);
   function suppressed(e) {
+    if (e.direct && e.button.id.startsWith('ec-action-')) return false;
     if (typeof overspeedActive !== 'undefined' && overspeedActive) return true;
     if (bodyHas('ucm-active') || bodyHas('ard-active') || bodyHas('manual-rescue-active') || bodyHas('portrait-tools-hidden')) return true;
     if (bodyHas('buffer-demo-active') && !/buffer-demo-action$/.test(e.button.id)) return true;
@@ -280,13 +281,22 @@ const PartGlow = (() => {
     if (best && occluded(best)) best = null;
     if (best) return best.part;
     // 작은 부품은 화면 경계상자 근처(16px) 탭도 받는다.
-    let near = null, area = Infinity;
+    let near = null, distance = Infinity;
     for (const part of parts) {
       if (!part.active) continue;
       const r = screenRect(part);
       if (!r || r.w > 90 || r.h > 90) continue;
       if (x < r.x - 16 || x > r.x + r.w + 16 || y < r.y - 16 || y > r.y + r.h + 16) continue;
-      if (r.w * r.h < area) { area = r.w * r.h; near = part; }
+      const d = Math.hypot(x-r.x-r.w/2,y-r.y-r.h/2);
+      if (d >= distance) continue;
+      if (part.entries.some(e=>e.direct)) {
+        box.makeEmpty();part.meshes.forEach(m=>{if(worldVisible(m))box.expandByObject(m);});
+        box.getCenter(v);
+        const worldDistance=camera.position.distanceTo(v);v.project(camera);
+        ray.setFromCamera(ndc.set(v.x,v.y),camera);
+        if (occluded({part,distance:worldDistance})) continue;
+      }
+      distance=d;near=part;
     }
     return near;
   }
@@ -331,6 +341,9 @@ const PartGlow = (() => {
     // 두 번 탭(카메라 확대)의 두 번째 탭은 방금 연 메뉴를 다시 닫지 않는다.
     if (lastOpen.part === part && now - lastOpen.time < 450) return;
     lastOpen = { part, time: now };
+    if (live.length === 1 && live[0].direct) {
+      closeMenu(); live[0].button.click(); return;
+    }
     if (live.length === 1 && live[0].button.hasAttribute('aria-controls')) {   // 자체 설정 패널이 곧 메뉴다
       closeMenu(); live[0].button.click(); return;
     }
@@ -434,7 +447,7 @@ const PartGlow = (() => {
       hover = typeof controls !== 'undefined' && !controls.enabled ? null : pickAt(pointer.x, pointer.y);
     }
     renderer.domElement.style.cursor = hover ? 'pointer' : '';
-    if (hover && pointer && hover !== menuPart) {
+    if (hover && pointer && hover !== menuPart && !liveEntries(hover).every(e => e.direct)) {
       const live = liveEntries(hover);
       tip.innerHTML = '';
       tip.append(hover.name);

@@ -37,6 +37,7 @@ const HallFinish = (() => {
     b.traverse(o => { if (o.isMesh && /Lamp$/.test(o.name)) o.material = o.material.clone(); });
     b.userData = { type: 'hall-call-button', floor: floorIdx + 1 };
     parent.add(b);
+    PassengerControls.hall(b, floorIdx);
   }
 
   function load() {
@@ -75,7 +76,7 @@ const HallFinish = (() => {
       const job = { parent, x, y, z, floorIdx };
       buttonSrc ? applyButton(job) : pendingButtons.push(job);
     },
-    /** 층 버튼 LED 링 점등(향후 홀 호출 연동용). */
+    /** 층 버튼 LED 링 점등(PassengerControls 호출 및 점검 복귀 연동). */
     setLamp(floorIdx, dir, on) {
       const b = scene.getObjectByName('HallCallButton_' + (floorIdx + 1));
       const lampMesh = b?.getObjectByName(dir === 'up' ? 'ButtonUpLamp' : 'ButtonDownLamp');

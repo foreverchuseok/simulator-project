@@ -1097,26 +1097,27 @@
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
   <script src="js/config.js"></script>
-  <script src="js/part-glow.js?v=20261002-manual-rescue"></script>
+  <script src="js/part-glow.js?v=20261002-passenger-buttons"></script>
   <script src="js/pit-tensioner.js"></script>
   <script src="js/environment.js?v=20261002-dual-release"></script>
   <script src="js/machine-room-safety.js"></script>
   <script src="js/control-panel.js?v=20261002-choreography"></script>
   <script src="js/machine-room-power.js?v=20261002-choreography"></script>
   <script src="js/building-lights.js?v=20260930-glow-1"></script>
-  <script src="js/emergency-call.js?v=20261002-manual-rescue"></script>
+  <script src="js/emergency-call.js?v=20261002-passenger-buttons"></script>
   <script src="js/mascot.js?v=20261002-small-crew"></script>
   <script src="js/hall-interlock.js?v=20260928-interlock-2"></script>
   <script src="js/car-door-transmission.js"></script>
-  <script src="js/car-terrace.js"></script>
-  <script src="js/car-door.js"></script>
+  <script src="js/car-terrace.js?v=20261002-field"></script>
+  <script src="js/car-door-photo.js?v=20261002-field"></script>
+  <script src="js/car-door.js?v=20261002-field"></script>
   <script src="js/car-wiring.js"></script>
   <script src="js/car-underbody.js"></script>
-  <script src="js/car-panels.js"></script>
+  <script src="js/car-panels.js?v=20261002-passenger-buttons"></script>
   <script src="js/leveling-sensors.js"></script>
   <script src="js/safety-device.js"></script>
   <script src="js/elevator.js?v=20261001-contact"></script>
-  <script src="js/hall-finish.js"></script>
+  <script src="js/hall-finish.js?v=20261002-passenger-buttons"></script>
   <script src="js/hall-retention.js"></script>
   <script src="js/hall-emergency-guide.js"></script>
   <script src="js/pit-ladder.js?v=20260930-glow-1"></script>
@@ -1127,7 +1128,8 @@
   <script src="js/buffer-demo.js?v=20260930-glow-1"></script>
   <script src="js/part-actions.js?v=20260930-glow-1"></script>
   <script src="js/overspeed-effects.js?v=20260930-ovs-1"></script>
-  <script src="js/ui.js?v=20261002-manual-rescue"></script>
+  <script src="js/ui.js?v=20261002-passenger-buttons"></script>
+  <script src="js/passenger-controls.js?v=20261002-passenger-buttons"></script>
   <script src="js/hall-inspector.js?v=20261002-manual-rescue"></script>
   <script src="js/hall-manual.js?v=20260930-glow-1"></script>
   <script src="js/inspection-stations.js?v=20260930-glow-1"></script>
@@ -1610,6 +1612,7 @@
       buildWireRopes();         // 로프
       buildPitFoundation();     // 피트
       EmergencyCall.build();    // 비상통화장치 4곳 + 기계실 인터폰 표시등 (js/emergency-call.js)
+      PassengerControls.build();
       EmergencyLighting.build(); // 카탑 정전시 조명장치 + 카상부/카내 원형 비상등
       PitLadder.build(pitGrp);  // 좌측벽 측면 접이식 피트 사다리 (정지·조명 스위치 옆)
       UCMDemo.build(scene);     // 개문발차 시연 승객 「퉁이」(평소 숨김)
@@ -1666,6 +1669,7 @@
       InspectionStations.update();
       InspectionReturn.update();
       EmergencyCall.update(performance.now() / 1000);
+      PassengerControls.update(performance.now() / 1000);
       EmergencyLighting.update();
       renderer.render(scene, camera);
       PartGlow.render();          // 기능 부품 발광·탭 메뉴 (js/part-glow.js) — 메인 깊이 버퍼 위에 덧그림

@@ -153,8 +153,8 @@ function buildCarPanels(parent) {
   buildCarControls(parent,{floorY:bottom,frontZ,sideX});
 }
 
-/* 부품설계 221–223p + 현장 참고. 외형만 구현: 표시 4, 1~4층 버튼, 하중 스위치 30/50/100/110.
-   전기회로/FSM 연결은 docs/CAR-CONTROLS.md 참고. */
+/* 부품설계 221–223p + 현장 참고. 층·개폐 버튼은 PassengerControls,
+   비상통화는 EmergencyCall에서 연결한다. docs/CAR-CONTROLS.md 참고. */
 function buildCarControls(parent,{floorY,frontZ,sideX}) {
   const root=new THREE.Group(); root.name='carControlEquipment'; parent.add(root);
   const metal=M.ss(0x9aa4ac), dark=M.paint(0x020303), brass=M.ss(0xb49a38);
@@ -225,7 +225,7 @@ function buildCarControls(parent,{floorY,frontZ,sideX}) {
   for(let floor=4;floor>=1;floor--){
     const y=0.21-(4-floor)*0.145;
     const b=button('opbFloorButton_'+floor,String(floor),0,y);
-    b.userData={type:'cop-floor-button',floor,visualOnly:true};
+    b.userData={type:'cop-floor-button',floor,visualOnly:false};
     // 버튼 아래 작은 점자 돌기(외형).
     for(let i=0;i<floor;i++)cyl(0.0015,0.002,metal,-0.008+i*0.005,y-0.033,0.012,opb,'z');
   }
@@ -267,7 +267,7 @@ function buildCarControls(parent,{floorY,frontZ,sideX}) {
     cyl(0.024,0.006,metal,0,0,0,b,'z');
     cyl(0.021,0.005,key.id==='call'?brass:dark,0,0,0.004,b,'z');
     label(key.text,0.035,0.026,0,0,0.007,b);
-    b.userData={type:'accessible-cop-button',action:key.id,visualOnly:true,centerHeight:accessibleButtonHeight};
+    b.userData={type:'accessible-cop-button',action:key.id,visualOnly:false,centerHeight:accessibleButtonHeight};
     const plate=box('accessibleBraillePlate',0.035,0.013,0.001,metal,x,-0.041,0.016,wcop);
     plate.userData.brailleCells=key.dots;
     key.dots.forEach((cell,ci)=>cell.forEach(dot=>{
@@ -277,7 +277,7 @@ function buildCarControls(parent,{floorY,frontZ,sideX}) {
       bead.position.set(x+dx,-0.041+dy,0.0165);bead.name='accessibleBrailleDot';wcop.add(bead);
     }));
   });
-  wcop.userData={visualOnly:true,reference:'Hyundai NEO OPDNB210',buttonHeight:accessibleButtonHeight,entrySide:'right',wall:'opaque-left',floorCount:4};
+  wcop.userData={visualOnly:false,reference:'Hyundai NEO OPDNB210',buttonHeight:accessibleButtonHeight,entrySide:'right',wall:'opaque-left',floorCount:4};
 
   // 221p: 상부 난간 왼쪽 앞, 난간 안쪽에 걸친 긴 카 탑 박스와 네 고정 볼트.
   const topBox=new THREE.Group();topBox.name='carTopBox';
