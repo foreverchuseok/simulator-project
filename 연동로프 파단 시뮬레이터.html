@@ -1,0 +1,434 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>연동로프 파단 시뮬레이터</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: 결론 요약 → 조작 가능한 문 헤더 단면도 → 원리 → 근거 → 한계. 안전 현수막의 주황과 강판 회색 계열 */
+:root{
+  --bg:#ECEFEC; --surface:#F7F8F6; --surface2:#E3E8E5; --ink:#142024; --muted:#56656A; --line:#C3CCCA;
+  --steel:#C3CCCD; --steel2:#95A3A6; --wall:#D5DBD8; --shaft:#162024; --car:#EAE4D2; --carpanel:#AEB9BB;
+  --accent:#D9480F; --ok:#2B8A3E; --warn:#C77D00; --bad:#C92A2A;
+  --sans:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1417; --surface:#182024; --surface2:#222D31; --ink:#E7EDEB; --muted:#92A1A5; --line:#2C393D;
+    --steel:#56666A; --steel2:#7C8D91; --wall:#1C262A; --shaft:#05080A; --car:#3B392F; --carpanel:#6F7D80;
+    --accent:#FF7A3D; --ok:#51CF66; --warn:#FFC53D; --bad:#FF6B6B; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1417; --surface:#182024; --surface2:#222D31; --ink:#E7EDEB; --muted:#92A1A5; --line:#2C393D;
+  --steel:#56666A; --steel2:#7C8D91; --wall:#1C262A; --shaft:#05080A; --car:#3B392F; --carpanel:#6F7D80;
+  --accent:#FF7A3D; --ok:#51CF66; --warn:#FFC53D; --bad:#FF6B6B; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.65;padding-inline:16px}
+.wrap{max-width:980px;margin-inline:auto;padding-block:28px 56px;display:flex;flex-direction:column;gap:36px}
+h1,h2,h3{text-wrap:balance;line-height:1.3;margin:0}
+h1{font-size:clamp(1.55rem,4.6vw,2.3rem);font-weight:700;letter-spacing:-.02em}
+h2{font-size:1.25rem;font-weight:700;letter-spacing:-.01em}
+h3{font-size:1rem;font-weight:600}
+p{margin:0}
+.eyebrow{font:500 .75rem/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.lead{color:var(--muted);max-width:62ch}
+header{display:flex;flex-direction:column;gap:12px}
+.finds{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.find{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:16px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.find b{font-weight:600}
+.tag{font:500 .7rem/1 var(--mono);letter-spacing:.04em;color:var(--muted)}
+section{display:flex;flex-direction:column;gap:14px;min-width:0}
+.stage{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:14px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+button,.seg label{font:500 .85rem/1.2 var(--sans)}
+button{cursor:pointer;color:var(--ink);background:var(--surface2);border:1px solid var(--line);border-radius:4px;padding:9px 12px;min-height:40px}
+button:hover:not(:disabled){border-color:var(--steel2)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button:focus-visible,input:focus-visible+span,.seg input:focus-visible+label{outline:2px solid var(--accent);outline-offset:2px}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.note{font-size:.85rem;color:var(--muted);min-height:2.9em}
+figure{margin:0;display:flex;flex-direction:column;gap:8px;min-width:0}
+svg{width:100%;height:auto;display:block;max-width:100%}
+figcaption{font-size:.8rem;color:var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.78rem;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.ctrls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.grp{display:flex;flex-direction:column;gap:8px;min-width:0}
+.lab{font:500 .72rem/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.seg{display:flex;flex-direction:column;gap:6px}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label{display:block;border:1px solid var(--line);border-radius:4px;padding:9px 12px;cursor:pointer;background:var(--surface2)}
+.seg input:checked+label{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.chk{display:flex;gap:10px;align-items:flex-start;font-size:.85rem;cursor:pointer}
+.chk input{margin-top:3px;accent-color:var(--accent);width:16px;height:16px;flex:none}
+.acts{display:flex;flex-wrap:wrap;gap:8px}
+.read{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.cell{background:var(--surface2);border-radius:4px;padding:10px 12px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.cell .k{font:500 .68rem/1 var(--mono);letter-spacing:.06em;color:var(--muted)}
+.cell .v{font:500 1rem/1.2 var(--mono);font-variant-numeric:tabular-nums}
+.v[data-l="ok"]{color:var(--ok)} .v[data-l="bad"]{color:var(--bad)} .v[data-l="warn"]{color:var(--warn)}
+.msg{border-radius:4px;padding:14px 16px;font-weight:500;background:var(--surface2);border:1px solid var(--line);min-height:4.2em}
+.msg[data-l="ok"]{background:color-mix(in srgb,var(--ok) 14%,var(--surface));border-color:var(--ok)}
+.msg[data-l="warn"]{background:color-mix(in srgb,var(--warn) 16%,var(--surface));border-color:var(--warn)}
+.msg[data-l="bad"]{background:color-mix(in srgb,var(--bad) 14%,var(--surface));border-color:var(--bad)}
+.prose{display:flex;flex-direction:column;gap:12px;max-width:68ch}
+.prose ol{margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:8px}
+.derived{border:1px dashed var(--steel2);border-radius:6px;padding:14px 16px;background:var(--surface)}
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:.85rem}
+th,td{text-align:left;vertical-align:top;padding:10px 12px;border-bottom:1px solid var(--line)}
+th{font:500 .72rem/1 var(--mono);letter-spacing:.06em;color:var(--muted);background:var(--surface2)}
+tr:last-child td{border-bottom:0}
+a{color:var(--accent)}
+.src{font-size:.82rem;color:var(--muted);display:flex;flex-direction:column;gap:4px;padding-left:1.1em;margin:0}
+.bad-t{color:var(--bad);font-weight:600}
+@media (max-width:760px){
+  .finds,.ctrls{grid-template-columns:1fr}
+  .read{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (prefers-reduced-motion:no-preference){
+  #expose{animation:pulse 1.2s ease-in-out infinite}
+  @keyframes pulse{50%{opacity:.35}}
+}
+</style>
+
+<main class="wrap">
+<header>
+  <span class="eyebrow">승강장문 · 센터오픈 2매 · 연동로프</span>
+  <h1>연동로프가 끊어지면 승강장문은 어떻게 되나</h1>
+  <p class="lead">인터락은 한쪽 문에만 있습니다. 반대쪽 문은 연동로프에 끌려 움직입니다. 로프가 끊긴 순간부터 반대쪽 문에는 잠금도 구동력도 없습니다. 아래 단면도에서 직접 끊어 확인할 수 있습니다.</p>
+</header>
+
+<div class="finds">
+  <div class="find"><span class="tag">특허 US 3,912,049 근거</span><b>구동문은 정상, 반대문만 이탈</b><p>카 베인이 구동문(인터락 측)을 직접 끌고 갑니다. 로프가 끊기면 반대문(유휴문)만 따라오지 못합니다. 걸리는 것이 아니라 한쪽만 열립니다.</p></div>
+  <div class="find"><span class="tag">구조에서 직접 유도한 해석</span><b>끊긴 가닥에 따라 증상이 다름</b><p>열림 가닥이 끊기면 열 때 한쪽만 열립니다. 닫힘 가닥이 끊기면 열 때는 정상이고 닫을 때 유휴문이 열린 채 남습니다.</p></div>
+  <div class="find"><span class="tag">특허 US 3,912,049 · KR 101220495 근거</span><b>위험은 잠기지 않는 유휴문</b><p>구동문이 잠겨 인터락 SW가 닫혀도 유휴문이 열려 있거나 손으로 열리면, 카가 없는 층에서 승강로가 노출됩니다.</p></div>
+</div>
+
+<section aria-labelledby="sim">
+  <h2 id="sim">시뮬레이터</h2>
+  <div class="stage">
+    <div class="chips" id="chips" role="group" aria-label="시나리오"></div>
+    <p class="note" id="note">시나리오를 고르면 설정이 바뀌고 자동으로 실행됩니다. 아래 버튼으로 직접 조작할 수도 있습니다.</p>
+
+    <figure>
+      <svg id="svg" viewBox="0 0 760 350" role="img" aria-label="승강장문 헤더 단면도. 구동문과 유휴문이 연동로프로 연결되고, 인터락 후크는 구동문에만 있다.">
+        <defs>
+          <pattern id="haz" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <rect width="14" height="14" fill="#05080A"/><rect width="7" height="14" fill="#7a2020"/>
+          </pattern>
+        </defs>
+        <rect x="0" y="106" width="760" height="234" style="fill:var(--wall)"/>
+        <rect id="shaftBg" x="200" y="106" width="360" height="224" style="fill:var(--shaft)"/>
+        <rect id="hazBg" x="200" y="106" width="360" height="224" fill="url(#haz)" opacity=".18"/>
+        <line x1="214" y1="106" x2="214" y2="330" style="stroke:var(--steel2)" stroke-width="2" opacity=".5" id="rail1"/>
+        <line x1="546" y1="106" x2="546" y2="330" style="stroke:var(--steel2)" stroke-width="2" opacity=".5" id="rail2"/>
+        <text id="shaftTxt" x="380" y="222" text-anchor="middle" font-size="13" style="fill:#8FA0A4;font-family:var(--mono)">승강로 (카 없음)</text>
+        <rect id="carBg" x="200" y="106" width="360" height="224" style="fill:var(--car)"/>
+        <text id="carTxt" x="380" y="222" text-anchor="middle" font-size="13" style="fill:var(--muted);font-family:var(--mono)">카 내부</text>
+        <g id="carL"><rect x="202" y="108" width="176" height="220" style="fill:var(--carpanel);stroke:var(--steel2)"/><text x="290" y="296" text-anchor="middle" font-size="11" style="fill:var(--ink);font-family:var(--mono)">카문</text></g>
+        <g id="carR"><rect x="382" y="108" width="176" height="220" style="fill:var(--carpanel);stroke:var(--steel2)"/><text x="470" y="296" text-anchor="middle" font-size="11" style="fill:var(--ink);font-family:var(--mono)">카문</text></g>
+        <rect id="expose" x="201" y="107" width="358" height="222" fill="none" style="stroke:var(--bad)" stroke-width="4" stroke-dasharray="10 6"/>
+
+        <g id="gD"><rect x="200" y="106" width="180" height="224" style="fill:var(--steel);stroke:var(--steel2)" stroke-width="1.5"/><rect x="212" y="130" width="156" height="176" fill="none" style="stroke:var(--steel2)"/>
+          <circle cx="364" cy="128" r="3.5" style="fill:var(--ink)"/><circle cx="378" cy="128" r="3.5" style="fill:var(--ink)"/>
+          <text x="290" y="212" text-anchor="middle" font-size="14" font-weight="600" style="fill:var(--ink);font-family:var(--sans)">구동문</text>
+          <text x="290" y="232" text-anchor="middle" font-size="11" style="fill:var(--muted);font-family:var(--mono)">인터락 있음</text></g>
+        <g id="gI"><rect x="380" y="106" width="180" height="224" style="fill:var(--steel);stroke:var(--steel2)" stroke-width="1.5"/><rect x="392" y="130" width="156" height="176" fill="none" style="stroke:var(--steel2)"/>
+          <text x="470" y="212" text-anchor="middle" font-size="14" font-weight="600" style="fill:var(--ink);font-family:var(--sans)">유휴문</text>
+          <text x="470" y="232" text-anchor="middle" font-size="11" style="fill:var(--muted);font-family:var(--mono)">로프로만 구동</text></g>
+        <g id="gVane"><rect x="369.5" y="112" width="5" height="46" style="fill:var(--accent)"/><text x="372" y="172" text-anchor="middle" font-size="10" style="fill:var(--accent);font-family:var(--mono)">베인</text></g>
+        <rect x="200" y="330" width="360" height="8" style="fill:var(--steel2)"/>
+
+        <rect x="8" y="30" width="744" height="68" rx="3" style="fill:var(--surface2);stroke:var(--line)"/>
+        <rect x="8" y="98" width="744" height="6" style="fill:var(--steel2)"/>
+        <circle cx="24" cy="63" r="15" fill="none" style="stroke:var(--ink)" stroke-width="2"/><circle cx="24" cy="63" r="3" style="fill:var(--ink)"/>
+        <circle cx="736" cy="63" r="15" fill="none" style="stroke:var(--ink)" stroke-width="2"/><circle cx="736" cy="63" r="3" style="fill:var(--ink)"/>
+        <g style="stroke:var(--ink)" stroke-width="2" fill="none" stroke-linecap="round">
+          <line x1="24" y1="48" x2="684" y2="48"/><line id="uMid" x1="684" y1="48" x2="708" y2="48"/><line x1="708" y1="48" x2="736" y2="48"/>
+          <line x1="24" y1="78" x2="52" y2="78"/><line id="lMid" x1="52" y1="78" x2="76" y2="78"/><line x1="76" y1="78" x2="736" y2="78"/>
+        </g>
+        <g id="brk1" style="stroke:var(--bad);fill:none" stroke-width="2" stroke-linecap="round"><polyline points="684,48 689,43 687,52 693,46"/><polyline points="708,48 703,53 705,44 699,50"/></g>
+        <text id="brk1t" x="696" y="24" text-anchor="middle" font-size="12" font-weight="600" style="fill:var(--bad);font-family:var(--sans)">열림 가닥 파단</text>
+        <g id="brk2" style="stroke:var(--bad);fill:none" stroke-width="2" stroke-linecap="round"><polyline points="52,78 57,73 55,82 61,76"/><polyline points="76,78 71,83 73,74 67,80"/></g>
+        <text id="brk2t" x="64" y="24" text-anchor="middle" font-size="12" font-weight="600" style="fill:var(--bad);font-family:var(--sans)">닫힘 가닥 파단</text>
+
+        <rect id="lever" x="396" y="90" width="10" height="14" rx="1" style="fill:var(--steel2);stroke:var(--ink)"/>
+        <rect id="pin" x="382" y="100" width="22" height="4" style="fill:var(--ok)"/>
+        <rect id="catch" x="372" y="96" width="8" height="10" style="fill:var(--steel2);stroke:var(--ink)"/>
+        <rect id="tab" x="381" y="98" width="16" height="5" style="fill:var(--warn)"/>
+        <g id="gHook"><rect x="346" y="88" width="40" height="6" style="fill:var(--accent)"/><rect x="380" y="88" width="6" height="18" style="fill:var(--accent)"/></g>
+        <g id="gDtop"><line x1="300" y1="106" x2="300" y2="48" style="stroke:var(--ink)" stroke-width="1.5"/><rect x="296" y="44" width="8" height="8" style="fill:var(--accent)"/></g>
+        <g id="gItop"><line x1="460" y1="106" x2="460" y2="78" style="stroke:var(--ink)" stroke-width="1.5"/><rect x="456" y="74" width="8" height="8" style="fill:var(--accent)"/></g>
+
+        <circle id="lampDot" cx="300" cy="13" r="5" style="fill:var(--ok)"/>
+        <text id="lampTxt" x="312" y="17" font-size="11" style="fill:var(--ink);font-family:var(--mono)">인터락 SW 닫힘</text>
+      </svg>
+      <figcaption>센터오픈 승강장문 헤더와 문짝(정면). 연동로프는 양끝 풀리를 도는 폐루프이고, 클램프로 두 문에 물려 있습니다. 인터락 후크(주황)는 구동문에만 달려 있습니다.</figcaption>
+    </figure>
+    <div class="legend"><span><i style="background:var(--accent)"></i>인터락 후크 · 클램프 · 카 베인</span><span><i style="background:var(--warn)"></i>보강 레버의 차단 탭</span><span><i style="background:var(--ok)"></i>보강 레버의 잠금 핀</span><span><i style="background:var(--bad)"></i>파단 위치</span></div>
+
+    <div class="ctrls">
+      <div class="grp"><span class="lab">연동로프</span>
+        <div class="seg" role="radiogroup" aria-label="연동로프 상태">
+          <div><input type="radio" name="mode" id="m0" value="intact" checked><label for="m0">정상</label></div>
+          <div><input type="radio" name="mode" id="m1" value="arc1"><label for="m1">열림 가닥 파단</label></div>
+          <div><input type="radio" name="mode" id="m2" value="arc2"><label for="m2">닫힘 가닥 파단</label></div>
+        </div>
+      </div>
+      <div class="grp"><span class="lab">조건</span>
+        <label class="chk" for="safe"><input type="checkbox" id="safe"><span>보강 잠금레버 적용<br><small style="color:var(--muted)">US 3,912,049 구조. 유휴문이 닫혀 잠겨야만 후크가 내려옴</small></span></label>
+        <label class="chk" for="jam"><input type="checkbox" id="jam"><span>유휴문이 걸려 도어 클로저가 못 닫음<br><small style="color:var(--muted)">끄면 클로저가 유휴문을 천천히 닫음</small></span></label>
+      </div>
+      <div class="grp"><span class="lab">조작</span>
+        <div class="acts">
+          <button id="bOpen">카문 열기</button><button id="bClose">카문 닫기</button>
+          <button id="bDepart">카 출발</button><button id="bArrive">카 도착</button>
+          <button id="bPush">승강장에서 유휴문 밀기</button><button id="bShut">유휴문 손으로 닫기</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="read" aria-hidden="false">
+      <div class="cell"><span class="k">구동문</span><span class="v" id="rD">0%</span></div>
+      <div class="cell"><span class="k">유휴문</span><span class="v" id="rI">0%</span></div>
+      <div class="cell"><span class="k">인터락 SW</span><span class="v" id="rS">닫힘</span></div>
+      <div class="cell"><span class="k">카 주행</span><span class="v" id="rR">가능</span></div>
+    </div>
+    <div class="msg" id="msg" data-l="info" role="status" aria-live="polite"></div>
+  </div>
+</section>
+
+<section aria-labelledby="why">
+  <h2 id="why">원리</h2>
+  <div class="prose">
+    <ol>
+      <li><b>승강장문에는 구동 동력이 없습니다.</b> 카문이 열릴 때 카문의 베인이 구동문의 인터락 롤러를 눌러 후크를 풀고, 그대로 구동문을 끌고 갑니다.</li>
+      <li><b>구동문 반대쪽 문은 연동로프로 끌려갑니다.</b> 로프는 헤더 양끝 풀리를 도는 폐루프이고 두 문에 클램프로 물려 있습니다. 문이 열리고 닫힐 때마다 풀리와 롤러 구간에서 로프가 굽혀집니다.</li>
+      <li><b>인터락(후크와 스위치)은 구동문에만 있습니다.</b> 유휴문이 닫혀 있다는 보증은 로프가 대신합니다. 로프가 끊기면 그 보증이 사라집니다.</li>
+      <li><b>끊기면 세 가지가 동시에 생깁니다.</b> 유휴문이 카문을 따라 열리지 않을 수 있고, 닫은 뒤에도 열린 채 남을 수 있고, 카가 없을 때 잠기지 않은 채 손으로 열릴 수 있습니다. 구동문 인터락은 정상이라 스위치는 닫힙니다.</li>
+    </ol>
+    <div class="derived">
+      <h3>끊어진 가닥에 따라 달라지는 이유 (구조에서 유도한 해석)</h3>
+      <p>폐루프에서 구동문 클램프와 유휴문 클램프 사이는 두 가닥입니다. 구동문이 열리는 쪽으로 움직이면 우측 풀리를 도는 가닥이 팽팽해져 유휴문을 열어 줍니다. 닫히는 쪽으로 움직이면 좌측 풀리를 도는 가닥이 유휴문을 닫아 줍니다. 로프는 당기기만 하므로 한 가닥이 끊기면 그 방향의 연동만 사라집니다. 시뮬레이터의 두 파단 모드가 이 차이입니다. 실제 설치 방식에 따라 가닥 배치가 다를 수 있어, 이 부분은 문헌 근거가 아니라 기구학적 추론입니다.</p>
+    </div>
+    <div>
+      <h3>보강 방법 두 가지 (특허에 나온 해법)</h3>
+      <p>US 3,912,049는 유휴문에 잠금레버를 달았습니다. 유휴문이 열려 있으면 레버의 탭이 후크를 막아 인터락 SW가 닫히지 못하고, 닫히면 레버가 유휴문을 직접 잠급니다. KR 101220495는 양쪽 문에 모두 인터락을 달고 각 문을 카 도어벤이 직접 구동하게 해, 연동로프 자체를 없앴습니다. 시뮬레이터의 “보강 잠금레버 적용”이 앞의 방식입니다.</p>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="ev">
+  <h2 id="ev">근거와 확인 범위</h2>
+  <div class="tw"><table>
+    <thead><tr><th>자료</th><th>확인한 내용</th><th>한계</th></tr></thead>
+    <tbody>
+      <tr><td>US 3,912,049 (Dover, 1975) 전문</td><td>케이블이 끊기거나 풀리에서 벗어나거나 클램프가 풀리면 유휴문 제어를 잃음. 구동문이 닫혀 후크가 걸리고 스위치가 닫혀도 유휴문이 잠기지 않을 수 있음. 카가 없을 때 손으로 열 수 있음. 보강 레버 구조.</td><td>1975년 미국 특허이며 한국 현행 부품과 다를 수 있음</td></tr>
+      <tr><td>KR 101220495 (티센크루프엘리베이터코리아, 2013 등록) 전문</td><td>종래 구조는 한쪽 문만 잠그고 반대문은 연동에 의존하므로, 연동 제어 부재가 훼손되면 닫힌 문의 이탈과 개방이 생김. 연동로프 마모 파단과 고정볼트 풀림을 고장 요인으로 명시.</td><td>해결 구조의 설명이며 사고 통계는 아님</td></tr>
+      <tr><td>공단 사고분석 교안 (elsafeweek.or.kr)</td><td>검색 결과 발췌에서 “승강장문 도어연동로프 파단. 음식 운반을 위해 1층 승강장문을 개방하던 중 연동로프가 끊어지며 승강장문이 손등 위로 떨어진 사고” 확인</td><td>파일 전문은 열람하지 못함. 음식 운반이라는 문맥으로 수직문 덤웨이터로 추정하나 원문 확인 필요</td></tr>
+      <tr><td>하우징헤럴드 기고 · JP5267318B2</td><td>승강장문은 스스로 열릴 동력이 없고 카문에 의해 인터락이 풀리며 함께 움직임. 업계에는 연동로프 장력을 원격으로 점검하는 장치 특허도 있음.</td><td>요약문 수준</td></tr>
+      <tr><td>실제 파단 장면 영상</td><td class="bad-t">찾지 못했습니다</td><td>국내외 검색에서 연동로프 파단 영상은 나오지 않음. 이 시뮬레이터는 영상이 아니라 위 문헌의 구조 설명을 근거로 한 모델입니다.</td></tr>
+    </tbody>
+  </table></div>
+  <ul class="src">
+    <li><a href="https://patents.google.com/patent/US3912049A/en" target="_blank" rel="noopener">US 3,912,049A Interlock for center opening doors</a></li>
+    <li><a href="https://patents.google.com/patent/KR101220495B1/ko" target="_blank" rel="noopener">KR 101220495 B1 승장 도어 잠금 장치</a></li>
+    <li><a href="http://www.housingherald.co.kr/news/articleView.html?idxno=31584" target="_blank" rel="noopener">하우징헤럴드 엘리베이터 출입문 안전장치 소개</a></li>
+    <li><a href="https://patents.google.com/patent/JP5267318B2/en" target="_blank" rel="noopener">JP5267318B2 Linked rope inspection device for elevator hall doors</a></li>
+  </ul>
+</section>
+
+<section aria-labelledby="lim">
+  <h2 id="lim">현장 메모와 모델의 한계</h2>
+  <div class="prose">
+    <p><b>현장 경험(말씀해 주신 내용, 문헌 근거 없음)</b> 문이 열리고 닫힐 때 굽혀지는 구간에서 파단이 집중되고, 굽힘이 없는 구간은 거의 끊어지지 않습니다. 헤더 쪽 롤러가 작으면 굽힘이 커져 더 자주 끊어집니다. 승강로를 내려오며 장갑을 끼고 로프를 손으로 훑으면 끊어진 소선이 걸립니다.</p>
+    <p><b>모델이 단순화한 것</b> 센터오픈 2매 문만 그렸습니다. 2매 편개문도 같은 원리이지만 속도 차가 있습니다. 도어 클로저의 힘은 “걸림” 옵션 하나로 줄였습니다. 수직으로 열리는 덤웨이터문은 로프가 끊기면 문 자체가 낙하하므로 이 모델과 위험 양상이 다르며 포함하지 않았습니다.</p>
+  </div>
+</section>
+</main>
+
+<script>
+(function(){
+  var $=function(id){return document.getElementById(id)};
+  var T=170;
+  var reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var S={car:true,c:0,ct:0,pI:0,mode:'intact',safe:false,jam:false,flash:null,flashUntil:0};
+  var token=0;
+
+  var PRESETS=[
+    {label:'① 정상',cfg:{mode:'intact',safe:false,jam:false,car:true},steps:['open','close','depart'],
+     note:'카문이 열리면 두 문이 함께 열리고, 닫히면 함께 닫혀 잠긴 뒤 카가 출발합니다.'},
+    {label:'② 열림 가닥 파단',cfg:{mode:'arc1',safe:false,jam:false,car:true},steps:['open','close'],
+     note:'카문은 열리는데 승강장 유휴문은 닫힌 채입니다. 승객 쪽에서는 한쪽 문만 열린 것으로 보입니다.'},
+    {label:'③ 닫힘 가닥 파단',cfg:{mode:'arc2',safe:false,jam:true,car:true},steps:['open','close','depart'],
+     note:'열 때는 정상입니다. 닫을 때 유휴문이 열린 채 남고(걸림 가정), 구동문 인터락만 닫혀 카가 출발합니다.'},
+    {label:'④ 카 없는 층에서 밀기',cfg:{mode:'arc1',safe:false,jam:true,car:false},steps:['push'],
+     note:'카가 없는 층입니다. 로프가 끊겨 유휴문은 잠금이 없고, 손으로 밀면 승강로가 열립니다.'},
+    {label:'⑤ 보강 잠금레버',cfg:{mode:'arc2',safe:true,jam:true,car:true},steps:['open','close','depart','shut','depart','push'],
+     note:'같은 파단이지만 유휴문이 열려 있으면 후크가 막혀 카가 출발하지 못합니다. 닫으면 레버가 유휴문을 잠급니다.'}
+  ];
+  var DUR={open:2300,close:2500,depart:1700,arrive:1000,push:2600,shut:1200};
+
+  function sleep(ms){return new Promise(function(r){setTimeout(r,ms)})}
+  function hookLatched(){return S.c<0.002&&(!S.safe||S.pI<0.02)}
+  function idleLocked(){
+    if(S.c>=0.002) return false;
+    if(S.mode==='intact') return true;
+    return S.safe&&S.pI<0.02;
+  }
+  function flash(t,l){S.flash={t:t,l:l};S.flashUntil=performance.now()+4200}
+
+  function act(a){
+    if(a==='open'){ if(S.car) S.ct=1; }
+    else if(a==='close'){ if(S.car) S.ct=0; }
+    else if(a==='depart'){
+      if(!S.car) return;
+      if(S.c>0.002){flash('카문이 열려 있어 출발할 수 없습니다. 먼저 카문을 닫으세요.','warn');return;}
+      if(!hookLatched()){flash('인터락 SW가 열려 있어 카가 출발하지 못합니다. 보강 레버가 후크를 막고 있습니다.','ok');return;}
+      S.car=false;S.c=0;S.ct=0;
+      if(S.pI>0.02) flash('유휴문이 열린 채로 카가 출발했습니다. 이 층 승강로가 노출됩니다.','bad');
+    }
+    else if(a==='arrive'){ if(!S.car){S.car=true;S.c=0;S.ct=0;} }
+    else if(a==='push'){
+      if(idleLocked()){
+        flash(S.mode==='intact'
+          ?'밀어도 열리지 않습니다. 구동문 인터락이 잠겨 있고 유휴문은 연동로프로 구동문에 묶여 있습니다.'
+          :'밀어도 열리지 않습니다. 보강 잠금레버가 유휴문을 직접 잠그고 있습니다.','ok');
+        return;
+      }
+      if(S.mode==='intact'){flash('카문이 열려 있어 두 문이 이미 함께 열리는 상태입니다.','info');return;}
+      S.pI=Math.max(S.pI,0.5);
+    }
+    else if(a==='shut'){ S.pI=0; }
+  }
+
+  function evaluate(){
+    var circuit=hookLatched();
+    var exposure=!S.car&&S.pI>0.02;
+    var unsafeRun=circuit&&S.pI>0.02;
+    var m,l='info';
+    if(S.flash&&performance.now()<S.flashUntil){m=S.flash.t;l=S.flash.l}
+    else if(exposure){m='카가 없는 층에서 유휴문이 열려 승강로가 노출되어 있습니다. 추락 위험입니다.';l='bad'}
+    else if(unsafeRun){m='유휴문이 열려 있는데 인터락 SW는 닫혀 있습니다. 카가 출발할 수 있는 상태입니다.';l='bad'}
+    else if(!circuit&&S.c<0.002&&S.pI>0.02&&S.safe){m='보강 레버가 후크를 막아 인터락 SW가 열린 채입니다. 카는 출발하지 못합니다.';l='ok'}
+    else if(S.mode!=='intact'&&S.c>0.1&&S.pI<S.c-0.15){m='구동문만 열리고 유휴문은 닫힌 채입니다. 한쪽 문만 열린 상태입니다.';l='warn'}
+    else if(S.car&&S.c>0.05&&S.mode==='intact'){m='정상입니다. 두 문이 연동로프로 함께 움직입니다.';l='ok'}
+    else if(circuit&&S.pI<0.02){m=S.mode==='intact'?'정상입니다. 두 문이 닫혀 잠겨 있습니다.':'구동문은 잠겨 있고 유휴문은 닫혀 있습니다. 로프는 끊겼지만 지금은 겉으로 드러나지 않습니다.';l=S.mode==='intact'?'ok':'warn'}
+    else {m='';l='info'}
+    return {circuit:circuit,exposure:exposure,unsafeRun:unsafeRun,m:m,l:l};
+  }
+
+  var lastMsg='';
+  function draw(){
+    var ev=evaluate();
+    $('gD').setAttribute('transform','translate('+(-T*S.c)+',0)');
+    $('gI').setAttribute('transform','translate('+(T*S.pI)+',0)');
+    $('gDtop').setAttribute('transform','translate('+(-T*S.c)+',0)');
+    $('gItop').setAttribute('transform','translate('+(T*S.pI)+',0)');
+    $('gVane').setAttribute('transform','translate('+(-T*S.c)+',0)');
+    $('gVane').style.display=S.car?'':'none';
+    $('carL').setAttribute('transform','translate('+(-T*S.c)+',0)');
+    $('carR').setAttribute('transform','translate('+(T*S.c)+',0)');
+    $('carL').style.display=$('carR').style.display=S.car?'':'none';
+    $('carBg').style.display=$('carTxt').style.display=S.car?'':'none';
+    $('shaftBg').style.display=$('hazBg').style.display=$('shaftTxt').style.display=S.car?'none':'';
+    $('rail1').style.display=$('rail2').style.display=S.car?'none':'';
+    $('expose').style.display=ev.exposure?'':'none';
+    var raised=!ev.circuit;
+    $('gHook').setAttribute('transform','translate('+(-T*S.c)+','+(raised?-12:0)+')');
+    $('tab').style.display=(S.safe&&!ev.circuit&&S.c<0.002&&S.pI>0.02)?'':'none';
+    $('lever').style.display=S.safe?'':'none';
+    $('pin').style.display=(S.safe&&S.pI<0.02&&S.c<0.002)?'':'none';
+    var m=S.mode;
+    $('brk1').style.display=$('brk1t').style.display=m==='arc1'?'':'none';
+    $('brk2').style.display=$('brk2t').style.display=m==='arc2'?'':'none';
+    $('uMid').style.display=m==='arc1'?'none':'';
+    $('lMid').style.display=m==='arc2'?'none':'';
+    $('lampDot').style.fill=ev.circuit?'var(--ok)':'var(--bad)';
+    $('lampTxt').textContent=ev.circuit?'인터락 SW 닫힘':'인터락 SW 열림';
+    $('rD').textContent=Math.round(S.c*100)+'%';
+    $('rI').textContent=Math.round(S.pI*100)+'%';
+    var rS=$('rS'),rR=$('rR');
+    rS.textContent=ev.circuit?'닫힘':'열림';rS.dataset.l=ev.circuit?'ok':'warn';
+    rR.textContent=ev.circuit?'가능':'불가';rR.dataset.l=ev.unsafeRun?'bad':(ev.circuit?'ok':'warn');
+    $('rI').dataset.l=ev.exposure||ev.unsafeRun?'bad':'';
+    var msg=$('msg');
+    var key=ev.l+'|'+ev.m;
+    if(key!==lastMsg){msg.textContent=ev.m||'조작 버튼을 눌러 보세요.';msg.dataset.l=ev.l;lastMsg=key}
+    $('bOpen').disabled=!S.car||S.ct===1&&S.c>=0.999;
+    $('bClose').disabled=!S.car;
+    $('bDepart').disabled=!S.car;
+    $('bArrive').disabled=S.car;
+  }
+
+  var last=performance.now();
+  function frame(now){
+    var dt=Math.min(0.05,(now-last)/1000);last=now;
+    var k=reduce?8:1;
+    if(S.car){
+      var sp=0.5*k*dt;
+      if(S.c<S.ct) S.c=Math.min(S.ct,S.c+sp);
+      else if(S.c>S.ct) S.c=Math.max(S.ct,S.c-sp);
+    } else {S.c=0;S.ct=0}
+    if(S.mode==='intact') S.pI=S.c;
+    else if(S.mode==='arc1'){ if(S.c<S.pI) S.pI=S.c; }
+    else { if(S.c>S.pI) S.pI=S.c; }
+    if(S.mode!=='intact'&&!S.jam&&S.pI>S.c) S.pI=Math.max(S.c,S.pI-0.12*k*dt);
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  function syncUI(){
+    var r=document.querySelector('input[name=mode][value='+S.mode+']');if(r) r.checked=true;
+    $('safe').checked=S.safe;$('jam').checked=S.jam;
+  }
+  function setCfg(c){
+    S.car=c.car!==false;S.c=0;S.ct=0;S.pI=0;S.mode=c.mode;S.safe=c.safe;S.jam=c.jam;S.flash=null;lastMsg='';
+    syncUI();
+  }
+  function stopRun(){token++;var cs=document.querySelectorAll('.chip');for(var i=0;i<cs.length;i++)cs[i].setAttribute('aria-pressed','false')}
+  async function play(idx){
+    stopRun();
+    var p=PRESETS[idx];
+    document.querySelectorAll('.chip')[idx].setAttribute('aria-pressed','true');
+    $('note').textContent=p.note;
+    setCfg(p.cfg);
+    var my=token;
+    await sleep(500);
+    for(var i=0;i<p.steps.length;i++){
+      if(my!==token) return;
+      act(p.steps[i]);
+      await sleep(DUR[p.steps[i]]);
+    }
+  }
+
+  var chips=$('chips');
+  PRESETS.forEach(function(p,i){
+    var b=document.createElement('button');
+    b.className='chip';b.type='button';b.textContent=p.label;b.setAttribute('aria-pressed','false');
+    b.addEventListener('click',function(){play(i)});
+    chips.appendChild(b);
+  });
+  var reset=document.createElement('button');
+  reset.type='button';reset.textContent='초기화';
+  reset.addEventListener('click',function(){stopRun();setCfg({mode:'intact',safe:false,jam:false,car:true});$('note').textContent='초기 상태로 되돌렸습니다.'});
+  chips.appendChild(reset);
+
+  [['bOpen','open'],['bClose','close'],['bDepart','depart'],['bArrive','arrive'],['bPush','push'],['bShut','shut']].forEach(function(x){
+    $(x[0]).addEventListener('click',function(){stopRun();act(x[1])});
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('input[name=mode]'),function(r){
+    r.addEventListener('change',function(){stopRun();S.mode=r.value;S.pI=Math.min(S.pI,1)});
+  });
+  $('safe').addEventListener('change',function(){stopRun();S.safe=this.checked});
+  $('jam').addEventListener('change',function(){stopRun();S.jam=this.checked});
+
+  setCfg({mode:'intact',safe:false,jam:false,car:true});
+  requestAnimationFrame(frame);
+})();
+</script>
+
+</body></html>

@@ -2311,18 +2311,6 @@
 
     function govHandles() { return (mrGrp && mrGrp.userData && mrGrp.userData.governor) || null; }
 
-    // 캐치 좌단 ↔ 스위치 가로축의 원형 끝. Blender가 내보낸 접촉점/반경만 사용한다.
-    function governorSwitchContactAngle(gov, angle) {
-      const m=gov.mechanism, pivot=gov.topArm.position;
-      const x=m.catchContact[0]-pivot.x,y=m.catchContact[1]-pivot.y,c=Math.cos(angle),s=Math.sin(angle);
-      const ux=pivot.x+x*c-y*s-m.switchPivot[0],uy=pivot.y+x*s+y*c-m.switchPivot[1];
-      const vx=m.switchRoller[0]-m.switchPivot[0],vy=m.switchRoller[1]-m.switchPivot[1];
-      const radius=m.switchRollerRadius+m.catchContactRadius;
-      const cosine=(ux*ux+uy*uy+vx*vx+vy*vy-radius*radius)/(2*Math.hypot(ux,uy)*Math.hypot(vx,vy));
-      if(Math.abs(cosine)>1)return m.switchInitialRot;
-      return Math.min(m.switchInitialRot,Math.atan2(uy,ux)-Math.acos(cosine)-Math.atan2(vy,vx));
-    }
-
     /* 과속 트립: 진자 개방 → 타격 뭉치가 전기 스위치를 누름 → 쇄기/캐치 암 작동.
        파지: 물린 발톱을 휠이 끌고 가며 레버를 반대(-CW)로 돌린다 →
               레버 우단에서 내려온 떡판(캐치슈)이 로프를 시브 홈에 눌러 잡는다.

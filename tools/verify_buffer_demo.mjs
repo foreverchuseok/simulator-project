@@ -6,10 +6,11 @@ import {chromium} from 'playwright';
 const out = '.shot-buffer'; fs.mkdirSync(out, {recursive: true});
 const browser = await chromium.launch({args: ['--enable-gpu']});
 const report = {};
-const ready = () => govHandles()?.ready && CarDoor.state?.ready && cwtGrp.userData.model && scene.getObjectByName('carBufferStrike');
+const ready = () => govHandles()?.ready && CarDoor.state?.ready && cwtGrp.userData.model && scene.getObjectByName('carBufferStrike') && carGrp.userData.guideShoes?.length === 4;
 async function open(viewport, mobile = false) {
   const context = await browser.newContext({viewport, hasTouch: mobile, isMobile: mobile, deviceScaleFactor: 1});
   const page = await context.newPage(); page.setDefaultTimeout(120000);
+  await page.routeWebSocket('**', socket => socket.close());
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !/ReadPixels|GPU stall/.test(m.text())) errors.push(m.text()); });
@@ -91,8 +92,11 @@ try {
     carGrp.traverse(o => { if (!o.isMesh || !vis(o) || skip(o)) return; const y = new THREE.Box3().setFromObject(o).min.y; if (red(o)) qLow = Math.min(qLow, y); else pLow = Math.min(pLow, y); });
     cwtGrp.getObjectByName('GuideShoes').traverse(o => { if (o.isMesh && vis(o)) shoeTop = Math.max(shoeTop, new THREE.Box3().setFromObject(o).max.y); });
     railGrp.traverse(o => { if (o.name === 'GuideRail_8K_Root') o.traverse(m => { if (m.isMesh && vis(m)) railTop = Math.max(railTop, new THREE.Box3().setFromObject(m).max.y); }); });
-    const under = u.clear.under, pit = { P: pLow - (Y0 + .02), Q: qLow - (Y0 + .02), G: railTop - shoeTop,
-      predicted: Object.fromEntries(['P', 'Q', 'G'].map(k => [k, { gap: under[k].gap, ok: under[k].ok, required: under[k].required }])) };
+    let rLow = Infinity;
+    carGrp.userData.guideShoes.filter(s => !s.userData.isUpper).forEach(s => s.traverse(o => { if(o.isMesh && vis(o)) rLow=Math.min(rLow,new THREE.Box3().setFromObject(o).min.y); }));
+    const under = u.clear.under, pit = { P: pLow - (Y0 + .02), Q: qLow - (Y0 + .02), R:rLow - (Y0 + .02), G: railTop - shoeTop,
+      apronHeight:carGrp.getObjectByName('apronVertical').geometry.parameters.height,
+      predicted: Object.fromEntries(['P', 'Q', 'R', 'G'].map(k => [k, { gap: under[k].gap, ok: under[k].ok, required: under[k].required }])) };
     return { pit, vImpact: u.vImpact, decelG: u.decel / 9.81, compression: u.compression, face: carGrp.position.y + f.faceY,
       bufferTopNow: h.topY - h.stroke, scaleY: h.urethane.scale.y, scaleR: h.urethane.scale.x, rope, carY: carGrp.position.y,
       cwtY: cwtGrp.position.y, clear: { ...u.clear, box: undefined }, low, lowName, dustVisible: scene.getObjectByName('bufferImpactDust').visible,
@@ -106,13 +110,16 @@ try {
   assert.ok(Math.abs((before.carY - atRest.carY) - (atRest.cwtY - before.cwtY)) < 1e-6, 'cwt rise = car drop');
   assert.ok(Math.abs(atRest.clear.rise - (before.carY - atRest.carY)) < 1e-6 && atRest.clear.gap > .15);
   assert.ok(atRest.low > 0.02, 'car lowest part above pit floor: ' + atRest.low + ' ' + atRest.lowName);
-  for (const k of ['P', 'Q', 'G']) assert.ok(Math.abs(atRest.pit[k] - atRest.pit.predicted[k].gap) < 1e-6, `${k} predicted = actual at rest: ${JSON.stringify(atRest.pit)}`);
+  for (const k of ['P', 'Q', 'R', 'G']) assert.ok(Math.abs(atRest.pit[k] - atRest.pit.predicted[k].gap) < 1e-6, `${k} predicted = actual at rest: ${JSON.stringify(atRest.pit)}`);
+  assert.equal(atRest.pit.apronHeight,.75,'apron vertical stays 750mm');
+  assert.ok(atRest.pit.Q >= .1 && atRest.pit.Q < .11,'actual apron pit gap reaches 100mm');
+  assert.ok(atRest.pit.R >= .1 && atRest.pit.predicted.R.ok,'guide shoe pit clearance');
   assert.equal(atRest.pit.predicted.P.ok, atRest.pit.P >= .5); assert.equal(atRest.pit.predicted.Q.ok, atRest.pit.Q >= .1);
   assert.ok(atRest.pit.predicted.G.ok && Math.abs(atRest.pit.predicted.G.required - (.1 + .035)) < 1e-9, 'counterweight rail G >= 0.1+0.035v² (1 m/s)');
   await page.waitForTimeout(1600);
   await page.screenshot({path: `${out}/03-side-fill.png`});
   await page.waitForFunction(() => BufferDemo.state.stage === 'observe-under' && !gsap.isTweening(camera.position), null, {polling: 50});
-  assert.ok(await page.evaluate(() => ['P', 'Q'].every(k => scene.getObjectByName('over' + k).visible) && !scene.getObjectByName('overA').visible));
+  assert.ok(await page.evaluate(() => ['P', 'Q', 'R'].every(k => scene.getObjectByName('over' + k).visible) && !scene.getObjectByName('overA').visible));
   await page.screenshot({path: `${out}/03b-pit-under.png`});
   await page.waitForFunction(() => BufferDemo.state.stage === 'observe-cwt', null, {polling: 50});
   // 고정 대기 대신 상태로 기다린다(헤드리스 프레임 지연 시 gsap 시간이 늘어난다).

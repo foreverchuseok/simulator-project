@@ -1,0 +1,43 @@
+#pc-dock[hidden], .pc-only { display:none; }
+body.desktop-hud .pc-only { display:block; }
+body.desktop-hud #pc-dock { position:absolute;left:clamp(20px,4vw,64px);bottom:48px;width:296px;padding:16px;border-radius:22px; }
+body.desktop-hud #pc-upper { display:grid;grid-template-columns:84px 1fr;gap:14px; }
+body.desktop-hud #statusbar { order:-1; }
+body.desktop-hud #pc-dock #statusbar { width:auto;height:auto;align-self:stretch; }
+body.desktop-hud #statusbar .st-meta { flex:0;align-items:center;overflow:visible; }
+body.desktop-hud #statusbar #v-dir { max-width:74px; }
+body.desktop-hud #statusbar #v-spd { font-size:13px; }
+body.desktop-hud #statusbar { position:static;display:flex;flex-direction:column;justify-content:center;gap:12px;padding:0 12px 0 0;border:0;border-right:1px solid var(--ui-line);border-radius:0;background:none;box-shadow:none;backdrop-filter:none; }
+body.desktop-hud .st-floor { min-width:0;gap:4px; }
+body.desktop-hud #v-floor { font-size:30px; }
+body.desktop-hud .st-meta { align-items:center;gap:12px;width:100%; }
+body.desktop-hud #v-dir { max-width:76px;font-size:11px;padding:4px;align-self:center; }
+body.desktop-hud #v-dir::before, body.desktop-hud .st-bar { display:none; }
+body.desktop-hud #v-spd { font-size:13px; }
+body.desktop-hud #pc-shortcuts { display:grid;grid-template-columns:1fr 1fr;gap:7px; }
+body.desktop-hud #pc-shortcuts button { position:static;min-width:0;width:100%;height:60px;padding:7px 3px;border:1px solid var(--ui-line);border-radius:11px;background:var(--ui-fill);box-shadow:none;display:flex;flex-direction:column;justify-content:center;gap:5px;color:var(--ui-text);font:600 12px var(--ui-font);cursor:pointer; }
+body.desktop-hud #pc-shortcuts #walk-toggle { font-size:12px; }
+body.desktop-hud #pc-shortcuts #walk-toggle[hidden] { display:none; }
+body.desktop-hud #pc-reset-slot { order:4;height:60px; }
+#pc-reset { position:fixed;z-index:10000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;border:1px solid var(--ui-line);border-radius:11px;background:var(--ui-bg-strong);color:var(--ui-text);font:600 12px var(--ui-font);cursor:pointer;touch-action:manipulation; }
+#pc-reset[hidden] { display:none; }
+#pc-reset:focus-visible { outline:2px solid var(--info);outline-offset:2px; }
+#pc-reset:hover { background:var(--accent); }
+body.desktop-hud #pc-mode { display:flex;gap:6px;margin-top:15px;padding-top:12px;border-top:1px solid var(--ui-line); }
+body.desktop-hud #pc-mode button,body.desktop-hud #pc-manual-controls button { flex:1;min-height:44px;border:1px solid var(--ui-line);border-radius:10px;background:var(--ui-fill);color:var(--ui-text);font:600 12px var(--ui-font);cursor:pointer; }
+body.desktop-hud #pc-mode .mode-on { background:var(--accent);border-color:transparent; }
+body.desktop-hud #dd-op { position:static;transform:none;display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:9px;padding:0;border:0;border-radius:0;background:none;box-shadow:none;backdrop-filter:none; }
+body.desktop-hud #dd-op .rb-sep { display:none; }
+body.desktop-hud #fbtns { grid-column:1/-1;grid-row:1;display:grid;grid-template-columns:repeat(4,1fr);gap:7px; }
+body.desktop-hud #fbtns .c-btn { width:100%;height:44px;border-radius:10px; }
+body.desktop-hud #dd-op > button { width:100%;height:44px;min-width:0;border-radius:10px; }
+body.desktop-hud #pc-dock.pc-ins-mode #fbtns { display:none; }
+body.desktop-hud #pc-manual-controls:not([hidden]) { display:flex;gap:7px;margin-top:9px; }
+body.desktop-hud #inspection-drive { position:static;transform:none;margin-top:9px;padding:0;background:none;border:0;box-shadow:none;flex-wrap:wrap; }
+body.desktop-hud #inspection-drive button { flex:1;min-width:100px;min-height:44px;font-size:12px; }
+body.desktop-hud #inspection-return { flex-basis:100%; }
+body.desktop-hud #rail { display:none; }
+body.desktop-hud #hud > .sheet { left:calc(clamp(20px,4vw,64px) + 312px);right:auto;top:auto;bottom:48px;max-height:calc(100dvh - 96px);transform-origin:bottom left; }
+body.desktop-hud #pc-view-options #c-cabin { width:100%;margin-top:8px;justify-content:center; }
+body.desktop-hud #walk-panel { top:90px; }
+body.desktop-hud #pc-dock button:disabled { opacity:.45;cursor:default; }

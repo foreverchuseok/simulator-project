@@ -11,7 +11,8 @@
      같은 장면에서 6.5.7.2 상부틈새(가 A·B 수직 0.50m, 다 D 난간 수직 0.30m·C 경사 0.50m·E 내측 수평 0.40m)를
      빛나는 노란 치수로 덧붙인다(좌측 A·C, 중앙/우측 B, 우측 D·E). 레일 장면 뒤에 카 지붕 전체 장면을 한 번 더 보여 준다.
    ▪ 카 모드(2026-10-03): 균형추 모드처럼 여유거리를 종류별로 보인다 — 피트 P(카 최하부, 에이프런·가이드슈·안전기 제외 → 피트 바닥 0.50m),
-     Q(에이프런·가이드슈·안전기 → 피트 바닥 0.10m), 균형추 G(균형추 가이드슈 → 균형추 레일 끝 0.1+0.035v²), H(균형추 위 장애물).
+     Q(에이프런·가이드슈·안전기 최저점 → 피트 바닥 0.10m), R(하부 가이드슈 별도 → 피트 바닥 0.10m),
+     균형추 G(균형추 가이드슈 → 균형추 레일 끝 0.1+0.035v²), H(균형추 위 장애물).
    ▪ 치수 라벨은 「기호 이름 수치 ✓/✗」만 짧게, 치수선은 번쩍인다(미달은 빨강). 기준 문구는 라벨에서 뺐다(사용자 지시).
    ▪ 시연 중 상단 가운데 일시정지·재생 버튼. 멈춘 동안 화면을 돌려 볼 수 있다.
    ▪ 형상·재질은 build() 에서 한 번만 만들고 update() 는 위치·배율·불투명도만 바꾼다.
@@ -37,8 +38,8 @@ const BufferDemo = (() => {
   const RESET = svg('<path d="M4 10a8 8 0 1 1 1 8M4 4v6h6"/>');
   const DUST_N = 220, CWT_FOV = 68;
   // 모드별 종류별 여유거리 치수. 균형추 모드 = 카 지붕 상부틈새, 카 모드 = 피트 하부틈새 + 균형추 레일.
-  const SPAN_IDS = ['A', 'B', 'C', 'D', 'E', 'P', 'Q', 'G'], MODE_SPANS = { cwt: ['A', 'B', 'C', 'D', 'E'], car: ['P', 'Q', 'G'] };
-  const STACK = { cwt: ['D', 'E', 'C', 'A', 'B'], car: ['P', 'Q', 'G'] };
+  const SPAN_IDS = ['A', 'B', 'C', 'D', 'E', 'P', 'Q', 'R', 'G'], MODE_SPANS = { cwt: ['A', 'B', 'C', 'D', 'E'], car: ['P', 'Q', 'R', 'G'] };
+  const STACK = { cwt: ['D', 'E', 'C', 'A', 'B'], car: ['P', 'Q', 'R', 'G'] };
   const PIT_FLOOR = () => Y0 + 0.02;   // 피트 마감 바닥 상면 (elevator.js buildPitFoundation 의 pitTopY)
   // dir: 완충기로 다가갈 때 카 이동 방향. 균형추 모드는 카가 올라가고 균형추가 내려와 완충기를 친다.
   const MODES = {
@@ -169,6 +170,7 @@ const BufferDemo = (() => {
       : CarDoor.state?.busy ? '도어 동작이 끝난 뒤 시연'
       : handle(m)?.type !== 'urethane' ? '우레탄 완충기(60 m/min 이하)에서 시연 — 운행 속도를 바꿔 주세요'
       : !strike(m) ? (m.key === 'cwt' ? '균형추 타격부 준비 중' : '카 하부 타격부 준비 중')
+      : m.key === 'car' && (carGrp.userData.guideShoes || []).filter(s => !s.userData.isUpper).length < 2 ? '카 하부 가이드슈 준비 중'
       : m.key === 'cwt' && !(railGrp?.userData.carRailTopY && upperShoes().length) ? '카 가이드레일·가이드슈 준비 중' : '';
   }
   const upperShoes = () => (carGrp.userData.guideShoes || []).filter(s => s.userData.isUpper);
@@ -376,6 +378,7 @@ const BufferDemo = (() => {
   /* 카 모드: 완충기가 다 눌린 카 높이(지금 + shift, shift<0)에서 피트 하부틈새와 균형추 레일 여유를 잰다.
      P: 에이프런·가이드슈·안전기·타격판·이동케이블을 뺀 카 최하부 → 피트 바닥(0.50m 이상)
      Q: 에이프런·가이드슈·안전기 최하부 → 피트 바닥(0.10m 이상)
+     R: 하부 가이드슈 하면 → 피트 바닥(0.10m 이상), Q와 별도로 표시.
      G: 균형추 가이드슈 윗면 → 균형추 가이드레일(8K) 끝(0.1+0.035v² 이상). 균형추는 카와 반대로 -shift 만큼 올라간다.
      보이는 메시만 쓴다(숨긴 최상단 이음부 FP 등은 Box3 에 섞이면 틀린다). */
   function measurePit(shift, vRated) {
@@ -388,8 +391,18 @@ const BufferDemo = (() => {
       if (!o.isMesh || !vis(o) || under(o)) return;
       b.setFromObject(o); if (b.isEmpty()) return;
       const t = reduced(o) ? lowQ : lowP;
-      if (b.min.y < t.y) Object.assign(t, { y: b.min.y, x: (b.min.x + b.max.x) / 2, z: (b.min.z + b.max.z) / 2, xMax: b.max.x });
+      if (b.min.y < t.y) Object.assign(t, { y: b.min.y, x: (b.min.x + b.max.x) / 2, z: (b.min.z + b.max.z) / 2, xMin: b.min.x, xMax: b.max.x });
     });
+    // Q는 예외 부품 전체의 최저 간극, R은 화살표로 지정한 하부 가이드슈의 실제 하면이다.
+    // 레일 근접 부품(수평 0.15m 이내)의 0.10m 수직 간극을 에이프런과 별도로 관찰한다.
+    const lowR = { y: Infinity };
+    for (const shoe of (carGrp.userData.guideShoes || []).filter(s => !s.userData.isUpper)) {
+      shoeBodyBox(shoe, b);
+      // 같은 높이면 -X 슈를 고른다. +X 피트 카메라 바로 뒤의 슈는 화면 밖이 된다.
+      if (b.min.y < lowR.y - 1e-6 || (Math.abs(b.min.y - lowR.y) < 1e-6 && b.max.x < lowR.xMax)) {
+        Object.assign(lowR, { y:b.min.y, xMax:b.max.x, z:(b.min.z+b.max.z)/2 });
+      }
+    }
     const floor = PIT_FLOOR(), at = (x, y, z) => new THREE.Vector3(x, y, z);
     let railTop = -Infinity, railX = 0, railZ = CWT_CENTER_Z;
     railGrp.traverse(o => {
@@ -407,8 +420,9 @@ const BufferDemo = (() => {
       cwtRailTop: railTop, cwtShoeTop: shoeTop,
       // P 선은 완충기를 관통하지 않게 +X 로 0.38m 비켜 그린다(값은 최하부 높이 그대로).
       P: makeSpan('P', '카 최하부 → 피트', 0.5, at(lowP.x + .38, lowP.y + shift, lowP.z), at(lowP.x + .38, floor, lowP.z), lowP.y + shift - floor),
-      // Q 선은 에이프런(가장 낮은 Q 부품)의 +X 끝에 그린다 — 피트 카메라가 판을 옆에서 본다.
-      Q: makeSpan('Q', '에이프런·가이드슈 → 피트', 0.1, at(lowQ.xMax - .03, lowQ.y + shift, lowQ.z), at(lowQ.xMax - .03, floor, lowQ.z), lowQ.y + shift - floor),
+      // Q 선은 먼 쪽 모서리에 둬 +X 피트 카메라에서 R과 함께 보이게 한다.
+      Q: makeSpan('Q', '에이프런 등 → 피트', 0.1, at(lowQ.xMin + .03, lowQ.y + shift, lowQ.z), at(lowQ.xMin + .03, floor, lowQ.z), lowQ.y + shift - floor),
+      R: makeSpan('R', '가이드슈 → 피트', 0.1, at(lowR.xMax, lowR.y + shift, lowR.z), at(lowR.xMax, floor, lowR.z), lowR.y + shift - floor),
       G: makeSpan('G', '균형추 레일 여유', .1 + .035 * vRated * vRated, at(gx, shoeTop + rise, railZ), at(gx, railTop, railZ), railTop - (shoeTop + rise))
     };
   }
@@ -547,7 +561,7 @@ const BufferDemo = (() => {
         // 카 모드: 먼저 카 아래 피트 하부틈새(P·Q), 그다음 균형추 위(G·H).
         U.stage = 'observe-under'; showClearance(); U.view = 'under'; underCam(1.6);
         const u = U.clear.under;
-        caption(`카 아래 피트 틈새 — P ${u.P.gap.toFixed(2)}m ${u.P.ok ? '✓' : '✗'} · Q ${u.Q.gap.toFixed(2)}m ${u.Q.ok ? '✓' : '✗'}`, u.P.ok && u.Q.ok ? '#b8f5c4' : '#ffb4a8');
+        caption(`카 아래 피트 틈새 — ${['P','Q','R'].map(id => `${id} ${u[id].gap.toFixed(2)}m ${u[id].ok ? '✓' : '✗'}`).join(' · ')}`, ['P','Q','R'].every(id => u[id].ok) ? '#b8f5c4' : '#ffb4a8');
         later(1.6 + T.holdUnder, observeTop);
         return;
       }
@@ -581,7 +595,7 @@ const BufferDemo = (() => {
       updateStatus('v-dir', '균형추 완충기 위 정지 · 복귀 대기', '#f0883e');
     } else {
       const u = U.clear.under;
-      caption(`완충기 압축 ${Math.round(U.compression * 1000)}mm · ${['P', 'Q', 'G'].map(id => `${id} ${u[id].gap.toFixed(2)}m ${u[id].ok ? '✓' : '✗'}`).join(' · ')} · H ${U.clear.gap.toFixed(2)}m — 아이콘 또는 복귀 버튼으로 1층 복귀`, '#b8f5c4');
+      caption(`완충기 압축 ${Math.round(U.compression * 1000)}mm · ${['P', 'Q', 'R', 'G'].map(id => `${id} ${u[id].gap.toFixed(2)}m ${u[id].ok ? '✓' : '✗'}`).join(' · ')} · H ${U.clear.gap.toFixed(2)}m — 아이콘 또는 복귀 버튼으로 1층 복귀`, '#b8f5c4');
       updateStatus('v-dir', '카 완충기 위 정지 · 복귀 대기', '#f0883e');
     }
   }

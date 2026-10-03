@@ -11,6 +11,7 @@ const ready = () => govHandles()?.ready && CarDoor.state?.ready && cwtGrp.userDa
 async function open(viewport, mobile = false) {
   const context = await browser.newContext({viewport, hasTouch: mobile, isMobile: mobile, deviceScaleFactor: 1});
   const page = await context.newPage(); page.setDefaultTimeout(120000);
+  await page.routeWebSocket('**', socket => socket.close());
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !/ReadPixels|GPU stall/.test(m.text())) errors.push(m.text()); });

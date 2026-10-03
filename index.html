@@ -921,6 +921,7 @@
     #hall-message.warning { padding:6px; border-left:2px solid #fbbf24; background:#f59e0b18; }
     #hall-panel .hold button { touch-action:none; user-select:none; }
   </style>
+  <link rel="stylesheet" href="css/desktop-hud.css?v=20261004-1">
 </head>
 
 <body>
@@ -930,6 +931,16 @@
 
     <!-- HUD: 상태 카드 · 우상단 레일 · 시트 · 하단 운행바. 기능 연결은 id 로만 한다(js/ui.js). -->
     <div id="hud">
+      <section id="pc-dock" class="glass" aria-label="통합 운행 패널" hidden>
+        <div id="pc-upper"><nav id="pc-shortcuts" aria-label="보조 메뉴">
+          <span id="pc-reset-slot" aria-hidden="true"></span>
+        </nav></div>
+        <div id="pc-mode" role="group" aria-label="운전 모드">
+          <button data-ins="off" aria-pressed="true">자동</button><button data-ins="on" aria-pressed="false">수동 · 점검</button>
+        </div>
+        <div id="pc-inspection"></div>
+        <div id="pc-manual-controls" hidden><button data-ins-dir="1" disabled aria-label="누르는 동안 점검 상승">▲ 상승 · 누름 유지</button><button data-ins-dir="-1" disabled aria-label="누르는 동안 점검 하강">▼ 하강 · 누름 유지</button></div>
+      </section>
 
       <!-- 상태 카드: 층·방향·상태·속도 -->
       <section id="statusbar" class="glass" aria-label="운행 상태" aria-live="polite">
@@ -951,7 +962,7 @@
 
       <!-- 우상단 레일 -->
       <nav id="rail" aria-label="보조 메뉴">
-        <button class="rail-btn glass" data-menu="dd-view" aria-expanded="false" aria-controls="dd-view" title="속도·보기 설정">
+        <button class="rail-btn glass" id="pc-settings-source" data-menu="dd-view" aria-expanded="false" aria-controls="dd-view" title="속도·보기 설정">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="9" cy="7" r="2.4" fill="currentColor"/><circle cx="15" cy="17" r="2.4" fill="currentColor"/></svg>
           <span>설정</span>
         </button>
@@ -970,6 +981,7 @@
       <div class="sheet glass" id="dd-overview" role="dialog" aria-label="전체 보기">
         <div class="sheet-head"><h3>전체 보기</h3><button class="sheet-close" data-close aria-label="닫기">✕</button></div>
         <button id="overview-home" class="act-code" style="width:100%;min-height:44px">처음 시점으로</button>
+        <div id="pc-view-options"></div>
       </div>
 
       <!-- 시트: 설정 -->
@@ -994,7 +1006,7 @@
           <dt>확대</dt><dd>마우스 휠 · 두 손가락 벌리기</dd>
           <dt>이동</dt><dd>우클릭 드래그 · 두 손가락 끌기</dd>
           <dt>가까이</dt><dd>부품 더블클릭 · 두 번 탭</dd>
-          <dt>돌아가기</dt><dd>오른쪽 위 「전체 보기」</dd>
+          <dt>돌아가기</dt><dd>「전체 보기」 → 「처음 시점으로」</dd>
         </dl>
       </div>
 
@@ -1100,7 +1112,7 @@
   <script src="js/part-glow.js?v=20261003-single-direct"></script>
   <script src="js/pit-tensioner.js"></script>
   <script src="js/character-walk.js?v=20261003-seunggom-1"></script>
-  <script src="js/environment.js?v=20261003-seunggom-1"></script>
+  <script src="js/environment.js?v=20261004-pit-clearance"></script>
   <script src="js/machine-room-safety.js"></script>
   <script src="js/control-panel.js?v=20261002-rescue-focus"></script>
   <script src="js/machine-room-power.js?v=20261002-choreography"></script>
@@ -1117,7 +1129,7 @@
   <script src="js/car-panels.js?v=20261002-passenger-buttons"></script>
   <script src="js/leveling-sensors.js"></script>
   <script src="js/safety-device.js"></script>
-  <script src="js/elevator.js?v=20261002-pc-governor"></script>
+  <script src="js/elevator.js?v=20261003-switch-pin"></script>
   <script src="js/hall-finish.js?v=20261002-passenger-buttons"></script>
   <script src="js/hall-retention.js"></script>
   <script src="js/hall-emergency-guide.js"></script>
@@ -1126,10 +1138,11 @@
   <script src="js/ucm-demo.js?v=20261003-pause-1"></script>
   <script src="js/ascent-demo.js?v=20261003-pause-2"></script>
   <script src="js/brake-demo.js?v=20261003-pause-1"></script>
-  <script src="js/buffer-demo.js?v=20261003-pit-spans-1"></script>
+  <script src="js/buffer-demo.js?v=20261004-pit-spans-2"></script>
   <script src="js/part-actions.js?v=20261003-drunk-kick"></script>
   <script src="js/overspeed-effects.js?v=20260930-ovs-1"></script>
   <script src="js/ui.js?v=20261003-pause-1"></script>
+  <script src="js/desktop-hud.js?v=20261004-1"></script>
   <script src="js/passenger-controls.js?v=20261002-passenger-buttons"></script>
   <script src="js/hall-inspector.js?v=20261002-manual-rescue"></script>
   <script src="js/hall-manual.js?v=20260930-glow-1"></script>
@@ -1640,6 +1653,7 @@
       InspectionStations.build();
       bindUIEvents();
       CharacterWalk.init();
+      DesktopHUD.init();
 
       installShadowCache(scene, camera, renderer);
 

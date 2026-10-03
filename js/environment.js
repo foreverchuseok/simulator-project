@@ -4253,7 +4253,7 @@
       govSetLinkage(0);
 
       // ── .glb 로드 — 노드(원점=피벗)를 래퍼에 장착 ───────────────────────
-      new THREE.GLTFLoader().load('models/gltf/overspeed_governor.glb?v=20261001-contact', (gltf) => {
+      new THREE.GLTFLoader().load('models/gltf/overspeed_governor.glb?v=20261003-switch-pin', (gltf) => {
         const g = gltf.scene;
         g.traverse(o => {
           if (o.isMesh) {
@@ -4560,7 +4560,8 @@
 
     // 완충기 형상과 균형추 최하단 위치가 공유하는 치수 원본.
     // urethaneHeight = 몸통 0.15 + 헤드 0.04, urethaneStroke = 카 완충기 충돌 시연 압축 행정(js/buffer-demo.js).
-    const BUFFER_DIM = Object.freeze({ baseHeight: 0.4, cwtBaseScale: 0.35,
+    // 카 받침만 60mm 올린다. 에이프런 수직 750mm를 유지한 채 완전 압축 시 피트 틈새 약 104mm 확보.
+    const BUFFER_DIM = Object.freeze({ baseHeight: 0.4, carBaseRaise: 0.06, cwtBaseScale: 0.35,
       hydraulicRodCenter: 0.55, hydraulicRodHeight: 0.25, cwtMinGap: 0.16,
       urethaneHeight: 0.19, urethaneStroke: 0.06 });
 
@@ -4583,7 +4584,7 @@
 
       pos.forEach(([px, pz, heightScale], i) => {
         // 1. 완충기 지지대 (철재 기둥)
-        const baseH = BUFFER_DIM.baseHeight * heightScale; // 카 0.4m, 균형추 0.14m
+        const baseH = BUFFER_DIM.baseHeight * heightScale + (i === 0 ? BUFFER_DIM.carBaseRaise : 0); // 카 0.46m, 균형추 0.14m
         createBox(0.2, baseH, 0.2, M.ss(0x8a929a), px, Y0 + baseH / 2, pz, bufferGrp);
         // 지지대 상판 (베이스 플레이트)
         const plateY = Y0 + baseH;

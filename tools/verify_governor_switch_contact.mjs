@@ -6,15 +6,16 @@ const browser=await chromium.launch({args:['--enable-gpu']});const errors=[];
 try{
  const page=await browser.newPage({viewport:{width:1440,height:1000}});
  page.on('pageerror',e=>errors.push(e.message));
+ await page.routeWebSocket('**',ws=>ws.close());
  const cdp=await page.context().newCDPSession(page);await cdp.send('Network.setCacheDisabled',{cacheDisabled:true});
  await page.goto('http://127.0.0.1:5500/index.html',{waitUntil:'networkidle'});
- await page.waitForFunction(()=>govHandles()?.ready&&CarDoor.state?.ready);
+ await page.waitForFunction(()=>govHandles()?.ready&&CarDoor.state?.ready&&document.getElementById('loading').classList.contains('hide'));
  const report=await page.evaluate(()=>{
   const g=govHandles(),m=g.mechanism,body=g.wheel.parent,V=THREE.Vector3;
   // Distance to actual exported GLB triangles, in metres at model scale.
-  function surfaceDistance(bodyPoint){
+  function surfaceDistance(bodyPoint,target=g.switchLever){
    const world=body.localToWorld(bodyPoint.clone()),q=new V(),t=new THREE.Triangle();let min=Infinity;
-   g.switchLever.traverse(o=>{if(!o.isMesh)return;const p=o.geometry.attributes.position,ix=o.geometry.index,n=ix?ix.count:p.count;
+   target.traverse(o=>{if(!o.isMesh)return;const p=o.geometry.attributes.position,ix=o.geometry.index,n=ix?ix.count:p.count;
     for(let i=0;i<n;i+=3){[t.a,t.b,t.c].forEach((v,j)=>v.fromBufferAttribute(p,ix?ix.getX(i+j):i+j).applyMatrix4(o.matrixWorld));t.closestPointToPoint(world,q);min=Math.min(min,q.distanceTo(world));}
    });return min/body.getWorldScale(new V()).x;
   }
@@ -30,17 +31,13 @@ try{
   const strikeLocal=body.worldToLocal(strike);
   const strikeDistance=surfaceDistance(strikeLocal);
   g.wheel.rotation.z=0;g.pendulums.forEach(p=>p.rotation.z=0);g.setLinkage(0);
-  const samples=[];
-  for(let i=0;i<=60;i++){
-   const a=m.releaseArm*i/60,b=governorSwitchContactAngle(g,a);
-   g.topArm.rotation.z=a;g.switchLever.rotation.z=b;scene.updateMatrixWorld(true);
-   const pad=new V(...m.catchContact).sub(g.topArm.position).applyAxisAngle(new V(0,0,1),a).add(g.topArm.position);
-   const roller=new V(...m.switchRoller).sub(new V(...m.switchPivot)).applyAxisAngle(new V(0,0,1),b).add(new V(...m.switchPivot));
-   const overlap=Math.min(pad.z+.004,roller.z+m.switchRollerThickness/2)-Math.max(pad.z-.004,roller.z-m.switchRollerThickness/2);
-   pad.z=(Math.min(pad.z+.004,roller.z+m.switchRollerThickness/2)+Math.max(pad.z-.004,roller.z-m.switchRollerThickness/2))/2;
-   samples.push({a,b,overlap,meshGap:surfaceDistance(pad)-m.catchContactRadius});
-  }
   g.topArm.rotation.z=0;g.switchLever.rotation.z=0;scene.updateMatrixWorld(true);
+  // The old round pad is gone. Check real upper-lever clearance to the slender pin.
+  let pinClearance=Infinity;
+  for(let i=0;i<=24;i++){
+   const p=new V(...m.switchRoller);p.z=m.switchPivot[2]+(m.switchRoller[2]+m.switchRollerThickness/2-m.switchPivot[2])*i/24;
+   pinClearance=Math.min(pinClearance,surfaceDistance(p,g.topArm)-m.switchRollerRadius);
+  }
   function rotate(p,pivot,angle){const c=Math.cos(angle),s=Math.sin(angle),x=p[0]-pivot[0],y=p[1]-pivot[1];return[pivot[0]+x*c-y*s,pivot[1]+x*s+y*c];}
   function nearestContact(a,b){
    let best={distance:Infinity};
@@ -69,18 +66,16 @@ try{
   const timeline=governorTrip(1).pause(),sweep=[];
   for(const time of [2.1,2.2,2.4,2.7,3.0,3.3,3.9,6.2]){timeline.time(time);sweep.push({time,wheel:g.wheel.rotation.z,angle:g.switchLever.rotation.z,closed:g.switchLever.userData.contactClosed});}
   timeline.kill();governorPhase='rest';g.ropeLocked=false;g.wheel.rotation.z=0;g.pendulums.forEach(p=>p.rotation.z=0);g.setLinkage(0);g.switchLever.rotation.z=0;g.switchLever.userData.contactClosed=true;g.topArm.rotation.z=0;g.pawl.rotation.z=0;g.ratchet.rotation.z=0;g.spring.scale.y=1;
-  return {normalGap,strikeDistance,strikeZ:strikeLocal.z,switchZ:m.switchTip[2],samples,strikes,sweep};
+  return {normalGap,strikeDistance,strikeZ:strikeLocal.z,switchZ:m.switchTip[2],pinClearance,strikes,sweep};
  });
  assert.ok(report.strikeDistance<.0044,`actual striker cube misses GLB actuator: ${report.strikeDistance}`);
  assert.ok(report.normalGap>Math.sqrt(2)*.0044,`normal-speed striker hits actuator: ${report.normalGap}`);
  assert.ok(Math.abs(report.strikeZ-report.switchZ)<1e-7,'striker and switch share depth');
- const contact=report.samples.filter(s=>s.b<-.08001);
- assert.ok(contact.length>20);
- assert.ok(contact.every(s=>s.overlap>0&&Math.abs(s.meshGap)<.00015),JSON.stringify(contact));
+ assert.ok(report.pinClearance>.002,`Resting upper lever is too close to pin: ${report.pinClearance}`);
  assert.ok(report.strikes.every(s=>s.count>20&&s.maxGap<.00065),JSON.stringify(report.strikes));
  assert.ok(Math.abs(report.sweep[0].angle)<1e-10,'Actuator stays at rest before the square head reaches it');
  assert.ok(report.sweep[2].angle<0&&report.sweep[2].angle>-.2,'First contact pushes the actuator without an instant latch');
- assert.ok(report.sweep[3].closed===false,'Electrical contact opens during physical push');
+ assert.ok(report.sweep[5].closed===false,'Electrical contact opens by the end of physical push, before latch snap');
  assert.ok(Math.abs(report.sweep[6].angle+Math.PI/3)<1e-5,'Down latch still reaches requested horizontal -75 degrees');
  await page.evaluate(()=>{
   document.querySelectorAll('#ui,#hud,#hint,#loading,.panel').forEach(e=>e.style.display='none');scene.fog=null;wallGrp.visible=false;controls.enableDamping=false;
@@ -89,8 +84,6 @@ try{
   controls.target.copy(b.localToWorld(new THREE.Vector3(-.095,.235,.035)));controls.update();
  });
  await page.screenshot({path:`${out}/rest.png`});
- await page.evaluate(()=>{const g=govHandles();g.topArm.rotation.z=g.mechanism.releaseArm;g.switchLever.rotation.z=governorSwitchContactAngle(g,g.mechanism.releaseArm);});
- await page.screenshot({path:`${out}/catch-contact.png`});
  for(const direction of [1,-1]){
   await page.evaluate(direction=>{
    const g=govHandles(),curve=direction>0?g.mechanism.switchStrikeDown:g.mechanism.switchStrikeUp,travel=curve.travel*.55;
@@ -99,5 +92,5 @@ try{
   await page.screenshot({path:`${out}/${direction>0?'down':'up'}-striker-contact.png`});
  }
  assert.deepEqual(errors,[]);fs.writeFileSync(`${out}/report.json`,JSON.stringify({...report,errors},null,2));
- console.log({strikeDistance:report.strikeDistance,contactSamples:contact.length,maxMeshGap:Math.max(...contact.map(s=>Math.abs(s.meshGap))),strikes:report.strikes,errors});
+ console.log({strikeDistance:report.strikeDistance,pinClearance:report.pinClearance,strikes:report.strikes,errors});
 }finally{await browser.close();}
