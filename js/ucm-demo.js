@@ -275,7 +275,7 @@ const UCMDemo = (() => {
   }
   /* ── 카 운동 (시간 배율 U.ts 로 느린 동작) ─────────────────── */
   function motionTick(time, deltaMs) {
-    if (U.stopped || U.closing) return;
+    if (U.stopped || U.closing || DemoPause.paused) return;   // 공통 일시정지(js/demo-pause.js)
     const dt = Math.min((deltaMs || 16.7) / 1000, .05) * U.ts;
     if (!dt) return;
     U.t0 += dt;

@@ -1097,15 +1097,16 @@
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
   <script src="js/config.js"></script>
-  <script src="js/part-glow.js?v=20261002-passenger-buttons"></script>
+  <script src="js/part-glow.js?v=20261003-single-direct"></script>
   <script src="js/pit-tensioner.js"></script>
-  <script src="js/environment.js?v=20261002-dual-release"></script>
+  <script src="js/character-walk.js?v=20261003-seunggom-1"></script>
+  <script src="js/environment.js?v=20261003-seunggom-1"></script>
   <script src="js/machine-room-safety.js"></script>
-  <script src="js/control-panel.js?v=20261002-choreography"></script>
+  <script src="js/control-panel.js?v=20261002-rescue-focus"></script>
   <script src="js/machine-room-power.js?v=20261002-choreography"></script>
   <script src="js/building-lights.js?v=20260930-glow-1"></script>
   <script src="js/emergency-call.js?v=20261002-passenger-buttons"></script>
-  <script src="js/mascot.js?v=20261002-small-crew"></script>
+  <script src="js/mascot.js?v=20261003-seunggom-1"></script>
   <script src="js/hall-interlock.js?v=20260928-interlock-2"></script>
   <script src="js/car-door-transmission.js"></script>
   <script src="js/car-terrace.js?v=20261002-field"></script>
@@ -1116,29 +1117,33 @@
   <script src="js/car-panels.js?v=20261002-passenger-buttons"></script>
   <script src="js/leveling-sensors.js"></script>
   <script src="js/safety-device.js"></script>
-  <script src="js/elevator.js?v=20261001-contact"></script>
+  <script src="js/elevator.js?v=20261002-pc-governor"></script>
   <script src="js/hall-finish.js?v=20261002-passenger-buttons"></script>
   <script src="js/hall-retention.js"></script>
   <script src="js/hall-emergency-guide.js"></script>
   <script src="js/pit-ladder.js?v=20260930-glow-1"></script>
   <script src="js/ucm-effects.js?v=20260930-ascent-1"></script>
-  <script src="js/ucm-demo.js?v=20260930-ascent-1"></script>
-  <script src="js/ascent-demo.js?v=20261001-pacing"></script>
-  <script src="js/brake-demo.js?v=20260930-glow-1"></script>
-  <script src="js/buffer-demo.js?v=20260930-glow-1"></script>
-  <script src="js/part-actions.js?v=20260930-glow-1"></script>
+  <script src="js/ucm-demo.js?v=20261003-pause-1"></script>
+  <script src="js/ascent-demo.js?v=20261003-pause-2"></script>
+  <script src="js/brake-demo.js?v=20261003-pause-1"></script>
+  <script src="js/buffer-demo.js?v=20261003-pit-spans-1"></script>
+  <script src="js/part-actions.js?v=20261003-drunk-kick"></script>
   <script src="js/overspeed-effects.js?v=20260930-ovs-1"></script>
-  <script src="js/ui.js?v=20261002-passenger-buttons"></script>
+  <script src="js/ui.js?v=20261003-pause-1"></script>
   <script src="js/passenger-controls.js?v=20261002-passenger-buttons"></script>
   <script src="js/hall-inspector.js?v=20261002-manual-rescue"></script>
   <script src="js/hall-manual.js?v=20260930-glow-1"></script>
   <script src="js/inspection-stations.js?v=20260930-glow-1"></script>
   <script src="js/inspection-return.js"></script>
-  <script src="js/interlock-demo.js?v=20260930-glow-1"></script>
+  <script src="js/interlock-demo.js?v=20261003-retention-story"></script>
+  <script src="js/relay-rope-demo.js?v=20261003-pause-1"></script>
+  <script src="js/drunk-bear.js?v=20261003-polar-1"></script>
+  <script src="js/retention-demo.js?v=20261003-front-cut"></script>
+  <script src="js/demo-pause.js?v=20261003-pause-2"></script>
   <script src="js/finger-gap.js?v=20260930-glow-1"></script>
   <script src="js/emergency-lighting.js?v=20260930-glow-1"></script>
-  <script src="js/ard-demo.js?v=20260930-glow-1"></script>
-  <script src="js/manual-rescue-demo.js?v=20261002-impact"></script>
+  <script src="js/ard-demo.js?v=20261003-pause-1"></script>
+  <script src="js/manual-rescue-demo.js?v=20261003-pause-1"></script>
 
   <script>
     // 층수 및 층고 배열 (피트 1.76m, 1층 4.0m, 2층 3.65m, 3층 3.7m)
@@ -1604,6 +1609,8 @@
       DoorBypass.bind();
       HallManual.bind();
       InterlockDemo.bind();
+      RelayRopeDemo.bind();
+      RetentionDemo.bind();
       FingerGap.bind();
       buildShaftCableHarness(); // 도어 접점 검정 배선 · 조명 · 상하 스위치 박스
       BuildingLights.build();   // 승강로 등 3로 스위치(피트·상부) + 기계실 일자형 LED 단독 스위치
@@ -1620,6 +1627,7 @@
       BrakeDemo.build();
       updateBuffers();          // 동적 완충기
       BufferDemo.build();       // 카 완충기 충돌 시연 아이콘·먼지·균형추 여유거리 치수 (js/buffer-demo.js)
+      DemoPause.build();        // 모든 시연 공통 일시정지 버튼 (js/demo-pause.js)
       ARDDemo.build();
       ManualRescueDemo.build();
 
@@ -1631,6 +1639,7 @@
 
       InspectionStations.build();
       bindUIEvents();
+      CharacterWalk.init();
 
       installShadowCache(scene, camera, renderer);
 
@@ -1652,8 +1661,9 @@
       Mascot.update(performance.now() / 1000);
       UCMDemo.update(performance.now() / 1000);
       BufferDemo.update();
+      DemoPause.update();
       ARDDemo.update();
-      controls.update();
+      if (!CharacterWalk.active) controls.update();
       if (camera.position.y < Y0 + 0.35) camera.position.y = Y0 + 0.35;
       PartActions.update();
       AscentDemo.update();
@@ -1661,6 +1671,8 @@
       HallManual.update();
       ManualRescueDemo.update();
       InterlockDemo.update();
+      RelayRopeDemo.update();
+      RetentionDemo.update();
       FingerGap.update();
       PitLadder.update();
       ControlPanel.update();
@@ -1671,6 +1683,7 @@
       EmergencyCall.update(performance.now() / 1000);
       PassengerControls.update(performance.now() / 1000);
       EmergencyLighting.update();
+      CharacterWalk.update(performance.now() / 1000);
       renderer.render(scene, camera);
       PartGlow.render();          // 기능 부품 발광·탭 메뉴 (js/part-glow.js) — 메인 깊이 버퍼 위에 덧그림
       AscentDemo.renderInset();

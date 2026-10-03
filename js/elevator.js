@@ -2343,22 +2343,31 @@
       const step=g.toothStep;
       const curve=spinDir>0?gov.mechanism.switchStrikeDown:gov.mechanism.switchStrikeUp;
       const hitPhase=curve.phase,tau=Math.PI*2;
+      // PC 교육용 확대: 진자를 닫은 한 바퀴 가속 뒤 첫 타격으로 이어진다.
+      const runUp=observer.runUpSeconds||0,start=w0+(runUp?spinDir*tau:0);
       // 다음 첫 접촉만 향한다. 여분 한 바퀴를 돌며 이미 열린 진자가 암을 통과하지 않는다.
-      const hit=spinDir>0?hitPhase+Math.ceil((w0+.001-hitPhase)/tau)*tau:
-        hitPhase+Math.floor((w0-.001-hitPhase)/tau)*tau;
+      const hit=spinDir>0?hitPhase+Math.ceil((start+.001-hitPhase)/tau)*tau:
+        hitPhase+Math.floor((start-.001-hitPhase)/tau)*tau;
       const cleared=hit+spinDir*curve.travel;
       const contact=spinDir>0?Math.ceil((cleared+0.04)/step)*step:Math.floor((cleared-0.04)/step)*step;
-      const initialOpen=gov.pendulums[0].rotation.z-g.pendRot0[0];
-      const phase={t:0};let previousStage='';
+      const initialOpen=runUp?0:gov.pendulums[0].rotation.z-g.pendRot0[0];
+      const phase={t:-runUp};let previousStage='';
       const unit=(a,b,t)=>Math.max(0,Math.min(1,(t-a)/(b-a)));
       const smooth=t=>t*t*(3-2*t);
       function apply(){
         const t=phase.t;
+        if(t<0){
+          const p=unit(-runUp,0,t);
+          gov.wheel.rotation.z=w0+spinDir*tau*p*p;
+          gov.pendulums.forEach((pend,i)=>pend.rotation.z=g.pendRot0[i]);gov.setLinkage(0);
+          if(previousStage!=='accelerating'){previousStage='accelerating';observer.onStage?.('accelerating');}
+          observer.onUpdate?.(t);return;
+        }
         const open=initialOpen+(pose.pendulum-initialOpen)*smooth(unit(0,1.2,t));
         gov.pendulums.forEach((p,i)=>p.rotation.z=g.pendRot0[i]+open);gov.setLinkage(open);
         // One owner for each transform: no overlapping wheel tweens.
         const push=unit(2.2,3.3,t),engage=smooth(unit(3.9,4.35,t)),drag=smooth(unit(4.85,6.2,t));
-        gov.wheel.rotation.z=w0+(hit-w0)*unit(0,2.2,t)+spinDir*curve.travel*push+(contact-cleared)*engage+spinDir*pose.ratchet*drag;
+        gov.wheel.rotation.z=start+(hit-start)*unit(0,2.2,t)+spinDir*curve.travel*push+(contact-cleared)*engage+spinDir*pose.ratchet*drag;
         gov.ratchet.rotation.z=spinDir*pose.ratchet*drag;
         gov.pawl.rotation.z=g.pawlRot0+pose.pawl*engage;
         const release=smooth(unit(4.35,4.85,t)),grip=drag;
@@ -2377,7 +2386,7 @@
         observer.onUpdate?.(t);
       }
       const tl=gsap.timeline();
-      tl.to(phase,{t:6.2,duration:6.2,ease:'none',onUpdate:apply});
+      tl.to(phase,{t:6.2,duration:6.2+runUp,ease:'none',onUpdate:apply});
       tl.add(()=>{apply();governorPhase='tripped';gov.ropeLocked=true;onLocked?.();});
       gov.tripTimeline=tl;return tl;
     }

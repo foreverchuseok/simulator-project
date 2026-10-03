@@ -83,7 +83,17 @@ try {
     // 카 하부가 피트 바닥·피트 설비 아래로 내려가지 않는다(가장 낮은 카 부품)
     let low = Infinity, lowName = '';
     carGrp.traverse(o => { if (!o.isMesh || !o.visible) return; const b = new THREE.Box3().setFromObject(o); if (b.min.y < low) { low = b.min.y; lowName = o.name; } });
-    return { vImpact: u.vImpact, decelG: u.decel / 9.81, compression: u.compression, face: carGrp.position.y + f.faceY,
+    // 2026-10-03 피트 하부틈새 P·Q·균형추 레일 G — 시작 때 예측한 값이 실제 정지 자세(보이는 메시)와 같아야 한다.
+    const vis = o => { for (let q = o; q; q = q.parent) if (!q.visible) return false; return true; };
+    const skip = o => { for (let q = o; q; q = q.parent) if (q.name === 'carBufferStrike' || q.name === 'carTravelCable') return true; return false; };
+    const red = o => { for (let q = o; q && q !== carGrp; q = q.parent) if (/apron/i.test(q.name) || q.userData?.type === 'carGuideShoe' || q.name === 'carSafetyGear') return true; return false; };
+    let pLow = Infinity, qLow = Infinity, shoeTop = -Infinity, railTop = -Infinity;
+    carGrp.traverse(o => { if (!o.isMesh || !vis(o) || skip(o)) return; const y = new THREE.Box3().setFromObject(o).min.y; if (red(o)) qLow = Math.min(qLow, y); else pLow = Math.min(pLow, y); });
+    cwtGrp.getObjectByName('GuideShoes').traverse(o => { if (o.isMesh && vis(o)) shoeTop = Math.max(shoeTop, new THREE.Box3().setFromObject(o).max.y); });
+    railGrp.traverse(o => { if (o.name === 'GuideRail_8K_Root') o.traverse(m => { if (m.isMesh && vis(m)) railTop = Math.max(railTop, new THREE.Box3().setFromObject(m).max.y); }); });
+    const under = u.clear.under, pit = { P: pLow - (Y0 + .02), Q: qLow - (Y0 + .02), G: railTop - shoeTop,
+      predicted: Object.fromEntries(['P', 'Q', 'G'].map(k => [k, { gap: under[k].gap, ok: under[k].ok, required: under[k].required }])) };
+    return { pit, vImpact: u.vImpact, decelG: u.decel / 9.81, compression: u.compression, face: carGrp.position.y + f.faceY,
       bufferTopNow: h.topY - h.stroke, scaleY: h.urethane.scale.y, scaleR: h.urethane.scale.x, rope, carY: carGrp.position.y,
       cwtY: cwtGrp.position.y, clear: { ...u.clear, box: undefined }, low, lowName, dustVisible: scene.getObjectByName('bufferImpactDust').visible,
       final: elevatorState.finalLimitActive };
@@ -96,8 +106,14 @@ try {
   assert.ok(Math.abs((before.carY - atRest.carY) - (atRest.cwtY - before.cwtY)) < 1e-6, 'cwt rise = car drop');
   assert.ok(Math.abs(atRest.clear.rise - (before.carY - atRest.carY)) < 1e-6 && atRest.clear.gap > .15);
   assert.ok(atRest.low > 0.02, 'car lowest part above pit floor: ' + atRest.low + ' ' + atRest.lowName);
+  for (const k of ['P', 'Q', 'G']) assert.ok(Math.abs(atRest.pit[k] - atRest.pit.predicted[k].gap) < 1e-6, `${k} predicted = actual at rest: ${JSON.stringify(atRest.pit)}`);
+  assert.equal(atRest.pit.predicted.P.ok, atRest.pit.P >= .5); assert.equal(atRest.pit.predicted.Q.ok, atRest.pit.Q >= .1);
+  assert.ok(atRest.pit.predicted.G.ok && Math.abs(atRest.pit.predicted.G.required - (.1 + .035)) < 1e-9, 'counterweight rail G >= 0.1+0.035v² (1 m/s)');
   await page.waitForTimeout(1600);
   await page.screenshot({path: `${out}/03-side-fill.png`});
+  await page.waitForFunction(() => BufferDemo.state.stage === 'observe-under' && !gsap.isTweening(camera.position), null, {polling: 50});
+  assert.ok(await page.evaluate(() => ['P', 'Q'].every(k => scene.getObjectByName('over' + k).visible) && !scene.getObjectByName('overA').visible));
+  await page.screenshot({path: `${out}/03b-pit-under.png`});
   await page.waitForFunction(() => BufferDemo.state.stage === 'observe-cwt', null, {polling: 50});
   // 고정 대기 대신 상태로 기다린다(헤드리스 프레임 지연 시 gsap 시간이 늘어난다).
   await page.waitForFunction(() => !document.getElementById('buffer-demo-clear').hidden && scene.getObjectByName('bufferDemoCwtClearance').visible

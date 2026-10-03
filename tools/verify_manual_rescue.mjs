@@ -29,7 +29,7 @@ try{
       if(p){const hub=new THREE.Vector3(...spec.handleHub);scene.getObjectByName('TurningHandleHung').localToWorld(hub);const axis=new THREE.Vector3(...tr.contract.manualRescue.shaftCenter);tr.worm.parent.localToWorld(axis);hubGap=hub.distanceTo(axis);}
       const stroke=carDoorR.position.x-q.d.cx;
       const reach=ManualRescueDemo.actors?.flatMap(a=>[a.worker.rig.holdArm,a.worker.rig.waveArm].map(arm=>arm.userData.rescueReach||0));
-      rescueSamples.push({t:performance.now(),stage:s.stage,manual:s.manual,powerOff:s.powerOff,reach,car:carGrp.position.y,cwt:cwtGrp.position.y,estop,state:currentState,doorOpen,carStroke:stroke,hallStroke:h.right.position.x-h.right.userData.cx,release:q.release,key:h.keyRatio,brake:s.brakeReleased,mechanicalBrake:tr.brakeOpen,handle:s.handleAttached,handleAngle,worm:tr.worm.rotation.z,hubGap,level:s.level,call:s.call,ard:ARDDemo.active,passenger:UCMDemo.character.visible,friend:!!ManualRescueDemo.friend?.root.visible});
+      rescueSamples.push({t:performance.now(),stage:s.stage,manual:s.manual,stop:s.stopPressed,stopZ:scene.getObjectByName('EmergencyStopButton').position.z,walking:ManualRescueDemo.actors?.some(a=>a.walking),alarm:!document.getElementById('manual-rescue-alarm').hidden,levelLabel:!document.getElementById('manual-rescue-level').hidden,voice:!!activeAnnouncement&&!activeAnnouncement.paused,powerOff:s.powerOff,reach,car:carGrp.position.y,cwt:cwtGrp.position.y,estop,state:currentState,doorOpen,carStroke:stroke,hallStroke:h.right.position.x-h.right.userData.cx,release:q.release,key:h.keyRatio,brake:s.brakeReleased,mechanicalBrake:tr.brakeOpen,handle:s.handleAttached,handleAngle,worm:tr.worm.rotation.z,hubGap,level:s.level,call:s.call,ard:ARDDemo.active,passenger:UCMDemo.character.visible,friend:!!ManualRescueDemo.friend?.root.visible});
     };gsap.ticker.add(rescueProbe);
     const l=scene.getObjectByName('ReleaseLeverHung'),h=scene.getObjectByName('TurningHandleHung');
     const p=l.getWorldPosition(new THREE.Vector3()).add(h.getWorldPosition(new THREE.Vector3())).multiplyScalar(.5);p.y-=.2;
@@ -40,11 +40,16 @@ try{
   const pick=await page.evaluate(()=>{const h=scene.getObjectByName('TurningHandleHung'),s=h.userData.manualRescue,p=new THREE.Vector3(0,(s.handleHub[1]+s.handleGrip[1])/2,0);h.localToWorld(p);p.project(camera);return {x:(p.x+1)*innerWidth/2,y:(1-p.y)*innerHeight/2};});
   if(mobile)await page.touchscreen.tap(pick.x,pick.y);else await page.mouse.click(pick.x,pick.y);
   await page.getByRole('button',{name:'수동 구출 시연',exact:true}).click();
-  for(const stage of ['trapped','control-manual','power-off','handle-mount','handle-seated','lever-mount','brake-release','winding','level-approach','level','intercom','key-turn','opening','exit','done']){
+  for(const stage of ['trapped','control-manual','control-stop','power-off','handle-mount','handle-seated','lever-mount','brake-release','winding','level-approach','level','intercom','key-turn','opening','exit','done']){
     await page.waitForFunction(stage=>ManualRescueDemo.state.stage===stage,stage);
     if(stage==='control-manual')await page.waitForFunction(()=>ManualRescueDemo.state.manual);
+    if(stage==='control-stop')await page.waitForFunction(()=>ManualRescueDemo.state.stopPressed);
     if(stage==='power-off')await page.waitForFunction(()=>ManualRescueDemo.state.powerOff);
-    await page.waitForTimeout((['trapped','intercom'].includes(stage)?1200:stage==='winding'?1000:stage==='opening'?1000:400)/speed);
+    if(stage==='trapped'){
+      await page.screenshot({path:path.join(out,`${mobile?width:'pc'}-blackout.png`)});
+      await page.waitForFunction(()=>!document.getElementById('manual-rescue-level').hidden);
+    }
+    await page.waitForTimeout((stage==='intercom'?1200:stage==='winding'?1000:stage==='opening'?1000:['control-manual','control-stop','power-off','handle-mount','lever-mount'].includes(stage)?80:200)/speed);
     await page.screenshot({path:path.join(out,`${mobile?width:'pc'}-${stage}.png`)});
     if(stage==='winding'){
       const crew=await page.evaluate(()=>{
@@ -77,18 +82,22 @@ try{
   const samples=await page.evaluate(()=>rescueSamples);fs.writeFileSync(path.join(out,`${mobile?width:'pc'}-samples.json`),JSON.stringify(samples));
   const ride=samples.filter(s=>s.stage==='riding');assert.ok(ride.at(-1).car-ride[0].car>.7,'Visible travel precedes sudden fault');
   const target=await page.evaluate(()=>ManualRescueDemo.state.targetY);
-  assert.ok(samples.filter(s=>s.stage==='trapped').every(s=>Math.abs(target-s.car-.28)<1e-6),'Fault stops 28cm below landing');
+  assert.ok(samples.filter(s=>s.stage==='trapped').every(s=>Math.abs(target-s.car-.60)<1e-6),'Fault stops 60cm below landing');
+  assert.ok(samples.some(s=>s.stage==='trapped'&&s.alarm&&s.voice),'Impact has blackout warning and spoken power failure');
+  assert.ok(samples.some(s=>s.stage==='trapped'&&!s.alarm&&s.levelLabel),'Bright view reveals level difference after blackout');
+  assert.ok(samples.every(s=>!s.walking),'Crew transfers use cuts rather than walking');
+  const press=samples.filter(s=>s.stage==='control-stop');assert.ok(press.at(-1).stopZ<press[0].stopZ-.004,'Red STOP visibly depresses');
   assert.ok(samples.filter(s=>s.stage==='trapped').every(s=>s.carStroke===0&&s.hallStroke===0&&!s.level&&s.estop&&!s.ard));
   assert.ok(samples.every(s=>!s.ard&&s.estop),'System remains faulted; no ARD/autonomous drive');
   const movement=samples.filter(s=>['winding','level-approach'].includes(s.stage));
   assert.ok(movement.every(s=>s.brake&&s.handle&&s.mechanicalBrake),'Brake open before rotation');
-  assert.ok(movement.every(s=>s.manual&&s.powerOff),'Manual mode and power isolation precede winding');
+  assert.ok(movement.every(s=>s.manual&&s.stop&&s.powerOff),'Manual mode, STOP and power isolation precede winding');
   console.log('TOOL REACH',Math.max(...movement.flatMap(s=>s.reach)));
   assert.ok(samples.every(s=>(s.reach||[]).every(d=>d<.001)),'Hands stay on carried and mounted tools without stretching arm segments');
   assert.ok(samples.filter(s=>!s.brake&&!s.level&&s.handle).every(s=>Math.abs(s.handleAngle)<1e-8));
   assert.ok(movement.every(s=>s.hubGap<1e-6),'Handle hub stays on encoder shaft');
   const first=movement[0];assert.ok(movement.every(s=>Math.abs(s.car+s.cwt-first.car-first.cwt)<1e-6));
-  assert.ok(movement.at(-1).car-first.car>.26);
+  assert.ok(movement.at(-1).car-first.car>.57);
   assert.ok((movement.at(-1).t-first.t)*speed>6500,'Winding is visible for seven seconds');
   assert.ok(movement.every(s=>Math.abs((s.handleAngle-first.handleAngle)-(s.worm-first.worm))<1e-6),'Handle turns about same world Z axis/angle as worm');
   const opening=samples.filter(s=>s.stage==='opening');assert.ok(opening.some(s=>s.carStroke>.2));assert.ok(opening.every(s=>s.level&&!s.brake&&Math.abs(s.carStroke-s.hallStroke)<1e-6),'Manual landing door couples car door at level');
@@ -103,9 +112,11 @@ try{
   // Cancellation exercises each owned tween/tool/door stage. No leftover callbacks may restart it.
   const restoredControls=await page.evaluate(()=>({controlOpen:ControlPanel.open,powerOpen:MachineRoomPower.open,selector:scene.getObjectByName('ManualModeSelector').quaternion.toArray(),breaker:scene.getObjectByName('MainBreakerToggle').quaternion.toArray()}));
   for(const k of Object.keys(restoredControls))assert.deepEqual(restoredControls[k],before[k]);
+  assert.equal(await page.evaluate(()=>document.getElementById('manual-rescue-alarm').hidden&&document.getElementById('manual-rescue-level').hidden&&!activeAnnouncement),true,'Fault overlays and announcement reset');
+  assert.ok(Math.abs(await page.evaluate(()=>scene.getObjectByName('EmergencyStopButton').position.z)-samples[0].stopZ)<1e-8,'Front STOP returns to its saved position');
   // Full sequence above uses real time; cancellation checks only need stage transitions.
   await page.evaluate(()=>{gsap.globalTimeline.timeScale(8);});
-  for(const phase of process.argv.includes('--quick')?[]:['trapped','control-manual','power-off','handle-mount','lever-mount','brake-release','winding','phone-approach','intercom','key-turn','opening']){
+  for(const phase of process.argv.includes('--quick')?[]:['trapped','control-manual','control-stop','power-off','handle-mount','lever-mount','brake-release','winding','phone-approach','intercom','key-turn','opening']){
     assert.equal(await page.evaluate(()=>ManualRescueDemo.start()),true);
     await page.waitForFunction(phase=>ManualRescueDemo.state.stage===phase,phase);
     await page.evaluate(()=>ManualRescueDemo.reset());await page.waitForTimeout(180);

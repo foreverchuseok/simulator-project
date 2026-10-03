@@ -2,9 +2,9 @@
 const ManualRescueDemo=(()=>{
   const state={active:false,stage:'idle',floor:1,brakeReleased:false,handleAttached:false,level:false,call:false,exited:false};
   let button,panel,title,detail,gap,friend,lever,handle,phone,receiver,cord,saved,jobs=[];
-  let leverPivot,handlePivot,receiverPivot,wire,actors,selector,breaker;
+  let leverPivot,handlePivot,receiverPivot,wire,actors,selector,breaker,stopButton,alarm,levelLabel;
   const platforms=[];
-  const CREW_SCALE=.76, PACE=1.65, FAULT_GAP=.28, WIND_SECONDS=7;
+  const CREW_SCALE=.76, PACE=1.65, FAULT_GAP=.60, WIND_SECONDS=7;
   let otherLever,otherPivot,impact,levelMarker;
   const point=new THREE.Vector3(),handA=new THREE.Vector3(),handB=new THREE.Vector3(),normal=new THREE.Vector3();
   const keyPose={approach:0,insert:0,key:0,walk:0,carry:0,foot:0};
@@ -24,6 +24,14 @@ const ManualRescueDemo=(()=>{
       #manual-rescue-panel{position:fixed;left:50%;bottom:var(--caption-bottom,22px);transform:translateX(-50%);width:min(430px,calc(100vw - 24px));box-sizing:border-box;z-index:70;padding:10px 14px;border:1px solid #8fa9b5;border-radius:12px;background:#122633f2;color:#f4f8fa;text-align:center;font:12px/1.5 sans-serif}
       #manual-rescue-panel[hidden]{display:none}#manual-rescue-panel strong{display:block;font-size:15px}#manual-rescue-detail{white-space:pre-line;color:#bfd5df}#manual-rescue-gap{font-weight:bold;color:#9bf2c6;margin-top:3px}
       #manual-rescue-panel button{min-height:44px;margin-top:6px;padding:4px 14px;color:white;border:1px solid #7794a4;border-radius:7px;background:#294958;cursor:pointer}
+      #manual-rescue-alarm{position:fixed;inset:0;z-index:69;display:grid;place-content:center;text-align:center;background:#02060deb;color:#fff;font:900 clamp(32px,7vw,76px)/1.35 sans-serif;pointer-events:none;text-shadow:0 0 24px #ff462b}
+      #manual-rescue-alarm small{font-size:.30em;color:#ffb6a9;letter-spacing:.15em}
+      #manual-rescue-level{position:fixed;z-index:68;pointer-events:none;padding:9px 13px;border:2px solid #ffbd45;border-radius:9px;background:#101c29ed;color:#ffce69;font:800 15px/1.5 sans-serif;white-space:pre-line;box-shadow:0 0 20px #ffab3266}
+      #manual-rescue-alarm[hidden],#manual-rescue-level[hidden]{display:none}
+      #manual-rescue-level strong{font-size:23px;color:#fff}#manual-rescue-level em{font-size:12px;font-style:normal;color:#ff9d8a}
+      @keyframes rescue-level-pulse{50%{box-shadow:0 0 32px #ffb43bdd;border-color:#fff}}
+      #manual-rescue-level:not([hidden]){animation:rescue-level-pulse .65s ease-in-out 3}
+      @media(prefers-reduced-motion:reduce){#manual-rescue-level:not([hidden]){animation:none}}
       @media(max-width:600px){#manual-rescue-panel{font-size:11px;padding:7px 10px}#manual-rescue-panel strong{font-size:13px}}
     `;document.head.appendChild(style);
     button=document.createElement('button');button.id='manual-rescue-action';button.className='part-action';button.type='button';button.hidden=true;button.title='개방레버 + 핸들 · 수동 구출 시연';button.setAttribute('aria-label',button.title);
@@ -33,10 +41,13 @@ const ManualRescueDemo=(()=>{
     panel=document.createElement('section');panel.id='manual-rescue-panel';panel.hidden=true;panel.setAttribute('aria-label','수동 구출운전 시연');
     panel.innerHTML='<strong role="status"></strong><div id="manual-rescue-detail"></div><div id="manual-rescue-gap"></div><button id="manual-rescue-exit">시연 종료 · 복귀</button>';
     document.body.appendChild(panel);title=panel.querySelector('strong');detail=panel.querySelector('#manual-rescue-detail');gap=panel.querySelector('#manual-rescue-gap');panel.querySelector('button').onclick=reset;
+    alarm=document.createElement('div');alarm.id='manual-rescue-alarm';alarm.hidden=true;alarm.innerHTML='<small>쿵! · 운행 정지</small>정전입니다';document.body.appendChild(alarm);
+    levelLabel=document.createElement('div');levelLabel.id='manual-rescue-level';levelLabel.hidden=true;levelLabel.innerHTML=`층 바닥 ━━━<br><strong>↑ ${Math.round(FAULT_GAP*100)}cm 미도달</strong><br>카 바닥 ━━━<br><em>레벨존 밖 · 문 잠김</em>`;document.body.appendChild(levelLabel);
     for(const type of ['click','pointerdown','keydown','change','dblclick'])document.addEventListener(type,e=>{
       if(!state.active)return;
       if(type==='keydown'&&e.key==='Escape'){reset();e.preventDefault();e.stopImmediatePropagation();return;}
-      if(panel.contains(e.target)||e.target.closest?.('#btn-estop'))return;
+      // 공통 일시정지 버튼과, 멈춘 동안의 화면 둘러보기는 통과시킨다(js/demo-pause.js).
+      if(panel.contains(e.target)||e.target.closest?.('#btn-estop')||e.target.closest?.('#demo-pause')||(DemoPause.paused&&e.target.closest?.('canvas')))return;
       if(e.target.closest?.('button,input,select,canvas')){e.preventDefault();e.stopImmediatePropagation();}
     },true);
   }
@@ -45,7 +56,7 @@ const ManualRescueDemo=(()=>{
   function snapshot(){
     saved={carY:carGrp.position.y,cwtY:cwtGrp.position.y,floor:curFloor,door:doorOpen,emergency:EmergencyLighting.on,
       camera:capture(camera),target:controls.target.clone(),fov:camera.fov,near:camera.near,enabled:controls.enabled,damp:controls.enableDamping,min:controls.minDistance,
-      lever:capture(lever),handle:capture(handle),receiver:capture(receiver),cordVisible:cord.visible,bearScale:Mascot.root.scale.clone(),bearFloor:Mascot.root.position.y,brake:tr().brakeOpen,controlOpen:ControlPanel.open,powerOpen:MachineRoomPower.open,selector:capture(selector),breaker:capture(breaker),
+      lever:capture(lever),handle:capture(handle),receiver:capture(receiver),cordVisible:cord.visible,bearScale:Mascot.root.scale.clone(),bearFloor:Mascot.root.position.y,brake:tr().brakeOpen,controlOpen:ControlPanel.open,powerOpen:MachineRoomPower.open,selector:capture(selector),breaker:capture(breaker),stop:capture(stopButton),
       spin:[mainSheaveGrp,deflectorSheaveGrp,governorWheelGrp,tensionSheaveGrp,tr().worm].map(capture),passenger:[]};
     passenger().traverse(o=>saved.passenger.push(capture(o)));
   }
@@ -54,10 +65,11 @@ const ManualRescueDemo=(()=>{
     lever=scene.getObjectByName('ReleaseLeverHung');handle=scene.getObjectByName('TurningHandleHung');phone=scene.getObjectByName('ControlPanelIntercom');receiver=phone.getObjectByName('IntercomHandset');cord=phone.getObjectByName('IntercomCord');
     if(!friend)friend=Mascot.createWorker('ManualRescueHelmetedFriend');
     selector=ControlPanel.root.getObjectByName('ManualModeSelector');breaker=MachineRoomPower.root.getObjectByName('MainBreakerToggle');
-    if(!selector||!breaker)return false;
+    stopButton=ControlPanel.root.getObjectByName('EmergencyStopButton');
+    if(!selector||!breaker||!stopButton)return false;
     if(!actors)actors=[Mascot,friend].map(worker=>({worker,rig:Mascot.rescueRig(worker,.26),p:new THREE.Vector3(),yaw:Math.PI,hand:null,carry:null,walking:false,phase:0}));
     leaveCabinView();closeAllMenus();snapshot();clearTimeout(autoTimer);EmergencyCall.hangUp();jobs=[];
-    Object.assign(state,{active:true,stage:'preparing',manual:false,powerOff:false,brakeReleased:false,handleAttached:false,level:false,call:false,exited:false});
+    Object.assign(state,{active:true,stage:'preparing',manual:false,stopPressed:false,powerOff:false,brakeReleased:false,handleAttached:false,level:false,call:false,exited:false});
     Object.assign(keyPose,{approach:0,insert:0,key:0,walk:0,carry:0,foot:0});
     panel.hidden=false;document.body.classList.add('manual-rescue-active');controls.enabled=false;controls.enableDamping=false;controls.minDistance=.02;camera.near=.002;camera.updateProjectionMatrix();
     gsap.killTweensOf(camera.position);gsap.killTweensOf(controls.target);MACH.resume();MACH.motorOff();
@@ -93,7 +105,7 @@ const ManualRescueDemo=(()=>{
   function fault(){
     state.floor=THREE.MathUtils.clamp(insNearestFloor(),1,FLOORS-1);state.targetY=FLOOR_Y[state.floor]+S.CAR_H/2;
     UCMDemo.neutral();passenger().visible=true;passenger().position.set(0,0,CAR_CTR_Z);passenger().rotation.set(0,0,0);
-    estop=true;moving=true;currentState=ELEVATOR_STATE.ESTOP;setTractionBrake(true,true);setY(state.targetY-1.10);
+    estop=true;moving=true;currentState=ELEVATOR_STATE.ESTOP;setTractionBrake(true,true);setY(state.targetY-FAULT_GAP-.82);
     stage('riding','승객 탑승 · 이동 중','층으로 이동하던 중 갑자기 고장이 발생합니다.');
     const fy=FLOOR_Y[state.floor],d=Math.max(4.1,2.4/camera.aspect);
     cameraTo(new THREE.Vector3(d,fy+1.35,CAR_CTR_Z-.80),new THREE.Vector3(0,fy+.35,CAR_CTR_Z+.10),.5);
@@ -104,11 +116,13 @@ const ManualRescueDemo=(()=>{
     },onComplete:()=>{
       moving=false;MACH.motorOff();setTractionBrake(false,true);MACH.brakeSet();MACH.ucmBrakeFailure();
       updateStatus('v-spd','0 m/min');syncAllIndicators(state.floor+1,'고장');
-      if(!EmergencyLighting.on)EmergencyLighting.toggle();showLevelMarker();
+      if(!EmergencyLighting.on)EmergencyLighting.toggle();
+      alarm.hidden=false;alarm.style.opacity=1;snd.powerFailure.play();
+      own(gsap.to(alarm,{opacity:0,delay:.8,duration:1.0,onComplete:()=>{alarm.hidden=true;showLevelMarker();levelLabel.hidden=false;}}));
       stage('trapped','쿵! 고장 정지 · 승객 갇힘',`노란선: 층 바닥 · 카는 ${Math.round(FAULT_GAP*100)}cm 아래\n레벨존 밖 / ARD 불가 · 문 잠김`);
       impact=renderer.domElement.animate([{transform:'translateY(0)'},{transform:'translateY(7px)'},{transform:'translateY(-4px)'},{transform:'translateY(2px)'},{transform:'translateY(0)'}],{duration:380});
       own(gsap.timeline().to(passenger().rotation,{z:-.13,duration:.13}).to(passenger().rotation,{z:.05,duration:.20}).to(passenger().rotation,{z:0,duration:.3}));
-      later(4.5,()=>{levelMarker.visible=false;prepareCrew();});
+      later(5.3,()=>{levelMarker.visible=false;levelLabel.hidden=true;prepareCrew();});
     }}));
   }
 
@@ -141,87 +155,76 @@ const ManualRescueDemo=(()=>{
     g.visible=true;g.updateWorldMatrix(true,true);
     return g;
   }
-  function moveActor(a,p,yaw,duration,done){
-    const delta=Math.atan2(Math.sin(yaw-a.yaw),Math.cos(yaw-a.yaw));a.walking=true;
-    own(gsap.to(a,{yaw:a.yaw+delta,duration:Math.min(.65,duration)}));
-    own(gsap.to(a.p,{x:p.x,y:p.y,z:p.z,duration,ease:'none',onComplete:()=>{a.walking=false;done?.();}}));
-  }
+  // 작업 위치로 바로 전환한다. 보행·계단 이동 없이 손의 조작을 보여준다.
   function travel(a,dest,yaw,name,done){
-    const g=platform(dest,yaw,name),entry=new THREE.Vector3(0,0,g.userData.run);g.localToWorld(entry);
-    const arrive=()=>{
-      const n=g.userData.steps;let i=0;
-      function stepUp(){if(i===n){a.platform=g;moveActor(a,dest,yaw,.6,done);return;}i++;
-        const p=entry.clone().lerp(dest,i/n);moveActor(a,p,g.rotation.y+Math.PI,.42,stepUp);
-      }stepUp();
-    };
-    const walk=()=>{
-      // 권상기 체대 안을 대각선으로 가로지르지 않고 앞쪽 통로를 이용한다.
-      const waypoints=[];
-      if(a.p.z<1.60)waypoints.push(new THREE.Vector3(a.p.x,saved.bearFloor,1.65));
-      waypoints.push(new THREE.Vector3(entry.x,saved.bearFloor,1.65),entry);
-      function next(){const p=waypoints.shift();if(!p){arrive();return;}const d=a.p.distanceTo(p);if(d<.02){next();return;}moveActor(a,p,Math.atan2(p.x-a.p.x,p.z-a.p.z),Math.max(.3,d/.65),next);}next();
-    };
-    if(a.platform){const old=a.platform,exit=new THREE.Vector3(0,0,old.userData.run);old.localToWorld(exit);a.platform=null;moveActor(a,exit,old.rotation.y,1.8,()=>{old.visible=false;walk();});}else walk();
+    if(a.platform)a.platform.visible=false;
+    a.platform=platform(dest,yaw,name);a.p.copy(dest);a.yaw=yaw;a.walking=false;
+    poseWorkers();done?.();
   }
   function reach(a,target,done){
     a.hand=a.worker.rig.holdArm.userData.rig.paw.getWorldPosition(new THREE.Vector3());
     own(gsap.to(a.hand,{x:target.x,y:target.y,z:target.z,duration:.8,ease:'power2.inOut',onComplete:done}));
   }
+  // 조작 직후 손을 몸쪽 아래로 빼서 바뀐 스위치 상태(눌린 STOP·돌아간 선택기·내린 차단기)를 드러낸다.
+  // 카메라가 어깨 뒤에 있으므로 어깨 방향으로만 빼면 화면에서 손이 그대로 대상을 가린다.
+  function retract(a,done){
+    const s=a.worker.rig.holdArm.getWorldPosition(new THREE.Vector3()),p=a.hand.clone().lerp(s,.3).add(new THREE.Vector3(0,-.12,-.10));
+    own(gsap.to(a.hand,{x:p.x,y:p.y,z:p.z,duration:.35,ease:'power1.out',onComplete:done}));
+  }
   function prepareCrew(){
     Mascot.beginInspection();friend.beginInspection();
     actors.forEach(a=>{a.worker.root.scale.setScalar(CREW_SCALE);a.worker.rig.eyes.forEach(e=>e.scale.y=.032);a.p.copy(a.worker.root.position);a.yaw=a.worker.root.rotation.y;a.hand=null;a.carry=null;a.toolGrip=null;a.secondGrip=null;a.platform=null;a.walking=false;});
-    // 동료는 통로에서 기다린 뒤 공구를 가져온다.
+    // 동료는 핸들 결합 장면부터 표시한다.
     actors[1].p.set(.7,saved.bearFloor,1.45);actors[1].yaw=-Math.PI/2;
+    friend.root.visible=false;
     stage('control-manual','제어반 · 자동 → 수동','고장 상태를 확인하고 수동 위치로 전환합니다.');
-    if(!ControlPanel.open)ControlPanel.toggle();
-    later(1.3,()=>operateSwitch(selector,'ControlStep',()=>{
-      own(gsap.to(selector.rotation,{z:1.2,duration:.7,onComplete:()=>{state.manual=true;later(1.5,isolatePower);}}));
-    }));
+    ControlPanel.restoreOpen(true);
+    operateSwitch(selector,'ControlStep',()=>{
+      own(gsap.to(selector.rotation,{z:1.2,duration:.7,onComplete:()=>{state.manual=true;retract(actors[0],()=>later(.5,pressStop));}}));
+    });
+  }
+  function pressStop(){
+    stage('control-stop','제어반 · 빨간 STOP 누르기','수동 전환 후 정지 스위치를 눌러 둡니다.');
+    operateSwitch(stopButton,'ControlStep',()=>{
+      const depth=stopButton.userData.pressDepth,hand=actors[0].hand;
+      const push=new THREE.Vector3(0,0,-depth).applyQuaternion(stopButton.parent.getWorldQuaternion(new THREE.Quaternion())).add(hand);
+      own(gsap.to(hand,{x:push.x,y:push.y,z:push.z,duration:.45}));
+      own(gsap.to(stopButton.position,{z:saved.stop.p.z-depth,duration:.45,onComplete:()=>{state.stopPressed=true;retract(actors[0],()=>later(.7,isolatePower));}}));
+    });
   }
   function operateSwitch(node,name,done){
     const target=node.getWorldPosition(new THREE.Vector3()),a=actors[0],yaw=-Math.PI/2;
     const dest=target.clone().add(new THREE.Vector3(.30,-.36*CREW_SCALE,-.185*CREW_SCALE));
-    const d=Math.max(1.8,1.15/camera.aspect);cameraTo(target.clone().add(new THREE.Vector3(d,.3,d*.45)),target.clone().add(new THREE.Vector3(.15,-.3,0)));
-    travel(a,dest,yaw,name,()=>reach(a,target,done));
+    const d=Math.max(.80,.60/camera.aspect);cameraTo(target.clone().add(new THREE.Vector3(d,-.25,d*.5625)),target,0);
+    // 이전 스위치를 잡던 손 목표를 비운 뒤 위치를 바꾼다. 남겨 두면 전환 첫 프레임에 팔이 늘어난다.
+    a.hand=null;travel(a,dest,yaw,name,()=>reach(a,target,done));
   }
   function isolatePower(){
     actors[0].hand=null;stage('power-off','분전함 · 주전원 차단','수동 전환 후 주전원을 OFF로 내립니다.');
-    if(!MachineRoomPower.open)MachineRoomPower.toggle();
-    later(1,()=>operateSwitch(breaker,'BreakerStep',()=>{
-      own(gsap.to(breaker.rotation,{x:-.65,duration:.65,onComplete:()=>{state.powerOff=true;later(1.5,tools);}}));
-    }));
+    MachineRoomPower.restoreOpen(true);
+    operateSwitch(breaker,'BreakerStep',()=>{
+      own(gsap.to(breaker.rotation,{x:-.65,duration:.65,onComplete:()=>{state.powerOff=true;retract(actors[0],()=>later(.7,tools));}}));
+    });
   }
   function fetchTool(a,object,grip,seat,world,q,name,stand,done,yaw=Math.PI){
-    const pickup=object.localToWorld(grip.clone()),dest=pickup.clone().add(new THREE.Vector3(.26*CREW_SCALE,-.36*CREW_SCALE,-.185*CREW_SCALE));
-    const d=Math.max(2.1,1.6/camera.aspect);cameraTo(pickup.clone().add(new THREE.Vector3(d,.25,d*.8)),pickup.clone().add(new THREE.Vector3(.2,-.25,0)));
-    a.hand=null;
-    travel(a,dest,-Math.PI/2,name+'WallStep',()=>reach(a,pickup,()=>{
-      scene.attach(object);a.worker.root.updateMatrixWorld(true);
-      a.carry={object,grip:grip.clone(),local:a.worker.root.worldToLocal(pickup.clone()),q:a.worker.root.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(object.quaternion)};a.hand=null;
-      // 걸이에서 먼저 들어 올리고 몸 앞으로 당긴 다음 운반한다.
-      own(gsap.to(a.carry.local,{y:a.carry.local.y+.07,duration:.5,onComplete:()=>{
-        own(gsap.to(a.carry.local,{x:.185,y:.36,z:.28,duration:.8,onComplete:()=>{
-          machineShot(1.4);
-          travel(a,stand,yaw,name+'WorkStep',()=>{
-            object.updateWorldMatrix(true,true);const p0=object.position.clone(),q0=object.quaternion.clone(),end=seat.clone().applyQuaternion(q).multiplyScalar(-1).add(world),s={t:0};
-            a.carry=null;a.toolGrip={object,grip};
-            own(gsap.to(s,{t:1,duration:2.2,ease:'power2.inOut',onUpdate:()=>{object.position.lerpVectors(p0,end,s.t);object.quaternion.copy(q0).slerp(q,s.t);},onComplete:()=>done(pivot(name,object,seat,world,q))}));
-          });
-        }}));
-      }}));
-    }));
+    a.hand=null;a.worker.root.visible=true;
+    travel(a,stand,yaw,name+'WorkStep',()=>{
+      const mounted=pivot(name,object,seat,world,q);a.toolGrip={object,grip};poseWorkers();
+      if(object===handle)handlePivot=mounted;else leverPivot=mounted;
+      machineShot(0);later(.7,()=>done(mounted));
+    });
   }
   function tools(){
-    if(!state.manual||!state.powerOff)return;
+    if(!state.manual||!state.stopPressed||!state.powerOff)return;
     actors[0].hand=null;
-    stage('handle-mount','핸들 가져오기 · 축에 결합','친구가 벽에서 핸들을 꺼내 들고 발판을 올라 정면에서 끼웁니다.');
+    stage('handle-mount','핸들 축 결합 확인','친구가 축에 결합된 핸들을 잡고 브레이크 개방을 기다립니다.');
     const c=tr().contract.manualRescue,world=tr().worm.parent.localToWorld(new THREE.Vector3(...c.shaftCenter));
     const q=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),-Math.PI/2);
     const stand=world.clone().add(new THREE.Vector3(.185*CREW_SCALE,-.36*CREW_SCALE,.26*CREW_SCALE));
     fetchTool(actors[1],handle,new THREE.Vector3(...toolSpec().handleGrip),new THREE.Vector3(...toolSpec().handleHub),world,q,'ManualHandlePivot',stand,p=>{
       handlePivot=p;state.handleAttached=true;state.worm0=tr().worm.rotation.z;
       stage('handle-seated','핸들 결합 완료 · 브레이크 닫힘','축 결합을 확인하고 핸들을 잡은 자세로 기다립니다.');
-      machineShot(.75);
+      machineShot(0);
       later(1.8,mountLever);
     });
   }
@@ -248,7 +251,7 @@ const ManualRescueDemo=(()=>{
       otherPivot=pivot('ManualReleaseLeverOtherPivot',otherLever,seat,lugWorld(0).clone(),q);
       actors[0].toolGrip={object:lever,grip};actors[0].secondGrip={object:otherLever,grip};
       const d=Math.max(1.1,1/camera.aspect);
-      cameraTo(center.clone().add(new THREE.Vector3(-1.15,.9*d,1.6*d)),center.clone().add(new THREE.Vector3(0,.12,-.08)),.65);
+      cameraTo(center.clone().add(new THREE.Vector3(-1.15,.9*d,1.6*d)),center.clone().add(new THREE.Vector3(0,.12,-.08)),0);
       const v={t:0};stage('brake-release','양손으로 당기기 · 이중 브레이크 개방','코일 양옆 레버를 승강곰 쪽으로 당겨 양쪽 브레이크를 벌립니다.');
       own(gsap.to(v,{t:1,duration:1.8,onUpdate:()=>poseLevers(v.t),onComplete:()=>{
         tr().brakeOpen=true;state.brakeReleased=true;later(1.3,()=>{machineShot(.6);wind();});
@@ -256,7 +259,7 @@ const ManualRescueDemo=(()=>{
     },0);
   }
   function wind(){
-    if(!state.manual||!state.powerOff||!state.brakeReleased||!state.handleAttached||!tr().brakeOpen)return;
+    if(!state.manual||!state.stopPressed||!state.powerOff||!state.brakeReleased||!state.handleAttached||!tr().brakeOpen)return;
     stage('winding','핸들 수동 회전 · 카를 조금 상승','승강곰은 브레이크 개방을 유지하고 친구가 핸들을 돌립니다.');
     moving=true;const p={y:carGrp.position.y};
     own(gsap.to(p,{y:state.targetY,duration:WIND_SECONDS*PACE,ease:'none',onUpdate:()=>{
@@ -271,13 +274,13 @@ const ManualRescueDemo=(()=>{
   }
   function callPassenger(){
     actors.forEach(a=>{a.hand=null;a.toolGrip=null;a.secondGrip=null;});
-    stage('phone-approach','브레이크 체결 확인 · 인터폰으로 이동','공구를 멈춘 뒤 발판을 내려와 승객에게 연락합니다.');
+    stage('phone-approach','브레이크 체결 확인 · 인터폰 통화 준비','공구를 멈추고 승객에게 연락합니다.');
     const c=phone.getObjectByName('IntercomPhoneRoot').userData;
     phone.updateWorldMatrix(true,true);const target=phone.localToWorld(new THREE.Vector3(...c.handsetCenter));
     const n=new THREE.Vector3(0,0,1).transformDirection(phone.matrixWorld),yaw=Math.atan2(-n.x,-n.z);
     const dest=target.clone().addScaledVector(n,.32);dest.y=Math.max(saved.bearFloor,target.y-.60*CREW_SCALE);
-    cameraTo(target.clone().addScaledVector(n,2).add(new THREE.Vector3(1,.25,.5)),target.clone().add(new THREE.Vector3(0,-.25,0)));
-    travel(actors[0],dest,yaw,'PhoneStep',liftReceiver);
+    cameraTo(target.clone().addScaledVector(n,2).add(new THREE.Vector3(1,.25,.5)),target.clone().add(new THREE.Vector3(0,-.25,0)),0);
+    travel(actors[0],dest,yaw,'PhoneStep',()=>later(.7,liftReceiver));
   }
   function liftReceiver(){
     // 공구는 브레이크 재체결 후에도 장착 위치에 둔다. 벽으로 순간 이동시키지 않는다.
@@ -350,7 +353,15 @@ const ManualRescueDemo=(()=>{
   }
   function update(){
     if(!button)return;
-    if(state.active){poseWorkers();updateWire();button.hidden=true;return;}
+    if(state.active){
+      poseWorkers();updateWire();button.hidden=true;
+      if(!levelLabel.hidden){
+        point.set(S.CAR_W/2+.03,FLOOR_Y[state.floor]-FAULT_GAP/2,CAR_CTR_Z-S.CAR_D*.28).project(camera);
+        levelLabel.style.left=Math.max(12,Math.min(innerWidth-levelLabel.offsetWidth-12,(point.x+1)*innerWidth/2+16))+'px';
+        levelLabel.style.top=Math.max(80,Math.min(panel.getBoundingClientRect().top-levelLabel.offsetHeight-12,(1-point.y)*innerHeight/2-levelLabel.offsetHeight/2))+'px';
+      }
+      return;
+    }
     const l=scene.getObjectByName('ReleaseLeverHung'),h=scene.getObjectByName('TurningHandleHung');
     button.hidden=true;if(!l?.userData.ready||!h?.userData.ready)return;
     for(let o=l;o;o=o.parent)if(!o.visible)return;
@@ -363,8 +374,10 @@ const ManualRescueDemo=(()=>{
   }
   function reset(){
     if(!state.active)return false;state.active=false;jobs.forEach(t=>t.kill());jobs=[];clearTimeout(autoTimer);CarDoor.state.timeline?.kill();impact?.cancel();if(levelMarker)levelMarker.visible=false;
+    alarm.hidden=true;levelLabel.hidden=true;
+    if(activeAnnouncement){activeAnnouncement.pause();activeAnnouncement=null;}announcementRequest++;window.speechSynthesis?.cancel();MACH.duck(false);
     if(state.call)HallInspector.end();EmergencyCall.setManualLink(false);actors?.forEach(a=>{a.rig.reset();a.carry=null;a.toolGrip=null;a.secondGrip=null;a.hand=null;a.platform=null;});platforms.forEach(p=>p.visible=false);friend?.endInspection();Mascot.endInspection();Mascot.root.scale.copy(saved.bearScale);
-    restore(saved.selector);restore(saved.breaker);
+    restore(saved.selector);restore(saved.breaker);restore(saved.stop);
     ControlPanel.restoreOpen(saved.controlOpen);MachineRoomPower.restoreOpen(saved.powerOpen);
     restore(saved.lever);restore(saved.handle);restore(saved.receiver);cord.visible=saved.cordVisible;if(wire)wire.visible=false;
     [leverPivot,otherPivot,handlePivot,receiverPivot].forEach(p=>{if(p)scene.remove(p);});leverPivot=otherPivot=handlePivot=receiverPivot=null;
@@ -375,7 +388,7 @@ const ManualRescueDemo=(()=>{
     setTractionBrake(saved.brake,true);MACH.motorOff();MACH.brakeSet();estop=false;moving=false;currentState=ELEVATOR_STATE.IDLE;
     if(EmergencyLighting.on!==saved.emergency)EmergencyLighting.toggle();
     camera.position.copy(saved.camera.p);camera.quaternion.copy(saved.camera.q);camera.fov=saved.fov;camera.near=saved.near;camera.updateProjectionMatrix();controls.target.copy(saved.target);controls.enabled=saved.enabled;controls.enableDamping=saved.damp;controls.minDistance=saved.min;controls.update();
-    panel.hidden=true;document.body.classList.remove('manual-rescue-active');Object.assign(state,{stage:'idle',manual:false,powerOff:false,brakeReleased:false,handleAttached:false,level:false,call:false,exited:false});
+    panel.hidden=true;document.body.classList.remove('manual-rescue-active');Object.assign(state,{stage:'idle',manual:false,stopPressed:false,powerOff:false,brakeReleased:false,handleAttached:false,level:false,call:false,exited:false});
     syncAllIndicators(curFloor+1,'');updateStatus('v-dir','정지 대기','#8b949e');updateStatus('v-spd','0 m/min');updateStatus('v-door','닫힘','#3fb950');
     if(saved.door)openDoors();return true;
   }

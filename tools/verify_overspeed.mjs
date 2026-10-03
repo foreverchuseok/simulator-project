@@ -51,7 +51,7 @@ try{
    ovsSamples.push({stage:ovsDemo.stage,shot:ovsDemo.shot,broken:ovsDemo.broken,breakProgress:ovsDemo.breakProgress,
      mainVisible:ropeObjs.every(r=>r.carDrop.visible),governorRopes:govRopeSegs.every(r=>r.visible),sparks:!!ovsDemo.sparks?.visible,scissor:renderer.getScissorTest(),
      t:performance.now(),y:carGrp.position.y,cwt:cwtGrp.position.y,wheel:g.wheel.rotation.z,
-     ratchet:g.ratchet.rotation.z,clampY:carGrp.position.y+carGrp.userData.govClamp.y,
+     ratchet:g.ratchet.rotation.z,pendulum:g.pendulums[0].rotation.z-g.geom.pendRot0[0],clampY:carGrp.position.y+carGrp.userData.govClamp.y,
      p:sg.shaft.rotation.x/SG_TRIP_ROT,ropeLocked:g.ropeLocked||false,
      contact:g.switchLever.userData.contactClosed,state:currentState,safetyContact:carGrp.getObjectByName('safetyLimitSwitch').userData.contactClosed});
    if(ovsDemo.sparks?.visible&&!window.ovsSparkFrame){window.ovsSparkFrame=true;setTimeout(()=>{
@@ -83,8 +83,18 @@ try{
   return {samples:ovsSamples,frames:ovsFrames,sounds:ovsSounds,padGap:point.x-m.ropeFaceX,switchAngle:gov.switchLever.rotation.z+m.switchRestAngle,phase:governorPhase,hidden:ovsDemo.hidden.length};
  });
  const stages=[...new Set(data.samples.map(s=>s.stage))];
- const expected=['preparing','rope-break','runaway','machine-room','centrifugal','electrical','pawl','rope-grip','rope-locked','linkage-view','linkage','safety-view','wedges'];
+ const desktop=await page.evaluate(()=>ovsDemo.desktopGovernor);
+ const expected=['preparing','rope-break','runaway','machine-room',...(desktop?['accelerating']:[]),'centrifugal','electrical','pawl','rope-grip','rope-locked','linkage-view','linkage','safety-view','wedges'];
  assert.deepEqual(stages.filter(s=>expected.includes(s)),expected);
+ const acceleration=data.samples.filter(s=>s.stage==='accelerating');
+ if(desktop){
+  assert.ok(acceleration.at(-1).t-acceleration[0].t>=2200,'PC shows acceleration for 2.4 seconds');
+  assert.ok(acceleration.every(s=>s.shot==='governor'&&s.contact&&!s.ropeLocked&&Math.abs(s.pendulum)<1e-8),'Acceleration stays in close-up with closed pendulums and untouched switch');
+  const mid=Math.floor(acceleration.length/2),a=acceleration[0],b=acceleration[mid],c=acceleration.at(-1);
+  assert.ok(Math.abs((c.wheel-b.wheel)/(c.t-b.t))>Math.abs((b.wheel-a.wheel)/(b.t-a.t))*1.5,'Wheel visibly accelerates');
+  const held=data.samples.filter(s=>s.stage==='rope-locked');
+  assert.ok(held.at(-1).t-held[0].t>=1350,'PC holds the rope grip before moving below the car');
+ }else assert.equal(acceleration.length,0,'Mobile keeps its existing sequence');
  const rupture=data.samples.filter(s=>s.stage==='rope-break'&&s.shot==='rope');
  const separated=rupture.filter(s=>s.breakProgress===1);
  assert.ok(separated.length>5,'Severed ends stay visible for several rendered frames');
@@ -148,7 +158,7 @@ try{
  await press('#ovs-exit');await page.waitForFunction(()=>!overspeedActive&&!moving&&currentState===ELEVATOR_STATE.DOOR_OPEN);
  assert.equal(await page.evaluate(()=>ovsOriginalMaterials.every(([o,m])=>o.material===m)),true);
  // Cancel during the new observation interval and during physical striker contact.
- for(const stage of ['preparing','separated','electrical']){
+ for(const stage of ['preparing','separated',...(desktop?['accelerating']:[]),'electrical']){
    await page.evaluate(()=>closeDoors());await page.waitForFunction(()=>!CarDoor.state.busy&&CarDoor.secured()&&!doorOpen);
    await page.evaluate(()=>{const dy=FLOOR_Y[3]+S.CAR_H/2-carGrp.position.y;carGrp.position.y+=dy;cwtGrp.position.y-=dy;curFloor=3;refreshRopes();startOverspeedFault(document.getElementById('btn-overspeed'));});
    if(stage!=='preparing')await page.waitForFunction(stage=>stage==='separated'?ovsDemo.stage==='rope-break'&&ovsDemo.breakProgress===1:ovsDemo.stage===stage,stage);

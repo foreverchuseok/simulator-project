@@ -114,9 +114,16 @@ const Mascot = (() => {
     p.eyes.forEach(e => { e.scale.y = .032 * blink; });
   }
 
-  function setVisible(on) { if (root) root.visible = !!on; }
-  function isVisible() { return !!(root && root.visible); }
+  function setVisible(on) {
+    if (typeof CharacterWalk !== 'undefined' && CharacterWalk.active) { CharacterWalk.setRoofVisible(on); return; }
+    if (root) root.visible = !!on;
+  }
+  function isVisible() {
+    if (typeof CharacterWalk !== 'undefined' && CharacterWalk.active) return CharacterWalk.roofVisible;
+    return !!(root && root.visible);
+  }
   function beginInspection(){
+    if (typeof CharacterWalk !== 'undefined' && CharacterWalk.active) CharacterWalk.exit(false);
     if(!root||inspectionHome)return;
     inspectionHome={position:root.position.clone(),rotation:root.rotation.clone(),visible:root.visible};
     root.visible=true;parts.body.position.set(0,0,0);parts.body.rotation.set(0,0,0);parts.head.rotation.set(0,0,0);parts.wrench.visible=false;
@@ -166,6 +173,76 @@ const Mascot = (() => {
     }
     return {root:copy,rig,inspectionPose:pose,beginInspection(){copy.visible=true;},endInspection(){copy.visible=false;},get inspecting(){return copy.visible;}};
   }
+  // 체험 전용: 원본 형상/재질은 공유하되 저해상도 기하와 독립 보행 피벗을 만든다.
+  // createWorker/옥상 원본의 기하·자세에는 쓰지 않으며 첫 체험 시 한 번만 호출한다.
+  function createWalker() {
+    const worker = createWorker('SeunggomWalker'), copy = worker.root, p = worker.rig;
+    copy.position.set(0,0,0); copy.rotation.set(0,0,0); copy.scale.setScalar(1);
+    p.body.position.set(0,0,0); p.body.rotation.set(0,0,0); p.head.rotation.set(0,0,0);
+    p.wrench.parent.remove(p.wrench);
+    [p.waveArm,p.holdArm].forEach((arm,i)=>arm.rotation.set(0,0,i===0?-.08:.08));
+    p.feet.forEach(f=>{f.position.y=0;f.position.z=0;});
+    p.legs.forEach(l=>{l.position.z=0;l.scale.z=.075;});
+    const visual = new THREE.Group(); visual.name='SeunggomVisual'; copy.add(visual);
+    // Keep the blob shadow grounded while the body moves.
+    [...copy.children].forEach(o=>{if(o!==visual && !(o.isMesh && o.geometry.type==='CircleGeometry'))visual.add(o);});
+    const strideGroups = p.feet.map((foot,i)=>{
+      const g=new THREE.Group();g.name='SeunggomStride_'+i;visual.add(g);g.add(foot,p.legs[i]);return g;
+    });
+    const low = new Map();
+    visual.traverse(o=>{
+      if(!o.isMesh)return;
+      const source=o.geometry, q=source.parameters;
+      if(!low.has(source)) {
+        let g=source;
+        if(source.type==='SphereGeometry') g=new THREE.SphereGeometry(q.radius,Math.min(q.widthSegments,20),Math.min(q.heightSegments,12),q.phiStart,q.phiLength,q.thetaStart,q.thetaLength);
+        else if(source.type==='CylinderGeometry') g=new THREE.CylinderGeometry(q.radiusTop,q.radiusBottom,q.height,Math.min(q.radialSegments,20),q.heightSegments,q.openEnded,q.thetaStart,q.thetaLength);
+        low.set(source,g);
+      }
+      o.geometry=low.get(source);o.castShadow=false;
+    });
+    // Batch rigid pieces by material inside each independently moving pivot.
+    // Blinking eyes, shoulders and stride groups stay separate.
+    const pivots=new Set([visual,p.body,p.head,...p.eyes,p.waveArm,p.holdArm,...strideGroups]);
+    function batch(group) {
+      group.updateWorldMatrix(true,true);
+      const inverse=new THREE.Matrix4().copy(group.matrixWorld).invert(), buckets=new Map(), meshes=[];
+      function visit(o){for(const c of o.children){if(pivots.has(c))continue;if(c.isMesh)meshes.push(c);visit(c);}}
+      visit(group);
+      for(const mesh of meshes){
+        const matrix=new THREE.Matrix4().multiplyMatrices(inverse,mesh.matrixWorld);
+        const proxy=new THREE.Mesh(mesh.geometry,mesh.material);proxy.matrix.copy(matrix);proxy.matrixAutoUpdate=false;
+        proxy.receiveShadow=mesh.receiveShadow;
+        const key=mesh.material.uuid;if(!buckets.has(key))buckets.set(key,[]);buckets.get(key).push(proxy);
+        mesh.parent.remove(mesh);
+      }
+      for(const list of buckets.values()){
+        const merged=mergeStaticMeshBucket(list);merged.name='SeunggomRigid';group.add(merged);
+      }
+    }
+    [p.head,p.body,p.waveArm,p.holdArm,...strideGroups,visual].forEach(batch);
+    // Only generated temporary geometry is disposed; shared roof geometry/materials remain intact.
+    for(const [source,g] of low)if(g!==source && !p.eyes.some(e=>e.geometry===g))g.dispose();
+    let distance=0, blend=0;
+    function animate(travel, dt, now) {
+      distance+=travel;
+      const wanted=travel>0.00001?1:0;blend+=(wanted-blend)*(1-Math.exp(-dt*16));
+      const cycle=distance/.32*Math.PI*2;
+      strideGroups.forEach((g,i)=>{
+        const t=((cycle/(2*Math.PI)+i*.5)%1+1)%1;
+        // Half-cycle planted, half-cycle lifted return: phase follows actual ground distance.
+        g.position.z=(t<.5?.08-.32*t:-.08+.32*(t-.5))*blend;
+        g.position.y=(t<.5?0:Math.sin((t-.5)*Math.PI*2)*.04)*blend;
+      });
+      p.body.position.y=Math.sin(cycle*2)*.004*blend;
+      p.body.rotation.z=Math.sin(cycle)*.018*blend;
+      p.waveArm.rotation.x=Math.sin(cycle)*.24*blend;p.holdArm.rotation.x=-Math.sin(cycle)*.24*blend;
+      p.eyes.forEach(e=>e.scale.y=.032*((now%3.6)>3.46?.18:1));
+    }
+    function resetPose(){distance=0;blend=0;animate(0,1,0);}
+    return {root:copy,visual,animate,resetPose};
+  }
+
   // 구출 연출 전용 두 관절. 길이는 고정하고 팔꿈치만 굽힌다.
   // 기존 점검 시연의 자세 계약에는 영향을 주지 않는다.
   function rescueRig(worker,armLength=.22){
@@ -189,5 +266,5 @@ const Mascot = (() => {
     function reset(){rig.feet.forEach(f=>{f.position.y=0;f.position.z=0;});arms.forEach(({arm,fore})=>{fore.visible=false;const q=arm.userData.rig;q.upper.quaternion.identity();q.upper.position.set(0,-.07,0);q.upper.scale.y=.09;q.paw.position.set(0,-.15,0);delete arm.userData.rescueReach;});}
     return {pose,reset};
   }
-  return { build, update, setVisible, isVisible,beginInspection,inspectionPose,endInspection,createWorker,rescueRig,get inspecting(){return !!inspectionHome;},get rig(){return parts;},get root() { return root; } };
+  return { build, update, setVisible, isVisible,beginInspection,inspectionPose,endInspection,createWorker,createWalker,rescueRig,get inspecting(){return !!inspectionHome;},get rig(){return parts;},get root() { return root; } };
 })();

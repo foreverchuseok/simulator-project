@@ -49,7 +49,8 @@ const ARDDemo = (() => {
     alarm=document.createElement('div');alarm.id='ard-alarm';alarm.hidden=true;alarm.innerHTML='<small>POWER FAILURE</small>정전입니다';document.body.appendChild(alarm);
     // 기존 UI의 포인터·키보드·단축 클릭이 자동 시연과 경합하지 않도록 캡처한다. STOP은 계속 유효하다.
     for(const type of ['click','pointerdown','keydown','change','dblclick'])document.addEventListener(type,e=>{
-      if(!state.active||panel.contains(e.target)||e.target.closest?.('#btn-estop'))return;
+      // 공통 일시정지 버튼과, 멈춘 동안의 화면 둘러보기는 통과시킨다(js/demo-pause.js).
+      if(!state.active||panel.contains(e.target)||e.target.closest?.('#btn-estop')||e.target.closest?.('#demo-pause')||(DemoPause.paused&&e.target.closest?.('canvas')))return;
       if(e.target.closest?.('button,input,select,canvas')){e.preventDefault();e.stopImmediatePropagation();}
     },true);
   }

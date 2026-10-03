@@ -244,7 +244,7 @@
     // ── 승강장 대리석 — 실사 사진(assets/bg/lobby_marble.png)을 상면에 입힘 ──
     //   사진 비율 2:1 → 슬래브 1.6m × 0.8m. 승강장 폭에 약 2장 반이 들어가 우편 도장처럼 안 쪼개진다.
     // 사진은 로드가 끝난 뒤에만 map 에 붙인다. 빈 텍스처를 먼저 넣으면 r128 에서 벽이 검게 나온다.
-    function loadFaceMat(path, u, v, fallback, roughness) {
+    function loadFaceMat(path, u, v, fallback, roughness, tint = 0xffffff) {
       const mat = new THREE.MeshStandardMaterial({
         color: fallback, roughness: roughness, metalness: 0.0
       });
@@ -255,7 +255,7 @@
         tex.repeat.set(Math.max(u, 0.01), Math.max(v, 0.01));
         tex.anisotropy = 8;
         mat.map = tex;
-        mat.color.setHex(0xffffff);
+        mat.color.setHex(tint);
         mat.needsUpdate = true;
       });
       return mat;
@@ -2197,6 +2197,8 @@
       addMeadowAnimal(deco, shadows, geo, 'duck', plaza.x0 - 0.3, plaza.z1 + 1.9, .55, look);
       addMeadowAnimal(deco, shadows, geo, 'rabbit', MEADOW_POND.x + 3.9, MEADOW_POND.z - 1.2, .9, [MEADOW_POND.x, MEADOW_POND.z]);
 
+      CharacterWalk.setPlaza(plaza);
+
       g.add(deco.mesh(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0, envMapIntensity: MEADOW_ENV }), 'meadowDecor'));
       g.add(shadows.mesh(new THREE.MeshBasicMaterial({ color: 0x2c5a26, transparent: true, opacity: 0.22,
         depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }), 'meadowBlobShadows'));
@@ -2576,19 +2578,108 @@
       parent.add(approachGrp);
     }
 
+    /* ── 승강장 마감 A안(호텔 로비형) — 이 블록이 치수 원본 ──
+       천장: 우드 루버(벽→앞 방향 살) + 벽쪽 간접조명 슬롯(라인 LED·벽 상단 빛번짐)
+       슬래브: 앞·좌우 끝에 스테인리스 테두리 / 벽: 문 옆 차콜 석재 액센트 + 스테인리스 걸레받이
+       모두 lobbyFinishA 그룹에 모아 재질별로 묶는다(batchStaticChildren). */
+    const LOBBY_FIN = {
+      louverW: 0.035, louverH: 0.045, louverPitch: 0.09, // 루버 살 폭·높이·간격
+      edgeInset: 0.06,  // 루버 영역 — 슬래브 가장자리 여백
+      coveD: 0.22,      // 벽쪽 간접조명 슬롯 깊이 (이 안에는 루버 없음)
+      coveLipH: 0.08,   // 슬롯 앞 각재 높이 — 라인 LED를 가린다
+      washH: 0.75,      // 벽 상단 빛번짐 높이
+      trimT: 0.004, trimDrop: 0.004, trimUp: 0.003, // 슬래브 테두리 두께·하단 처짐·상단 노싱
+      accentW: 0.50, accentT: 0.012, // 문 옆 액센트 벽 폭(삼방틀 바깥부터)·두께
+      baseH: 0.10, baseT: 0.016      // 걸레받이 — 액센트 벽보다 4mm 앞
+    };
+    let _lobbyFinMats = null;
+    function lobbyFinishMats() {
+      if (_lobbyFinMats) return _lobbyFinMats;
+      // 우드 결 — 살 길이(Z) 방향으로 결이 흐르도록 세로 줄무늬
+      const wc = document.createElement('canvas'); wc.width = 64; wc.height = 8;
+      const wg = wc.getContext('2d');
+      wg.fillStyle = '#b8875a'; wg.fillRect(0, 0, 64, 8);
+      for (let x = 0; x < 64; x++) {
+        const k = Math.sin(x * 0.9) * 0.5 + Math.sin(x * 0.23 + 1.7) * 0.5;
+        wg.fillStyle = k > 0 ? `rgba(92,56,30,${k * 0.25})` : `rgba(232,192,142,${-k * 0.22})`;
+        wg.fillRect(x, 0, 1, 8);
+      }
+      const woodTex = new THREE.CanvasTexture(wc);
+      woodTex.encoding = THREE.sRGBEncoding;
+      // 벽 상단 빛번짐 — 위(천장)에서 아래로 사라지는 그라데이션
+      const gc = document.createElement('canvas'); gc.width = 4; gc.height = 128;
+      const gg = gc.getContext('2d');
+      const grad = gg.createLinearGradient(0, 0, 0, 128);
+      grad.addColorStop(0, 'rgba(255,255,255,1)');
+      grad.addColorStop(0.35, 'rgba(255,255,255,0.45)');
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+      gg.fillStyle = grad; gg.fillRect(0, 0, 4, 128);
+      const washTex = new THREE.CanvasTexture(gc);
+      _lobbyFinMats = {
+        wood: new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.62, metalness: 0 }),
+        cove: M.coveLight(2.4),
+        wash: new THREE.MeshBasicMaterial({
+          color: 0xffcf8a, map: washTex, transparent: true, opacity: 0.32,
+          blending: THREE.AdditiveBlending, depthWrite: false
+        }),
+        accent: loadFaceMat('assets/bg/lobby_wall.png', LOBBY_FIN.accentW / 1.6, 3.5 / 0.8,
+          0x3e4044, 0.55, 0x46484d),
+        steel: M.silverHairline(0xd0d6dc, 0.3)
+      };
+      return _lobbyFinMats;
+    }
+    /** 한 층의 승장 마감. ceilUnderY = 윗층 슬래브(또는 캐노피) 하면. */
+    function addLobbyFinishFloor(grp, fy, ceilUnderY, faceZ, totalWallW, doorHoleW, lobbyDepth) {
+      const F = LOBBY_FIN, mats = lobbyFinishMats();
+      // (1) 우드 루버 천장 — 벽쪽 coveD 만큼은 간접조명 슬롯으로 비운다
+      const lx0 = -totalWallW / 2 + F.edgeInset, lx1 = -lx0;
+      const lz0 = faceZ + F.coveD, lz1 = faceZ + lobbyDepth - F.edgeInset;
+      const n = Math.floor((lx1 - lx0 - F.louverW) / F.louverPitch);
+      const ly = ceilUnderY - F.louverH / 2;
+      for (let k = 0; k <= n; k++) {
+        createBox(F.louverW, F.louverH, lz1 - lz0, mats.wood, -n * F.louverPitch / 2 + k * F.louverPitch, ly, (lz0 + lz1) / 2, grp);
+      }
+      createBox(lx1 - lx0, F.louverH, 0.03, mats.wood, 0, ly, lz1 + 0.015, grp);           // 앞 각재
+      createBox(lx1 - lx0, F.coveLipH, 0.03, mats.wood, 0, ceilUnderY - F.coveLipH / 2, lz0 - 0.015, grp); // 슬롯 앞 각재
+      // (2) 간접조명 — 슬롯 안 라인 LED + 벽 상단 빛번짐
+      createBox(lx1 - lx0, 0.012, 0.025, mats.cove, 0, ceilUnderY - 0.006, faceZ + F.coveD * 0.45, grp);
+      const wash = new THREE.Mesh(new THREE.PlaneGeometry(lx1 - lx0, F.washH), mats.wash);
+      wash.position.set(0, ceilUnderY - F.washH / 2, faceZ + 0.027);
+      wash.renderOrder = 2;
+      grp.add(wash);
+      // (3) 문 옆 액센트 벽 — 삼방틀 바깥 끝(doorHoleW/2 + 0.09)부터
+      const accX0 = doorHoleW / 2 + 0.09, accH = ceilUnderY - fy;
+      [-1, 1].forEach(s => createBox(F.accentW, accH, F.accentT, mats.accent,
+        s * (accX0 + F.accentW / 2), fy + accH / 2, faceZ + F.accentT / 2, grp));
+      // (4) 걸레받이 — 삼방틀 바깥부터 벽 끝까지
+      const baseW = totalWallW / 2 - accX0;
+      [-1, 1].forEach(s => createBox(baseW, F.baseH, F.baseT, mats.steel,
+        s * (accX0 + baseW / 2), fy + F.baseH / 2, faceZ + F.baseT / 2, grp));
+    }
+    /** 슬래브 앞·좌우 끝 스테인리스 테두리. topY = 슬래브 상면. */
+    function addSlabTrim(grp, topY, faceZ, totalWallW, lobbyDepth) {
+      const F = LOBBY_FIN, mats = lobbyFinishMats();
+      const h = 0.12 + F.trimDrop + F.trimUp, cy = topY + F.trimUp - h / 2;
+      createBox(totalWallW + 2 * F.trimT, h, F.trimT, mats.steel, 0, cy, faceZ + lobbyDepth + F.trimT / 2, grp);
+      [-1, 1].forEach(s => createBox(F.trimT, h, lobbyDepth, mats.steel,
+        s * (totalWallW / 2 + F.trimT / 2), cy, faceZ + lobbyDepth / 2, grp));
+    }
+
     function buildFrontWallAndLobby() {
       if (wallGrp) scene.remove(wallGrp);
       wallGrp = new THREE.Group();
       // 1층 승강장 단차 해소 (포디움 기단부, 보행자 직통 계단, 우측 나선형 휠체어 경사로)
       buildLobbyApproachRampAndStairs(wallGrp);
-      // 외면=석재 사진, 승강로 내면=콘크리트. 현판·코니스·문틀은 그대로 둔다.
-      const terracottaMat = M.paint(0xa95032);
+      // 외면=석재 사진, 승강로 내면=콘크리트. 현판·문틀은 그대로 둔다.
       const jambSs = M.silverHairline(0xc8d0d8, 0.28);
       const wallZ = FRONT_WALL_INNER_Z + S.WALL_T / 2; // 승강로 전면벽 — 카 전면에서 ~200mm (문 구역 깊이 확보)
       const doorHoleW = S.DOOR_W + 0.1;
       const totalWallW = S.SHAFT_W + S.WALL_T * 2;
       const sideW = (totalWallW - doorHoleW) / 2;
       const facadeZ = wallZ + S.WALL_T / 2 + 0.012;
+      const faceZ = wallZ + S.WALL_T / 2;       // 전면벽 외면 (승장 쪽)
+      const finGrp = new THREE.Group();          // 승장 마감 A안 (LOBBY_FIN)
+      finGrp.name = 'lobbyFinishA';
 
       for (let i = 0; i < FLOORS; i++) {
         const fy = FLOOR_Y[i];
@@ -2612,14 +2703,12 @@
         createBox(0.09, 2.56, 0.025, jambSs,  portalX, fy + 1.28, facadeZ, wallGrp);
         createBox(doorHoleW + 0.18, 0.10, 0.028, jambSs, 0, fy + 2.56, facadeZ + 0.002, wallGrp);
 
-        // 층별 수평 코니스 — 단조로운 흰 수직면을 분절하는 따뜻한 테라코타 띠
-        createBox(totalWallW, 0.11, 0.035, terracottaMat,
-          0, fy + fh - 0.055, facadeZ + 0.004, wallGrp);
-
         // 로비 대리석 바닥 — 상면만 타일 텍스처 (전면벽 이동에 맞춰 깊이 보정)
         const lobbyDepth = 1.5 + (S.SHAFT_D / 2 - FRONT_WALL_INNER_Z);
         createBox(totalWallW, 0.12, lobbyDepth, lobbyMarbleFaceMats(totalWallW, lobbyDepth),
           0, fy - 0.06, wallZ + S.WALL_T / 2 + lobbyDepth / 2, wallGrp);
+        // 1층 슬래브는 기단·계단·경사로와 맞물리므로 테두리는 2층부터
+        if (i > 0) addSlabTrim(finGrp, fy, faceZ, totalWallW, lobbyDepth);
 
         // 천장 Y 좌표 (해당 층 바닥 + 층고)
         const ceilingY = fy + fh;
@@ -2627,6 +2716,7 @@
         // 4층(최상층) 천장 캐노피 슬래브 추가 (타 층 슬래브와 동일 레벨 및 재질로 일체화)
         if (i === FLOORS - 1) {
           createBox(totalWallW, 0.12, lobbyDepth, lobbyMarbleFaceMats(totalWallW, lobbyDepth), 0, ceilingY - 0.06, wallZ + S.WALL_T / 2 + lobbyDepth / 2, wallGrp);
+          addSlabTrim(finGrp, ceilingY, faceZ, totalWallW, lobbyDepth);
           // 로비 캐노피는 원래 높이에 두고, 그 위 승강로 전면만 기계실 슬래브까지 막는다.
           const overheadWallH = SHAFT_CEIL_Y - ceilingY;
           if (overheadWallH > 0) {
@@ -2637,19 +2727,26 @@
           }
         }
 
-        // 전 층 승강장 앞 LED 다운라이트 (천장에 부착)
+        addLobbyFinishFloor(finGrp, fy, ceilingY - 0.12, faceZ, totalWallW, doorHoleW, lobbyDepth);
+
+        // 전 층 승강장 앞 LED 다운라이트 (우드 루버 하단에 부착)
         const ledMat = M.emit(0xfffbe8, 2.0);
         const ledCasing = M.ss(0xffffff);
         const lightZ = wallZ + S.WALL_T / 2 + 0.6;
-        const lightY = ceilingY - 0.12; // 윗층 바닥/캐노피 하단면
+        const lightY = ceilingY - 0.12 - LOBBY_FIN.louverH; // 윗층 슬래브 하면 아래 루버 하단
         createCylinder(0.12, 0.12, 0.02, ledCasing, 0, lightY - 0.01, lightZ, wallGrp);
         createCylinder(0.09, 0.09, 0.025, ledMat, 0, lightY - 0.012, lightZ, wallGrp);
 
         // 스테인리스 홀 호출버튼(실사 GLB: hall_call_button.glb) 및 바닥 점자 블록
+        // 버튼 판은 문 옆 액센트 벽(LOBBY_FIN.accentT) 위에 붙는다.
         const btnBoxX = doorHoleW / 2 + 0.25;
-        HallFinish.mountCallButton(wallGrp, btnBoxX, fy + HALL_FINISH.btnCenterY, wallZ + S.WALL_T / 2 + 0.0005, i);
+        HallFinish.mountCallButton(wallGrp, btnBoxX, fy + HALL_FINISH.btnCenterY, faceZ + LOBBY_FIN.accentT + 0.0005, i);
         addTactileBlock(wallGrp, btnBoxX, fy + 0.0025, wallZ + S.WALL_T / 2 + 0.3, 0.3);
       }
+
+      finGrp.traverse(o => { if (o.isMesh) o.castShadow = false; });
+      batchStaticChildren(finGrp, 'lobbyFinish');
+      wallGrp.add(finGrp);
 
       // 피트 전면벽 추가
       createBox(totalWallW, PIT, S.WALL_T, lobbyFrontWallMats(totalWallW, PIT, S.WALL_T),
@@ -2662,8 +2759,12 @@
       const sideWallD = sideWallFront - SHAFT_BACK_Z; // 깊이 확장 시 후방으로만 성장
       const sideWallCZ = (sideWallFront + SHAFT_BACK_Z) / 2;
 
-      createBox(S.WALL_T, sideWallH, sideWallD, lobbySideWallMats(S.WALL_T, sideWallH, sideWallD),
-        sideWallX, Y0 + sideWallH / 2, sideWallCZ, wallGrp);
+      // 모서리에서 전면벽 끝면(-X)·전면(+Z)과 같은 평면을 쓰면 깜빡인다(Z-파이팅).
+      // 측면(-X)은 2mm 밖으로, 전면(+Z)은 2mm 안으로 물려 각 면의 주인을 하나로 정한다.
+      const CORNER_EPS = 0.002;
+      createBox(S.WALL_T + CORNER_EPS, sideWallH, sideWallD - CORNER_EPS,
+        lobbySideWallMats(S.WALL_T, sideWallH, sideWallD),
+        sideWallX - CORNER_EPS / 2, Y0 + sideWallH / 2, sideWallCZ - CORNER_EPS / 2, wallGrp);
 
       // --- 세로형 지사 로고 현판 (assets/bg/logo.png) ---
       const logoTex = new THREE.TextureLoader().load('assets/bg/logo.png',

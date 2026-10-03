@@ -21,6 +21,7 @@ function cabinLookPose() {
 }
 
 function enterCabinView() {
+  if (CharacterWalk.active) CharacterWalk.exit(false);
   if (overspeedActive || !controls.enabled) return;
   controls.minDistance = MANUAL_CAMERA.minDistance;
   camera.near = MANUAL_CAMERA.near;
@@ -87,10 +88,13 @@ function updateManualCameraNear() {
           const d = noiseBuf.getChannelData(0);
           for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
         }
-        if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+        if (ctx.state === 'suspended' && !held) ctx.resume().catch(() => {});
         return ctx;
       }
       function resume() { try { ac(); } catch (e) { console.log(e); } }
+      // 시연 일시정지(DemoPause) 동안 모터음·효과음을 통째로 멈춘다. 재생하면 그 자리에서 이어진다.
+      let held = false;
+      function hold(on) { held = !!on; if (!ctx) return; (on ? ctx.suspend() : ctx.resume()).catch(() => {}); }
 
       // 구동 모터 드론 시작 — 정지 상태(게인 0)에서 대기, setDrive로 램프업
       function motorOn() {
@@ -251,7 +255,7 @@ function updateManualCameraNear() {
         });
       }
       function effect(play) { return { currentTime: 0, play() { try { play(); return Promise.resolve(); } catch (e) { return Promise.reject(e); } } }; }
-      return { resume, motorOn, motorOff, setDrive, brakeRelease, brakeSet, duck, ropeBrakeBang, ucmBrakeFailure, brakeWarning, bufferImpact, bump, overspeedImpact,
+      return { resume, hold, motorOn, motorOff, setDrive, brakeRelease, brakeSet, duck, ropeBrakeBang, ucmBrakeFailure, brakeWarning, bufferImpact, bump, overspeedImpact,
         doorOpen: effect(() => door(false)), doorClose: effect(() => door(true)), chime: effect(chime) };
     })();
 
@@ -363,6 +367,11 @@ function updateManualCameraNear() {
     }
 
     function closeDoors(cb) {
+      if (CharacterWalk.doorwayOccupied()) {
+        clearTimeout(autoTimer); autoTimer = setTimeout(() => closeDoors(cb), 250);
+        if (currentState === ELEVATOR_STATE.DOOR_CLOSING) openDoors();
+        return;
+      }
       if (ManualRescueDemo.active) return;
       if (ARDDemo.blocksCommands) return;
       if (InterlockDemo.active) return;
@@ -808,7 +817,7 @@ function updateManualCameraNear() {
 
       // 부식된 가닥을 먼저 확대하고, 파단 직후 카 전체 낙하로 전환한다.
       _saveCam();
-      ovsDemo.stage='preparing';prepareOVSRopeBreak();
+      ovsDemo.stage='preparing';ovsDemo.desktopGovernor=matchMedia('(min-width: 900px) and (pointer: fine)').matches;prepareOVSRopeBreak();
       ovsStage('① 주로프 부식 · 녹슨 가닥이 하중을 버티지 못합니다.');
 
       // 중력 가속으로 과속 검출. 카메라 이동 중에도 낙하를 이어가고 기구 연동에 인계한다.
@@ -819,6 +828,7 @@ function updateManualCameraNear() {
       const ACCEL = 9.81;
       let tripped = false;
       const fallTick = (time, deltaMs) => {
+        if (DemoPause.paused) return;   // 공통 일시정지(js/demo-pause.js)
         // GSAP과 같은 경과 시간. 50ms 상한으로 낮은 FPS의 PC만 느려지지 않게 한다.
         const dt = Math.max(0,(deltaMs || 16.7) / 1000);
         const deltaY = -Math.min(v*dt+.5*ACCEL*dt*dt,Math.max(0,carGrp.position.y-yFloor1-.8));
@@ -836,7 +846,7 @@ function updateManualCameraNear() {
         updateStatus('v-spd', Math.round(vmm) + ' m/min', '#f85149');
         // 진자 원심 개방 — 정격 90%부터 속도 비례로 벌어짐 (트립 최대각의 70%까지)
         const open = Math.min(Math.max((vmm - targetSpeed * 0.9) / (vTrip - targetSpeed * 0.9), 0), 1)
-          * gov.pose.trip.pendulum * 0.7;
+          * gov.pose.trip.pendulum * (ovsDemo.desktopGovernor?0:0.7);
         gov.pendulums[0].rotation.z = gov.geom.pendRot0[0] + open;
         gov.pendulums[1].rotation.z = gov.geom.pendRot0[1] + open;
         if (gov.setLinkage) gov.setLinkage(open);
@@ -885,7 +895,7 @@ function updateManualCameraNear() {
         OVSEffects.hit('캐치슈 체결','조속기 로프 파지');OVSEffects.burst(_govWorld(),.10,1);
         OVSEffects.later(.12,()=>OVSEffects.capture('governor'));
         ovsStage('④ 캐치슈가 뒤쪽 조속기 로프를 꽉 잡았습니다.');
-        ovsDemo.pending=gsap.delayedCall(.55,()=>{
+        ovsDemo.pending=gsap.delayedCall(ovsDemo.desktopGovernor?1.5:.55,()=>{
           setOVSCutaway(true);ovsDemo.stage='linkage-view';
           ovsStage('⑤ 고정된 로프 → 카의 하강이 링크를 당깁니다.');
           ovsCamera('linkage',.38,()=>engageDeviceStop(spinDir,btn,{onComplete:()=>{
@@ -895,9 +905,10 @@ function updateManualCameraNear() {
           }}));
         });
       },{
+        runUpSeconds:ovsDemo.desktopGovernor?2.4:0,
         onStage:stage=>{
           ovsDemo.stage=stage;
-          const captions={centrifugal:'과속 감지 · 원심 진자가 벌어집니다.',
+          const captions={accelerating:'조속기 휠 가속 · 회전이 빨라집니다. (느린 동작)',centrifugal:'과속 감지 · 원심 진자가 벌어집니다.',
             electrical:'과속 스위치 타격 · 접점이 열리고 레버가 떨어집니다.',
             pawl:'쐐기가 톱니에 꽉 걸려 캐치 레버를 작동시킵니다.',
             'rope-grip':'캐치슈가 조속기 로프를 눌러 고정합니다.'};
@@ -1334,6 +1345,7 @@ function updateManualCameraNear() {
       controls.addEventListener('change', updateManualCameraNear);
       updateManualCameraNear();
       canvas.addEventListener('pointerdown', e => {
+        if (CharacterWalk.active) { lastTap = null; return; }
         if (e.button !== 0) { lastTap = null; return; }
         pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, time: performance.now(), invalid: false });
         if (pointers.size > 1) {
@@ -1352,7 +1364,7 @@ function updateManualCameraNear() {
         const p = pointers.get(e.pointerId);
         pointers.delete(e.pointerId);
         const now = performance.now();
-        if (!p || p.invalid || now - p.time > 450 || overspeedActive || !controls.enabled) {
+        if (!p || p.invalid || now - p.time > 450 || overspeedActive || !controls.enabled || CharacterWalk.active) {
           ignored.add(e); lastTap = null; return;
         }
         const rect = canvas.getBoundingClientRect();
@@ -1410,6 +1422,7 @@ function updateManualCameraNear() {
     }
 
     function moveCam(cx, cy, cz, tx, ty, tz, fitWidth = true) {
+      if (CharacterWalk.active) CharacterWalk.exit(false);
       leaveCabinView();
       // 세로 화면에서는 부품의 좌우가 잘리지 않도록 같은 시선 방향으로 물러난다.
       const distanceScale = fitWidth ? Math.max(1, 0.9 / camera.aspect) : 1;

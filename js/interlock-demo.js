@@ -7,6 +7,8 @@ const InterlockDemo=(()=>{
   let floor=-1,phase='idle',timeline,paused=false,panel,title,message,contactBadges,mainBadge,auxBadge,controlsWereEnabled=true;
   const materials=[];let lastPaint='';
   function blockedReason(f){
+    if(typeof RetentionDemo!=='undefined'&&RetentionDemo.active)return '하부 이탈방지 시연을 종료한 뒤 눌러주세요.';
+    if(typeof RelayRopeDemo!=='undefined'&&RelayRopeDemo.active)return '연동로프 시연을 종료한 뒤 눌러주세요.';
     if(!Number.isInteger(f)||!hatchDoors[f]?.interlock?.ready||!CarDoor.state?.ready)return '도어 준비 중입니다. 잠시 후 다시 눌러주세요.';
     if(!hatchDoors[f].interlock.contacts)return '인터록 파일을 새로 불러와야 합니다. 페이지를 새로고침한 뒤 눌러주세요.';
     if(floor>=0)return '인터록 시연이 진행 중입니다.';
@@ -85,6 +87,8 @@ const InterlockDemo=(()=>{
   }
   function safePose(){try{pose();}catch(error){failed(error);}}
   function finish(){
+    if(typeof RetentionDemo!=='undefined'&&RetentionDemo.active)RetentionDemo.cancel();
+    if(typeof RelayRopeDemo!=='undefined'&&RelayRopeDemo.active)RelayRopeDemo.cancel();
     if(floor<0){if(panel)panel.hidden=true;return;}timeline?.kill();timeline=null;
     const h=hatchDoors[floor],coupled=h.manualCoupled;
     try{poseState.release=poseState.opening=0;pose();}
@@ -149,5 +153,6 @@ const InterlockDemo=(()=>{
       b.setAttribute('aria-label',`${f+1}층 인터록 열림·닫힘 시연`);b.title=b.getAttribute('aria-label');b.setAttribute('aria-controls','interlock-demo-panel');b.setAttribute('aria-pressed','false');b.onclick=()=>start(f);document.getElementById('part-actions').appendChild(b);buttons.push(b);
       PartGlow.bind(b,()=>{const i=hatchDoors[f]?.interlock;return i?.ready?[i.fixed,i.moving,i.opposite]:null;},`${f+1}층 승장문 인터록`);}
   }
-  return {bind,update,start,pause,cancel:finish,allowed,get active(){return floor>=0;},get floor(){return floor;},get phase(){return phase;},get poseState(){return poseState;},get paused(){return paused;}};
+  // Landing-door demonstrations share the existing exclusive command guard.
+  return {bind,update,start,pause,cancel:finish,allowed,get active(){return floor>=0||(typeof RelayRopeDemo!=='undefined'&&RelayRopeDemo.active)||(typeof RetentionDemo!=='undefined'&&RetentionDemo.active);},get floor(){return floor;},get phase(){return phase;},get poseState(){return poseState;},get paused(){return paused;}};
 })();

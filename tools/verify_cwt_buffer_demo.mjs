@@ -15,7 +15,7 @@ async function open(viewport, mobile = false) {
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !/ReadPixels|GPU stall/.test(m.text())) errors.push(m.text()); });
   const cdp = await context.newCDPSession(page); await cdp.send('Network.setCacheDisabled', {cacheDisabled: true});
-  await page.goto('http://127.0.0.1:5500/index.html?legacyIcons', {waitUntil: 'networkidle'});
+  await page.goto(`${process.env.SIM_URL || 'http://127.0.0.1:5500'}/index.html?legacyIcons`, {waitUntil: 'networkidle'});
   await page.waitForFunction(ready);
   return {page, errors};
 }
@@ -24,7 +24,7 @@ const pitView = page => page.evaluate(async () => {
   camera.position.set(0.45, 0.62, CWT_CENTER_Z + 1.25); controls.target.set(0, 0.42, CWT_CENTER_Z); controls.update();
   for (let i = 0; i < 3; i++) await new Promise(requestAnimationFrame);
 });
-const fast = page => page.evaluate(() => { BufferDemo.timing.holdPit = 1.8; BufferDemo.timing.holdTop = 3; });
+const fast = page => page.evaluate(() => { BufferDemo.timing.holdPit = 1.8; BufferDemo.timing.holdTop = 3; BufferDemo.timing.holdRoof = 3; });
 try {
   const {page, errors} = await open({width: 1280, height: 850});
 
@@ -63,6 +63,16 @@ try {
   });
   await page.click('#cwt-buffer-demo-action');
   await page.waitForFunction(() => BufferDemo.state.stage === 'approach' && !gsap.isTweening(camera.position), null, {polling: 50});
+  // 일시정지: 카가 멈추고 버튼이 재생으로 바뀐다 → 재생하면 이어 간다
+  await page.waitForFunction(() => BufferDemo.state.v > .2, null, {polling: 16});
+  await page.click('#buffer-demo-pause');
+  const p0 = await page.evaluate(() => ({ y: carGrp.position.y, text: document.getElementById('buffer-demo-pause').textContent, paused: BufferDemo.state.paused }));
+  await page.waitForTimeout(700);
+  const p1 = await page.evaluate(() => carGrp.position.y);
+  assert.ok(p0.paused && /재생/.test(p0.text) && Math.abs(p1 - p0.y) < 1e-9, `paused ${JSON.stringify(p0)} ${p1}`);
+  await page.click('#buffer-demo-pause');
+  await page.waitForTimeout(400);
+  assert.ok(await page.evaluate(y => !BufferDemo.state.paused && carGrp.position.y > y, p1), 'resumed');
   await page.waitForFunction(() => BufferDemo.state.stage === 'approach' && (BufferDemo.state.contactY - carGrp.position.y) < .25, null, {polling: 16});
   await page.screenshot({path: `${out}/02-approach.png`});
   await page.waitForFunction(() => BufferDemo.state.stage === 'compress', null, {polling: 16});
@@ -96,13 +106,21 @@ try {
   assert.ok(Math.abs(atRest.clear.gap - (atRest.railTop - atRest.shoeTop)) < 1e-6, 'rail clearance measured from shoe');
   assert.ok(atRest.oilerTop > atRest.shoeTop + .01, `oiler ${atRest.oilerTop} sits above shoe body ${atRest.shoeTop} (excluded)`);
   assert.ok(atRest.clear.gap >= atRest.clear.required, 'rail clearance >= 0.1+0.035v²');
+  const over = atRest.clear.over;
+  assert.ok(over && over.D.gap >= 0.3 && over.C.gap >= 0.5 && Math.abs(over.E.gap - 0.4) < 1e-9, 'handrail D/C/E');
+  assert.ok(over.D.from.x > 0.5 && over.E.from.x > 0.5 && over.C.from.x < -0.5 && over.A.from.x < -0.3 && over.B.from.x > -0.3, 'overhead dims split left/right');
+  assert.ok(over.A.gap >= 0.5 && over.B.gap >= 0.5, 'roof vertical A/B >= 0.50');
+  assert.ok(Math.abs(over.C.gap - Math.hypot(0.4, over.D.gap)) < 1e-6, 'C is the incline across E');
   assert.ok(atRest.carTop < before.overhead, `car top ${atRest.carTop} below overhead ${before.overhead} ${before.overheadName}`);
   await page.waitForFunction(() => !gsap.isTweening(camera.position), null, {polling: 50});
   await page.waitForTimeout(300);
   await page.screenshot({path: `${out}/04-side-strike.png`});
   await page.waitForFunction(() => BufferDemo.state.stage === 'observe-cwt', null, {polling: 50});
-  await page.waitForFunction(() => !document.getElementById('buffer-demo-clear').hidden && scene.getObjectByName('bufferDemoCwtClearance').visible && !gsap.isTweening(camera.position), null, {polling: 50});
+  await page.waitForFunction(() => !document.getElementById('buffer-demo-clear').hidden && scene.getObjectByName('bufferDemoCwtClearance').visible && scene.getObjectByName('bufferDemoOverheadClearance').visible && !gsap.isTweening(camera.position), null, {polling: 50});
   await page.screenshot({path: `${out}/05-rail-clearance.png`});
+  await page.waitForFunction(() => BufferDemo.state.view === 'roof' && !gsap.isTweening(camera.position), null, {polling: 50});
+  await page.waitForTimeout(200);
+  await page.screenshot({path: `${out}/05b-roof-overhead.png`});
   await page.waitForFunction(() => BufferDemo.state.stage === 'done', null, {polling: 50});
   await page.waitForTimeout(300);
   await page.screenshot({path: `${out}/06-done.png`});
@@ -158,6 +176,9 @@ try {
   await m.page.waitForTimeout(200);
   await m.page.waitForFunction(() => !gsap.isTweening(camera.position), null, {polling: 50});
   await m.page.screenshot({path: `${out}/07-mobile-rail.png`});
+  await m.page.waitForFunction(() => BufferDemo.state.view === 'roof' && !gsap.isTweening(camera.position), null, {polling: 50});
+  await m.page.waitForTimeout(200);
+  await m.page.screenshot({path: `${out}/07b-mobile-roof.png`});
   await m.page.waitForFunction(() => BufferDemo.state.stage === 'done', null, {polling: 50});
   await m.page.tap('#fault-reset');
   await m.page.waitForFunction(() => !BufferDemo.active, null, {polling: 50});

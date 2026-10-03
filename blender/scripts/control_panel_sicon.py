@@ -256,9 +256,10 @@ box(B, WHITE, (0, TOP_Y - TOP_RAIL / 2, D / 2 + .0006), (.20, .030, .0012))
 textz(B, INK, '엘리베이터 제어반', 0, TOP_Y - TOP_RAIL / 2, D / 2 + .0013, .015, .18, True)
 ex, ey = W / 2 - .055, TOP_Y - TOP_RAIL / 2
 box(B, YELLOW, (ex, ey, D / 2 + .0008), (.046, .046, .0016), keep=True)
-cyl(B, DARK, (ex, ey, D / 2 + .008), .017, .013, 'z', 20)
-cyl(B, RED, (ex, ey, D / 2 + .018), .022, .010, 'z', 24, r2=.020)
-sphere(B, RED, (ex, ey, D / 2 + .023), (.020, .020, .006), 18, 6)
+PIVOT['EmergencyStopButton'] = Vector((ex, ey, D / 2 + .018))
+cyl('EmergencyStopButton', DARK, (ex, ey, D / 2 + .008), .017, .013, 'z', 20)
+cyl('EmergencyStopButton', RED, (ex, ey, D / 2 + .018), .022, .010, 'z', 24, r2=.020)
+sphere('EmergencyStopButton', RED, (ex, ey, D / 2 + .023), (.020, .020, .006), 18, 6)
 textz(B, INK, '비상정지', ex - .062, ey, D / 2 + .0006, .010, .05, True)
 # 피아노 경첩 — 양쪽 바깥 모서리 전 높이, 너클 14마디(마디 사이 1.5mm) + 핀 캡 + 본체측 날개
 for sx in (-1, 1):
@@ -763,6 +764,8 @@ for gname, piv in PIVOT.items():
     e = bpy.data.objects.new(gname, None); bpy.context.collection.objects.link(e)
     e.location = to_blender(piv); e.parent = root; groups[gname] = e
 groups['ManualModeSelector'].parent = groups['CabinetInterior']
+groups['EmergencyStopButton'].parent = groups['CabinetBody']
+groups['EmergencyStopButton']['pressDepth'] = .006 * NS.z
 for (gname, mname), data in BUCKETS.items():
     piv = PIVOT[gname]
     me = bpy.data.meshes.new(f'{gname}_{mname}')

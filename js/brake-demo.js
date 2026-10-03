@@ -39,7 +39,8 @@ const BrakeDemo = (() => {
     document.addEventListener('pointerdown',e=>{if(!panel.hidden&&!panel.contains(e.target)&&e.target!==button)close();});
     document.addEventListener('keydown',e=>{if(e.key==='Escape'){close();if(state.active)reset();}});
     for(const type of ['click','pointerdown','change','keydown','dblclick'])document.addEventListener(type,e=>{
-      if(!state.active||e.target.closest?.('#ucm-exit,#btn-estop,#fault-reset,#btn-brake-compare'))return;
+      // 공통 일시정지 버튼과, 멈춘 동안의 화면 둘러보기는 통과시킨다(js/demo-pause.js).
+      if(!state.active||e.target.closest?.('#ucm-exit,#btn-estop,#fault-reset,#btn-brake-compare')||e.target.closest?.('#demo-pause')||(DemoPause.paused&&e.target.closest?.('canvas')))return;
       if(e.target.closest?.('button,input,select,canvas')){e.preventDefault();e.stopImmediatePropagation();}
     },true);
     caption=document.createElement('div');caption.id='brake-compare-stage';caption.hidden=true;caption.setAttribute('role','status');document.body.appendChild(caption);

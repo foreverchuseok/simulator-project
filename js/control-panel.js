@@ -22,7 +22,7 @@ const ControlPanel = (() => {
     root.rotation.y = rotY;
     root.userData = { type: 'control-panel', spec: S0, ready: false };
     parent.add(root);
-    new THREE.GLTFLoader().load('models/gltf/control_panel.glb?v=20261002-choreography', gltf => {
+    new THREE.GLTFLoader().load('models/gltf/control_panel.glb?v=20261002-rescue-focus', gltf => {
       const model = gltf.scene;
       model.name = 'ControlPanelModel';
       const extras = model.getObjectByName('ControlPanel')?.userData || {};

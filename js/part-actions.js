@@ -72,10 +72,8 @@ const PartActions=(()=>{
     return true;
   }
   const govOffset=new THREE.Vector3(0,.32,0);
-  let guideContent;
   const retentionContent='<div class="part-panel-head"><strong>승장문 하부 이탈방지장치</strong><button type="button" aria-label="이탈방지장치 설명 닫기">×</button></div><p>일반 도어슈 두 개는 1번 실 홈을 따라 움직이며 문 하단을 안내합니다. 가운데 금색 보강슈는 2번 실 홈에 들어가 문짝과 함께 이동합니다.</p><p>하부 이탈방지장치는 문 하단이 실에서 빠지는 것을 억제하는 보조 장치입니다. 위쪽 비상가이드와 함께 문짝의 이탈을 방지하는 역할을 합니다.</p><p class="guide-detail">현재 화면은 구조 설명을 위한 교육용 형상입니다.</p>';
   function updateGuides(){
-    if(!guideContent)guideContent=guidePanel.innerHTML;
     for(const guide of [...HallEmergencyGuide.guides,...HallRetention.devices]){
       const retention=guide.userData.type==='hall-door-retention';
       let button=guideButtons.get(guide);
@@ -83,11 +81,12 @@ const PartActions=(()=>{
         button=document.createElement('button');button.type='button';button.className='part-action';
         button.id=retention?'retention-action-'+HallRetention.devices.indexOf(guide):'guide-action-'+guide.userData.floor+'-'+guide.userData.side;
         const floor=retention?hatchDoors.findIndex(h=>h.left===guide.parent||h.right===guide.parent):guide.userData.floor;
-        button.setAttribute('aria-label',`${floor+1}층 ${retention?'승장문 하부 이탈방지장치':'승강장문 비상가이드'} 설명`);
-        button.setAttribute('aria-controls','emergency-guide-panel');button.setAttribute('aria-expanded','false');icon(button,'guide');
-        button.addEventListener('click',()=>{const open=activeGuide!==button||guidePanel.hidden;closeAllMenus();if(open){guidePanel.innerHTML=retention?retentionContent:guideContent;guidePanel.setAttribute('aria-label',retention?'승장문 하부 이탈방지장치 설명':'승강장문 비상가이드 설명');guidePanel.querySelector('button').addEventListener('click',close);activeGuide=button;guidePanel.hidden=false;button.setAttribute('aria-expanded','true');}});
+        button.setAttribute('aria-label',`${floor+1}층 ${retention?'승장문 하부 이탈방지장치':'승강장문 상부 비상가이드'} 충돌·이탈 자동 시연`);
+        button.setAttribute('aria-controls','retention-demo-panel');button.setAttribute('aria-expanded','false');icon(button,'guide');
+        // 상부 가이드·하부 보강슈는 한 세트 — 같은 시연을 열고, 누른 쪽 장치를 먼저·길게 보여 준다.
+        button.addEventListener('click',()=>{close();RetentionDemo.start(floor,retention?'retention':'guide');});
         document.getElementById('part-actions').appendChild(button);guideButtons.set(guide,button);
-        PartGlow.bind(button,()=>guide,retention?'승장문 하부 이탈방지장치':'승강장문 비상가이드',()=>'구조 설명 보기');
+        PartGlow.bind(button,()=>guide,retention?'승장문 하부 이탈방지장치':'승강장문 비상가이드',()=>'충돌·이탈 자동 시연',{direct:true});
       }
       guide.getWorldPosition(guideWorld);
       if(camera.position.distanceToSquared(guideWorld)>9){button.hidden=true;}else place(button,guide,guideOffset);

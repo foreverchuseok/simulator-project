@@ -39,25 +39,22 @@ try{
   for(const n of mobile?['조속기','로프브레이크']:['조속기','제어반','로프브레이크','권상기 주브레이크'])assert.ok(lit.includes(n),`${n} 발광 없음: ${lit} / 오류: ${errors.slice(0,3).join(" | ")}`);
   await page.screenshot({path:`${out}/${tag}-machine-room.png`});
 
-  // 3) 제어반 탭 → 메뉴 → 문 열기(기존 ControlPanel.toggle 경로).
+  // 3) 제어반 탭 → (항목이 하나뿐이라 메뉴 없이) 바로 문 열기(기존 ControlPanel.toggle 경로).
   // 제어반 정면(로컬 +Z 가 문) 시점.
   await page.evaluate(()=>{const r=ControlPanel.root;__cam(r.localToWorld(new THREE.Vector3(.3,1.1,2.2)),r.localToWorld(new THREE.Vector3(0,.7,0)));});
   await page.waitForFunction(()=>PartGlow.parts.some(p=>p.name==='제어반'&&p.active&&p.root.visible),{},{timeout:45000});
   let c=await center('제어반');assert.ok(c,'제어반 중심');
   await tap(c.x,c.y);await frames(4);
-  assert.match(await menuText()||'',/제어반 문 열기/);
-  await page.screenshot({path:`${out}/${tag}-control-menu.png`});
-  await clickSel('#part-menu .part-menu-item');
   await page.waitForFunction(()=>ControlPanel.open&&!ControlPanel.busy,{},{timeout:10000});
-  assert.equal(await menuText(),null,'항목 실행 후 메뉴가 닫혀야 한다');
+  assert.equal(await menuText(),null,'선택지가 하나면 메뉴 없이 바로 실행');
+  await page.screenshot({path:`${out}/${tag}-control-direct.png`});
   // 제어반 안의 점검운전 스위치(부품 속 부품)는 바깥 제어반보다 우선 선택된다.
   await page.waitForFunction(()=>PartGlow.parts.some(p=>p.name==='제어반 점검운전 스위치'&&p.active),{},{timeout:45000});
   const sw=await center('제어반 점검운전 스위치');
   assert.equal(await page.evaluate(([x,y])=>PartGlow.pickAt(x,y)?.name,[sw.x,sw.y]),'제어반 점검운전 스위치');
   await frames(6);c=await center('제어반');await tap(c.x,c.y);await frames(4);
-  assert.match(await menuText()||'',/제어반 문 닫기/);
-  await clickSel('#part-menu .part-menu-item');
   await page.waitForFunction(()=>!ControlPanel.open&&!ControlPanel.busy,{},{timeout:10000});
+  assert.equal(await menuText(),null);
 
   // 4) 로프브레이크: 두 행동(개문발차·상승과속)이 한 메뉴로 묶인다 → 개문발차 설정 패널.
   await page.evaluate(()=>{const b=new THREE.Box3().setFromObject(scene.getObjectByName('RopeBrake'));const p=b.getCenter(new THREE.Vector3());__cam(p.clone().add(new THREE.Vector3(2,1.2,2)),p);});
@@ -93,8 +90,10 @@ try{
   await page.evaluate(()=>closeAllMenus());await page.waitForFunction(()=>PartGlow.parts.every(p=>!p.root.visible),{},{timeout:30000}).catch(()=>{});
   assert.deepEqual(await page.evaluate(()=>PartGlow.parts.filter(p=>p.root.visible).map(p=>p.name)),[],'끄기 후에도 빛난다');
   await page.screenshot({path:`${out}/${tag}-glow-off.png`});
-  c=await center('조속기');await tap(c.x,c.y);await frames(4);
-  assert.match(await menuText()||'',/조속기/,'빛을 꺼도 탭 메뉴는 열려야 한다');
+  // 빛을 꺼도 탭은 그대로 동작한다(로프브레이크: 두 항목 메뉴).
+  await page.evaluate(()=>{const b=new THREE.Box3().setFromObject(scene.getObjectByName('RopeBrake'));const p=b.getCenter(new THREE.Vector3());__cam(p.clone().add(new THREE.Vector3(2,1.2,2)),p);});await frames(10);
+  c=await center('로프브레이크');await tap(c.x,c.y);await frames(4);
+  assert.match(await menuText()||'',/개문발차/,'빛을 꺼도 탭 메뉴는 열려야 한다');
   await page.evaluate(()=>PartGlow.closeMenu());
   await page.reload({waitUntil:'networkidle'});await ready();
   assert.equal(await page.evaluate(()=>PartGlow.enabled),false,'새로고침 후 설정 유지');

@@ -341,10 +341,9 @@ const PartGlow = (() => {
     // 두 번 탭(카메라 확대)의 두 번째 탭은 방금 연 메뉴를 다시 닫지 않는다.
     if (lastOpen.part === part && now - lastOpen.time < 450) return;
     lastOpen = { part, time: now };
-    if (live.length === 1 && live[0].direct) {
-      closeMenu(); live[0].button.click(); return;
-    }
-    if (live.length === 1 && live[0].button.hasAttribute('aria-controls')) {   // 자체 설정 패널이 곧 메뉴다
+    // 고를 것이 하나뿐이면 메뉴 없이 바로 실행한다(2026-10-03 사용자 지시 — 완충기·조속기·ARD 등 "한 번 더 클릭" 제거).
+    // 자체 설정 패널이 있는 부품(aria-controls)은 그 패널이 곧 선택 화면이다. 비활성 단일 항목만 메뉴로 사유를 보인다.
+    if (live.length === 1 && !live[0].button.disabled) {
       closeMenu(); live[0].button.click(); return;
     }
     openMenu(part, live);

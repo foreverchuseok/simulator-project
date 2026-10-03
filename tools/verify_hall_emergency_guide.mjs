@@ -51,9 +51,10 @@ try{
  });await page.screenshot({path:`${out}/fold-side.png`});
  await aim();
  await page.waitForFunction(()=>!document.getElementById('guide-action-0-1').hidden);
- await page.click('#guide-action-0-1');assert.ok(await page.locator('#emergency-guide-panel').isVisible());
- await page.screenshot({path:`${out}/desktop-info.png`});await page.keyboard.press('Escape');
- assert.ok(await page.locator('#emergency-guide-panel').isHidden());
+ // 2026-10-03: the guide opens the shared drunk-kick story (upper focus) instead of an info panel.
+ await page.click('#guide-action-0-1');assert.deepEqual(await page.evaluate(()=>[RetentionDemo.active,RetentionDemo.state.focus,RetentionDemo.state.floor]),[true,'guide',0]);
+ await page.screenshot({path:`${out}/desktop-demo.png`});await page.keyboard.press('Escape');
+ assert.equal(await page.evaluate(()=>RetentionDemo.active),false);
  // Same camera and quality; isolate guide rendering cost with only the new meshes toggled.
  report.performance=[];
  for(const visible of [false,true]){
@@ -65,9 +66,9 @@ try{
  await aim();await page.screenshot({path:`${out}/open.png`});
  await page.evaluate(()=>{const h=hatchDoors[0];h.left.position.x=h.left.userData.cx;h.right.position.x=h.right.userData.cx;spinDoorDrive(h);});
  await page.setViewportSize({width:390,height:844});await aim();await page.tap('#guide-action-0-1');
- assert.ok(await page.locator('#emergency-guide-panel').isVisible());
- const bounds=await page.locator('#emergency-guide-panel').boundingBox();assert.ok(bounds.x>=0&&bounds.x+bounds.width<=390&&bounds.y+bounds.height<=844);
- await page.screenshot({path:`${out}/mobile-info.png`});await page.tap('#emergency-guide-dismiss');
- assert.ok(await page.locator('#emergency-guide-panel').isHidden());
+ assert.deepEqual(await page.evaluate(()=>[RetentionDemo.active,RetentionDemo.state.focus]),[true,'guide']);
+ const bounds=await page.locator('#retention-demo-panel').boundingBox();assert.ok(bounds.x>=0&&bounds.x+bounds.width<=390&&bounds.y+bounds.height<=844);
+ await page.screenshot({path:`${out}/mobile-demo.png`});await page.tap('#retention-demo-exit');
+ assert.equal(await page.evaluate(()=>RetentionDemo.active),false);
  assert.deepEqual(errors,[]);report.errors=errors;fs.writeFileSync(`${out}/report.json`,JSON.stringify(report,null,2));console.log(JSON.stringify(report));
 }finally{await browser.close();}

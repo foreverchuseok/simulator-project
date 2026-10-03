@@ -76,7 +76,8 @@ const AscentDemo = (() => {
     document.addEventListener('keydown',e=>{if(e.key==='Escape'){close();if(state.active)reset();}});
     // 기존 점검·속도·문 명령이 시연 중 상태를 덮어쓰지 않도록 한다. 종료와 STOP은 항상 유효하다.
     for(const type of ['click','pointerdown','change','keydown','dblclick'])document.addEventListener(type,e=>{
-      if(!state.active||e.target.closest?.('#ucm-exit,#btn-estop,#fault-reset,#btn-ascent'))return;
+      // 공통 일시정지 버튼과, 멈춘 동안의 화면 둘러보기는 통과시킨다(js/demo-pause.js).
+      if(!state.active||e.target.closest?.('#ucm-exit,#btn-estop,#fault-reset,#btn-ascent')||e.target.closest?.('#demo-pause')||(DemoPause.paused&&e.target.closest?.('canvas')))return;
       if(e.target.closest?.('button,input,select,canvas')){e.preventDefault();e.stopImmediatePropagation();}
     },true);
     caption=document.createElement('div');caption.id='ascent-stage';caption.hidden=true;caption.setAttribute('role','status');document.body.appendChild(caption);
@@ -182,7 +183,7 @@ const AscentDemo = (() => {
   }
   function openPendulum(p){const g=govHandles();g.pendulums.forEach((o,i)=>o.rotation.z=g.geom.pendRot0[i]+p);g.setLinkage(p);}
   function tick(time,delta){
-    if(!state.active||!['runaway','unprotected'].includes(state.stage))return;
+    if(!state.active||!['runaway','unprotected'].includes(state.stage)||DemoPause.paused)return;
     // 3~4층 추적 장면을 종전보다 1.3배 빠르게 재생한다. 검출속도와 이동 경로는 유지한다.
     // 경과 시간을 버리지 않는다. 낮은 FPS에서도 PC/모바일의 재생 시간이 같다.
     let dt=Math.max(0,(delta||16.7)/1000),a=state.stage==='runaway'?state.runAccel:motion.accel;
