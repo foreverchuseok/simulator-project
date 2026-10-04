@@ -345,6 +345,9 @@ function updateManualCameraNear() {
     function openDoors(cb) {
       if (ManualRescueDemo.active) return;
       if (ARDDemo.blocksCommands) return;
+      if (PhotoEyeDemo.blocksCommands) return;
+      if (RopeMeasure.active) return;
+      if (TerminalDemo.blocksCommands) return;
       if (DoorBypass.mode !== 'off') return;
       // 점검 운전 중에는 도어 오퍼레이터 회로가 차단된다 (착상 위치가 아닐 수 있음)
       if (insMode) { updateStatus('v-door', '점검운전 중 — 도어 조작 불가', '#f0883e'); return; }
@@ -374,6 +377,9 @@ function updateManualCameraNear() {
       }
       if (ManualRescueDemo.active) return;
       if (ARDDemo.blocksCommands) return;
+      if (PhotoEyeDemo.blocksCommands) return;
+      if (RopeMeasure.active) return;
+      if (TerminalDemo.blocksCommands) return;
       if (InterlockDemo.active) return;
       if (HallManual.busy) return; // 독립 개방한 승장문은 유지하며 카문만 닫는다.
       if (DoorBypass.mode !== 'off') return;
@@ -447,13 +453,20 @@ function updateManualCameraNear() {
        현장 규칙: 점검 스위치를 넣으면 자동·승강장 호출이 모두 무효가 되고,
        ▲/▼ 버튼을 "누르고 있는 동안만" 서행 이동(hold-to-run)한다. 손을 떼면
        즉시 정지. 점검 속도는 정격(60 m/min)이 아니라 15 m/min(0.25 m/s)로,
-       법정 상한 0.63 m/s 이내다. 종단(최상·최하층 ±INS_OVERRUN)에서 자동 정지.
+       법정 상한 0.63 m/s 이내다.
+       종단 스위치(2026-10-04 사용자): 진행 방향 쪽 강제감속 스위치가 열리면 INS_SLOW_SPEED 로 줄고,
+       리미트가 열리면 정지 — 그 방향만 막고 반대 방향은 운전한다. 파이널이 열리면 주전원 차단(래치),
+       수동 복귀 전엔 양방향 모두 불가. 판정은 TerminalDemo.isOpen/blockReason(js/terminal-demo.js).
+       ±INS_OVERRUN 은 스위치보다 바깥의 최후 기계 한계다(리미트 접점 개로 ≈ 0.16m, 파이널 ≈ 0.34m).
     ───────────────────────────────────────────────────────────── */
     const INSPECT_SPEED = 15;   // 점검 운전 속도 (m/min) — 정격 60 대비 1/4 서행
+    const INS_SLOW_SPEED = 7.5; // 강제감속 스위치 개로 구간의 점검 속도 (m/min)
+    const INS_SLOW_DECEL = 15;  // 감속 변화율 (m/min/s) — 15→7.5 m/min 을 약 0.5초에
     const INS_OVERRUN   = 0.35; // 최상·최하층 착상면 기준 허용 오버런 (m)
     let insMode = false;        // 점검 운전 스위치 ON/OFF
     let insDir  = 0;            // 현재 이동 방향 (+1 상승 / -1 하강 / 0 정지)
     let insHold = 0;            // 버튼을 누르고 있는 방향 (도어 폐쇄 대기 중 판정용)
+    let insSpeed = INSPECT_SPEED; // 현재 점검 속도 (m/min) — 강제감속 구간에서 줄어든다
 
     function insLimits() {
       return {
@@ -477,7 +490,10 @@ function updateManualCameraNear() {
       const dt = Math.min((deltaMs || 16.7) / 1000, 0.1);
       const lim = insLimits();
       const y0 = carGrp.position.y;
-      const ny = Math.min(Math.max(y0 + insDir * (INSPECT_SPEED / 60) * dt, lim.bot), lim.top);
+      // 진행 방향 쪽 강제감속 스위치가 열려 있으면 서서히 감속한다(반대 방향이면 그대로).
+      const want = TerminalDemo.isOpen('slowdown', insDir) ? INS_SLOW_SPEED : INSPECT_SPEED;
+      insSpeed = want < insSpeed ? Math.max(want, insSpeed - INS_SLOW_DECEL * dt) : want;
+      const ny = Math.min(Math.max(y0 + insDir * (insSpeed / 60) * dt, lim.bot), lim.top);
       const deltaY = ny - y0;
 
       carGrp.position.y = ny;
@@ -486,10 +502,18 @@ function updateManualCameraNear() {
       refreshRopes(); refreshGovernorRope();
 
       syncAllIndicators(insDisplayFloor(), insDir > 0 ? '↑' : '↓');
-      MACH.setDrive(INSPECT_SPEED / 60); // 서행 구동음 (정격 대비 비율 아닌 절대 서행감)
-      updateStatus('v-spd', INSPECT_SPEED + ' m/min', '#f0883e');
+      MACH.setDrive(insSpeed / 60); // 서행 구동음 (정격 대비 비율 아닌 절대 서행감)
+      updateStatus('v-spd', +insSpeed.toFixed(1) + ' m/min', '#f0883e');
       updateStatus('v-floor', insDisplayFloor() + 'F', '#f0883e');
       const l = scene.getObjectByName('carLight'); if (l) l.position.y = carGrp.position.y + S.CAR_H * 0.75;
+
+      // 종단 스위치: 파이널(주전원 차단·래치) → 리미트(제어 회로 차단·반대 방향 허용) 순으로 본다.
+      if (TerminalDemo.isOpen('final', insDir)) {
+        TerminalDemo.latchFinal(insDir); insStop(TerminalDemo.blockReason(insDir)); return;
+      }
+      if (TerminalDemo.isOpen('limit', insDir)) { insStop(TerminalDemo.blockReason(insDir)); return; }
+      if (insDir !== 0 && TerminalDemo.isOpen('slowdown', insDir) && insSpeed < INSPECT_SPEED)
+        updateStatus('v-dir', (insDir > 0 ? '▲' : '▼') + ' 강제감속 스위치 개로 — 점검 속도 ' + INS_SLOW_SPEED + ' m/min', '#f0883e');
 
       // 종단(최상·최하 오버런 한계) 도달 → 강제 정지
       if ((insDir > 0 && ny >= lim.top) || (insDir < 0 && ny <= lim.bot)) {
@@ -503,6 +527,9 @@ function updateManualCameraNear() {
       if (HallManual.busy || (InspectionStations.active && !InspectionStations.ready)) return;
       if (!PitLadder.secured) { updateStatus('v-dir', '피트 사다리 펼침 — 운행 차단', '#f85149'); return; }
       if (!insMode || estop || overspeedActive || insDir === dir) return;
+      // 종단 스위치: 리미트가 열린 방향·파이널 래치면 출발하지 않는다(반대 방향은 허용).
+      const terminalBlock = TerminalDemo.blockReason(dir);
+      if (terminalBlock) { if (insDir !== 0) insStop(); updateStatus('v-dir', terminalBlock, '#f85149'); return; }
       if (DoorBypass.mode !== 'off' && !DoorBypass.canInspect()) return;
       // 도어가 열려 있으면 먼저 닫고, 그때까지 버튼을 계속 누르고 있는 경우에만 출발
       if (DoorBypass.mode === 'off' && (doorOpen || gsap.isTweening(carDoorL.position))) {
@@ -515,9 +542,10 @@ function updateManualCameraNear() {
       if (insDir !== 0) gsap.ticker.remove(insTick); // 방향 전환
 
       insDir = dir; moving = true;
+      insSpeed = TerminalDemo.isOpen('slowdown', dir) ? INS_SLOW_SPEED : INSPECT_SPEED;
       currentState = ELEVATOR_STATE.MOVING;
       updateStatus('v-dir', dir > 0 ? '▲ 점검 상승 (서행)' : '▼ 점검 하강 (서행)', '#f0883e');
-      MACH.resume(); MACH.brakeRelease(); MACH.motorOn(); MACH.setDrive(INSPECT_SPEED / 60);
+      MACH.resume(); MACH.brakeRelease(); MACH.motorOn(); MACH.setDrive(insSpeed / 60);
       gsap.ticker.add(insTick);
     }
 
@@ -555,6 +583,7 @@ function updateManualCameraNear() {
       try {
         if(ManualRescueDemo.active)ManualRescueDemo.reset();
         InterlockDemo.cancel();clearTimeout(autoTimer);insHold=0;insStop();InspectionReturn.cancel();InspectionStations.release();
+        if(TerminalDemo.active)TerminalDemo.cancel();TerminalDemo.clearFaults(); // 파이널 리미트 수동 복귀 포함
         // Fault demonstrations retain their own mechanical recovery sequence.
         if(BrakeDemo.active){BrakeDemo.reset();await wait(()=>!BrakeDemo.active);}
         if(AscentDemo.active){AscentDemo.reset();await wait(()=>!AscentDemo.active);}
@@ -983,6 +1012,7 @@ function updateManualCameraNear() {
     // (점검→자동 복귀 착상에도 재사용: label/openAfter 로 문구·도어 개방 여부 조정)
     function rescueToNearestFloor(label = '구출 운전 (서행)', openAfter = true, { floor = insNearestFloor(), onArrive } = {}) {
       if (!PitLadder.secured) { updateStatus('v-dir', '피트 사다리 펼침 — 운행 차단', '#f85149'); return; }
+      if (TerminalDemo.latched) { updateStatus('v-dir', TerminalDemo.blockReason(0), '#f85149'); return; }
       if (!DoorBypass.hallSecured()) return;
       if (DoorBypass.mode !== 'off') return;
       const nf = floor;
@@ -1017,6 +1047,10 @@ function updateManualCameraNear() {
     function moveElevator(fIdx) {
       if (ManualRescueDemo.active) return;
       if (ARDDemo.active) return;
+      if (PhotoEyeDemo.active) return;
+      if (RopeMeasure.active) return;
+      if (TerminalDemo.active) return;
+      if (TerminalDemo.latched) { updateStatus('v-dir', TerminalDemo.blockReason(0), '#f85149'); return; }
       if (UCMDemo.state.active) return;
       if (InterlockDemo.active) return;
       if (InspectionReturn.busy) return;
@@ -1242,6 +1276,9 @@ function updateManualCameraNear() {
         if (BrakeDemo.active) { BrakeDemo.reset(); return; }
         if (AscentDemo.active) { AscentDemo.reset(); return; }
         if (ARDDemo.active) { ARDDemo.halt(); return; }
+        if (PhotoEyeDemo.active) { PhotoEyeDemo.cancel(); return; }
+        if (RopeMeasure.active) { RopeMeasure.cancel(); return; }
+        if (TerminalDemo.active) { TerminalDemo.cancel(); return; }
         if (UCMDemo.state.active) { UCMDemo.reset(document.getElementById('btn-ucm')); return; }
         // 완충기 충돌 시연: 내려가는 중이면 그 자리 정지, 완충기 위·정지 상태면 1층 복귀 (js/buffer-demo.js)
         if (BufferDemo.active) { const st = BufferDemo.state.stage; if (st === 'approach') BufferDemo.halt(); else BufferDemo.reset(); return; }

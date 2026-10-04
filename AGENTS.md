@@ -125,7 +125,7 @@ const deviceY = FLOOR_Y[fIdx] + S.CAR_H / 2;
 - 실제 운행 FSM은 `currentState`와 `ELEVATOR_STATE`가 기준이다.
 - 상태: `IDLE`, `MOVING`, `DOOR_OPENING`, `DOOR_OPEN`, `DOOR_CLOSING`, `ESTOP`.
 - `moving`, `doorOpen`, `estop`, `curFloor`가 현재 운행 흐름에서 함께 사용된다.
-- `elevatorState`의 감속·리미트 플래그(`slowdownActive`, `limitActive`, `finalLimitActive`)는 `refreshTerminalDevices()`가 카 캠이 레일 고정 스위치 6개를 밟는 상태로 채운다. 다만 이 플래그를 읽는 운행 FSM 로직은 아직 없다. 운행이 이 값으로 제어된다고 오해하지 않는다.
+- `elevatorState`의 감속·리미트 플래그(`slowdownActive`, `limitActive`, `finalLimitActive`)는 `refreshTerminalDevices()`가 카 캠이 레일 고정 스위치 6개를 밟는 상태로 채운다. 2026-10-04부터 점검(INS) 운전과 종단 스위치 시연(`js/terminal-demo.js`)은 스위치별 접점 `sw.contactOpen`을 `TerminalDemo.isOpen()/blockReason()`으로 읽어 감속·정지·방향 차단을 한다. 파이널 래치는 자동 호출·구출 운전도 막는다. 자동 운행(`moveElevator`)의 속도 곡선은 여전히 강제감속·리미트를 읽지 않는다.
 - 기존 FSM, 로프 갱신, 센서 배치를 요청 없이 변경하지 않는다.
 - 도어 형상은 재공사 중이다. `buildCarDoors()`는 빈 그룹 스텁이다. `buildHatchDoors()`는 실·삼방틀·행거 케이스를 이미 올린다. 빈 스텁으로 오해하지 않는다.
 - 승장 헤더 구조는 고정이다: **양단 벽 브라켓 → C레일**. 행거판·롤러·인터록은 지금은 화면에 올리지 않는다. 상세는 `docs/DOOR-REBUILD.md` 행거 케이스 계약.

@@ -127,6 +127,7 @@ const PartGlow = (() => {
 
   /* ── 등록 ── */
   // resolve: () => Object3D | Object3D[] | null. 같은 대상에 묶인 버튼들은 한 부품 메뉴로 합친다.
+  // options.hitTest(raycaster): 가느다란 부품의 선택 여유. 반환 distance에도 공통 가림 판정을 적용한다.
   function bind(button, resolve, name, label, options = {}) {
     if (!button || entries.some(e => e.button === button)) return;
     entries.push({ button, resolve, name, label, ...options, part: null });
@@ -214,7 +215,7 @@ const PartGlow = (() => {
   function suppressed(e) {
     if (e.direct && e.button.id.startsWith('ec-action-')) return false;
     if (typeof overspeedActive !== 'undefined' && overspeedActive) return true;
-    if (bodyHas('ucm-active') || bodyHas('ard-active') || bodyHas('manual-rescue-active') || bodyHas('portrait-tools-hidden')) return true;
+    if (bodyHas('ucm-active') || bodyHas('ard-active') || bodyHas('manual-rescue-active') || bodyHas('photo-eye-active') || bodyHas('rope-measure-active') || bodyHas('terminal-demo-active') || bodyHas('portrait-tools-hidden')) return true;
     if (bodyHas('buffer-demo-active') && !/buffer-demo-action$/.test(e.button.id)) return true;
     return false;
   }
@@ -272,7 +273,11 @@ const PartGlow = (() => {
     for (const part of parts) {
       if (!part.active) continue;
       const meshes = part.meshes.filter(m => worldVisible(m));
-      const hit = ray.intersectObjects(meshes, false)[0];
+      let hit = ray.intersectObjects(meshes, false)[0];
+      if (!hit) for (const e of liveEntries(part)) {
+        const candidate = e.hitTest?.(ray);
+        if (candidate && (!hit || candidate.distance < hit.distance)) hit = candidate;
+      }
       if (!hit) continue;
       // 부품 안에 든 부품(제어반 ⊃ 점검운전 스위치)은 같은 면을 맞히므로 더 작은 쪽을 고른다.
       const tie = best && Math.abs(hit.distance - best.distance) < 1e-3;

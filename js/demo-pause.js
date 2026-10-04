@@ -15,6 +15,9 @@ const DemoPause = (() => {
     ['브레이크 비교', () => typeof BrakeDemo !== 'undefined' && BrakeDemo.active],
     ['ARD 자동구출', () => typeof ARDDemo !== 'undefined' && ARDDemo.active],
     ['수동 구출', () => typeof ManualRescueDemo !== 'undefined' && ManualRescueDemo.active],
+    ['문닫힘 안전장치', () => typeof PhotoEyeDemo !== 'undefined' && PhotoEyeDemo.active],
+    ['종단 스위치', () => typeof TerminalDemo !== 'undefined' && TerminalDemo.active],
+    ['주로프 측정', () => typeof RopeMeasure !== 'undefined' && RopeMeasure.active],
     ['인터록', () => typeof InterlockDemo !== 'undefined' && InterlockDemo.floor >= 0],
     ['연동로프', () => typeof RelayRopeDemo !== 'undefined' && RelayRopeDemo.active],
     ['조속기 과속', () => typeof overspeedActive !== 'undefined' && overspeedActive]

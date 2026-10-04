@@ -39,7 +39,9 @@ try{
   await page.screenshot({path:path.join(out,`${mobile?width:'pc'}-tools.png`)});
   const pick=await page.evaluate(()=>{const h=scene.getObjectByName('TurningHandleHung'),s=h.userData.manualRescue,p=new THREE.Vector3(0,(s.handleHub[1]+s.handleGrip[1])/2,0);h.localToWorld(p);p.project(camera);return {x:(p.x+1)*innerWidth/2,y:(1-p.y)*innerHeight/2};});
   if(mobile)await page.touchscreen.tap(pick.x,pick.y);else await page.mouse.click(pick.x,pick.y);
-  await page.getByRole('button',{name:'수동 구출 시연',exact:true}).click();
+  // 2026-10-03부터 부품 항목이 하나면 탭 즉시 실행된다(메뉴 없음). 메뉴가 뜬 경우에만 항목을 누른다.
+  await page.waitForTimeout(400);
+  if(!await page.evaluate(()=>ManualRescueDemo.active))await page.getByRole('button',{name:'수동 구출 시연',exact:true}).click();
   for(const stage of ['trapped','control-manual','control-stop','power-off','handle-mount','handle-seated','lever-mount','brake-release','winding','level-approach','level','intercom','key-turn','opening','exit','done']){
     await page.waitForFunction(stage=>ManualRescueDemo.state.stage===stage,stage);
     if(stage==='control-manual')await page.waitForFunction(()=>ManualRescueDemo.state.manual);
@@ -64,7 +66,7 @@ try{
         return {scales:actors.map(a=>a.worker.root.scale.x),facing:directions[0].dot(directions[1]),forkGaps};
       });
       console.log('CREW',crew);
-      assert.ok(crew.scales.every(s=>s<.8),'Both workers are visibly smaller');
+      assert.ok(crew.scales.every(s=>Math.abs(s-1.6)<1e-9),'Both workers 1.6x (2026-10-05: short arms must reach the 0.354 m crank)');
       assert.ok(crew.facing<-.99,'Brake operator faces the coil from opposite side to handle operator');
       assert.ok(crew.forkGaps.every(d=>d<1e-5),'Both lever forks stay seated on coil-side pins (10 micrometre transform tolerance)');
       const visible=await page.evaluate(()=>{
@@ -93,6 +95,7 @@ try{
   assert.ok(movement.every(s=>s.brake&&s.handle&&s.mechanicalBrake),'Brake open before rotation');
   assert.ok(movement.every(s=>s.manual&&s.stop&&s.powerOff),'Manual mode, STOP and power isolation precede winding');
   console.log('TOOL REACH',Math.max(...movement.flatMap(s=>s.reach)));
+  const byStage={};for(const x of samples)for(const d of x.reach||[])byStage[x.stage]=Math.max(byStage[x.stage]||0,d);console.log('REACH BY STAGE',JSON.stringify(byStage));
   assert.ok(samples.every(s=>(s.reach||[]).every(d=>d<.001)),'Hands stay on carried and mounted tools without stretching arm segments');
   assert.ok(samples.filter(s=>!s.brake&&!s.level&&s.handle).every(s=>Math.abs(s.handleAngle)<1e-8));
   assert.ok(movement.every(s=>s.hubGap<1e-6),'Handle hub stays on encoder shaft');

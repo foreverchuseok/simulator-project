@@ -2054,7 +2054,7 @@
 
     /* 카 공용 캠 한 개가 일렬 스위치 여섯 개를 순서대로 밟는 상태 갱신.
        스위치 롤러축 Y 가 해당 종류 가닥 범위 안이면 눌린다. 양 끝 FLS_LEAD 는 리드인.
-       운행 FSM 은 건드리지 않는다. elevatorState 플래그만 반영한다. */
+       점검(INS) 운전과 종단 스위치 시연은 sw.contactOpen 을 읽어 감속·정지한다(TerminalDemo.isOpen). */
     function refreshTerminalDevices() {
       const cam = terminalDevices.cam;
       if (!cam || !terminalDevices.switches.length) return;
@@ -2070,7 +2070,8 @@
         sw.ratio = r;
         sw.lever.rotation.z = sw.dir * FLS_TRIP_ANGLE * r;
         // 완전 동작에서 유리창 속 가동 접점이 고정 접점에서 떨어진다(운행 회로 개로).
-        sw.contactOpen = r > 0.98;
+        // sw.welded = 접점 융착 고장 가정(종단 스위치 시연 js/terminal-demo.js) — 롤러는 눌려도 접점이 열리지 않는다.
+        sw.contactOpen = r > 0.98 && !sw.welded;
         if (sw.contactOpen) active[sw.kind] = true;
         sw.body.userData.contactClosed = !sw.contactOpen;
         if (sw.bridge) sw.bridge.position.y = sw.contactOpen ? -LIMIT_SWITCH_MODEL.bridgeStroke : 0;

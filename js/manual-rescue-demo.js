@@ -4,7 +4,9 @@ const ManualRescueDemo=(()=>{
   let button,panel,title,detail,gap,friend,lever,handle,phone,receiver,cord,saved,jobs=[];
   let leverPivot,handlePivot,receiverPivot,wire,actors,selector,breaker,stopButton,alarm,levelLabel;
   const platforms=[];
-  const CREW_SCALE=.76, PACE=1.65, FAULT_GAP=.60, WIND_SECONDS=7;
+  // ARM: 팔 한 관절 길이(로컬). 2026-10-05 사용자 「손이 너무 길다」 → 0.26→0.16.
+  // 핸들(축~손잡이 0.354m)을 짧은 팔로 계속 돌리도록 곰 두 마리를 0.76→1.6배로 키웠다(사용자 선택). 서는 자리는 몸 크기에서 파생한다.
+  const CREW_SCALE=1.6, PACE=1.65, FAULT_GAP=.60, WIND_SECONDS=7, ARM=.16;
   let otherLever,otherPivot,impact,levelMarker;
   const point=new THREE.Vector3(),handA=new THREE.Vector3(),handB=new THREE.Vector3(),normal=new THREE.Vector3();
   const keyPose={approach:0,insert:0,key:0,walk:0,carry:0,foot:0};
@@ -67,7 +69,7 @@ const ManualRescueDemo=(()=>{
     selector=ControlPanel.root.getObjectByName('ManualModeSelector');breaker=MachineRoomPower.root.getObjectByName('MainBreakerToggle');
     stopButton=ControlPanel.root.getObjectByName('EmergencyStopButton');
     if(!selector||!breaker||!stopButton)return false;
-    if(!actors)actors=[Mascot,friend].map(worker=>({worker,rig:Mascot.rescueRig(worker,.26),p:new THREE.Vector3(),yaw:Math.PI,hand:null,carry:null,walking:false,phase:0}));
+    if(!actors)actors=[Mascot,friend].map(worker=>({worker,rig:Mascot.rescueRig(worker,ARM),p:new THREE.Vector3(),yaw:Math.PI,hand:null,carry:null,walking:false,phase:0}));
     leaveCabinView();closeAllMenus();snapshot();clearTimeout(autoTimer);EmergencyCall.hangUp();jobs=[];
     Object.assign(state,{active:true,stage:'preparing',manual:false,stopPressed:false,powerOff:false,brakeReleased:false,handleAttached:false,level:false,call:false,exited:false});
     Object.assign(keyPose,{approach:0,insert:0,key:0,walk:0,carry:0,foot:0});
@@ -194,8 +196,10 @@ const ManualRescueDemo=(()=>{
   }
   function operateSwitch(node,name,done){
     const target=node.getWorldPosition(new THREE.Vector3()),a=actors[0],yaw=-Math.PI/2;
-    const dest=target.clone().add(new THREE.Vector3(.30,-.36*CREW_SCALE,-.185*CREW_SCALE));
-    const d=Math.max(.80,.60/camera.aspect);cameraTo(target.clone().add(new THREE.Vector3(d,-.25,d*.5625)),target,0);
+    // 배(앞 반지름 0.18×축척) 앞 여유를 두고, 왼팔 어깨가 스위치 정면·같은 높이에 오게 선다.
+    const dest=target.clone().add(new THREE.Vector3(.24*CREW_SCALE,-.36*CREW_SCALE,-.185*CREW_SCALE));dest.y=Math.max(saved.bearFloor,dest.y);
+    // 곰(−Z 쪽에 섬)이 스위치를 가리지 않게 +Z 쪽 비스듬한 앞에서 본다. 거리는 곰 크기에 비례.
+    const d=Math.max(.80,.60/camera.aspect)*CREW_SCALE/.95;cameraTo(target.clone().add(new THREE.Vector3(d*.8,.05,d*.75)),target.clone().add(new THREE.Vector3(0,-.05,-.08)),0);
     // 이전 스위치를 잡던 손 목표를 비운 뒤 위치를 바꾼다. 남겨 두면 전환 첫 프레임에 팔이 늘어난다.
     a.hand=null;travel(a,dest,yaw,name,()=>reach(a,target,done));
   }
@@ -220,7 +224,9 @@ const ManualRescueDemo=(()=>{
     stage('handle-mount','핸들 축 결합 확인','친구가 축에 결합된 핸들을 잡고 브레이크 개방을 기다립니다.');
     const c=tr().contract.manualRescue,world=tr().worm.parent.localToWorld(new THREE.Vector3(...c.shaftCenter));
     const q=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),-Math.PI/2);
-    const stand=world.clone().add(new THREE.Vector3(.185*CREW_SCALE,-.36*CREW_SCALE,.26*CREW_SCALE));
+    // 왼팔 어깨를 핸들 축선 위에 둔다 — 손잡이가 돌아도 어깨~손잡이 거리가 일정하다(√(0.354²+축방향²) < 팔 2관절).
+    // 축방향 거리는 돌아가는 손잡이(축에서 +Z 0.005~0.075m)가 배에 닿지 않는 최소값.
+    const stand=world.clone().add(new THREE.Vector3(.185*CREW_SCALE,-.36*CREW_SCALE,.09+.18*CREW_SCALE));stand.y=Math.max(saved.bearFloor,stand.y);
     fetchTool(actors[1],handle,new THREE.Vector3(...toolSpec().handleGrip),new THREE.Vector3(...toolSpec().handleHub),world,q,'ManualHandlePivot',stand,p=>{
       handlePivot=p;state.handleAttached=true;state.worm0=tr().worm.rotation.z;
       stage('handle-seated','핸들 결합 완료 · 브레이크 닫힘','축 결합을 확인하고 핸들을 잡은 자세로 기다립니다.');
@@ -243,7 +249,7 @@ const ManualRescueDemo=(()=>{
     const world=lugWorld().clone(),q=new THREE.Quaternion();
     const grip=new THREE.Vector3(...toolSpec().leverGrip),seat=new THREE.Vector3(...toolSpec().leverSeat);
     const center=world.clone().add(lugWorld(0)).multiplyScalar(.5);
-    const stand=center.clone().add(new THREE.Vector3(0,grip.y-seat.y-.36*CREW_SCALE,-.25));
+    const stand=center.clone().add(new THREE.Vector3(0,grip.y-seat.y-.36*CREW_SCALE,-(.18*CREW_SCALE+.08)));stand.y=Math.max(saved.bearFloor,stand.y);
     fetchTool(actors[0],lever,grip,seat,world,q,'ManualReleaseLeverPivot',stand,p=>{
       leverPivot=p;
       if(!otherLever){otherLever=lever.clone(true);otherLever.name='ManualReleaseLeverOther';}
@@ -278,7 +284,9 @@ const ManualRescueDemo=(()=>{
     const c=phone.getObjectByName('IntercomPhoneRoot').userData;
     phone.updateWorldMatrix(true,true);const target=phone.localToWorld(new THREE.Vector3(...c.handsetCenter));
     const n=new THREE.Vector3(0,0,1).transformDirection(phone.matrixWorld),yaw=Math.atan2(-n.x,-n.z);
-    const dest=target.clone().addScaledVector(n,.32);dest.y=Math.max(saved.bearFloor,target.y-.60*CREW_SCALE);
+    // 수화기를 드는 오른팔(waveArm) 어깨가 수화기 정면·같은 높이에 오게, 안전모 챙(0.215×축척)이 벽에 닿지 않는 거리에서 어깨 폭만큼 비켜 선다.
+    const side=new THREE.Vector3(-.185*CREW_SCALE,0,0).applyAxisAngle(new THREE.Vector3(0,1,0),yaw);
+    const dest=target.clone().addScaledVector(n,.215*CREW_SCALE+.04).sub(side);dest.y=Math.max(saved.bearFloor,target.y-.36*CREW_SCALE);
     cameraTo(target.clone().addScaledVector(n,2).add(new THREE.Vector3(1,.25,.5)),target.clone().add(new THREE.Vector3(0,-.25,0)),0);
     travel(actors[0],dest,yaw,'PhoneStep',()=>later(.7,liftReceiver));
   }

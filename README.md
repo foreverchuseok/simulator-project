@@ -8,6 +8,8 @@
 
 Three.js로 승강로, 카, 도어, 기계실, 피트와 안전장치를 구성하고 GSAP으로 운행·도어·고장 동작을 연출한다.
 
+카 상부에서 주로프를 클릭하면 승곰이가 캘리퍼스를 들고 지름을 측정한다. 주출입층 시브 구간 추적 → 영점 조정 → 미마모부·마모부 두 방향 측정 → 손상·장력 확인 순서이며, 영상의 **미마모부 직경 대비 90% 이상** 기준으로 교육용 예시를 비교한다. 상세는 [주로프 측정](docs/ROPE-MEASUREMENT.md)을 참고한다.
+
 문서와 코드가 다르면 현재 코드가 기준이다.
 
 현재 단계는 **1단계 — 웹 최적화와 기본 사용 경험 정리**다. 사용 기준은 Galaxy S22 이상 / Chrome이며 기존 버전이 S22+에서 원활하다는 사용자 확인을 받았다. 부품 더블클릭·더블탭으로 가까이 보고 오른쪽 위 「전체 보기」로 복귀한다. 새 카메라 조작의 실제 모바일 검증과 통합 확인이 남아 있다. 전체 순서와 다음 작업은 [공유 로드맵](docs/ROADMAP.md)을 참고한다.
@@ -319,6 +321,7 @@ ESTOP
 | 전면벽·로비·점자 | `js/environment.js` | `buildFrontWallAndLobby()` |
 | 가이드레일 | `js/environment.js` | `buildGuideRails()` |
 | 층 센서·리미트 | `js/environment.js` | `buildShaftLandingDevices()`, `buildLimitSwitches()` |
+| 종단 스위치 작동·시연(강제감속·리미트·파이널) | `js/terminal-demo.js`, `docs/TRAVEL-CABLE-TERMINAL.md` | `TerminalDemo.isOpen/blockReason`(INS 공용), 스위치 6개 발광 → 시연, `tools/verify_terminal_switches.mjs` |
 | 기계실 마스코트 「승강곰」 | `js/mascot.js` | `Mascot.build/update/setVisible`, 「설정」 「캐릭터」 토글 |
 | 기계실·권상기 | `js/environment.js` | `buildMachineRoom()`, `setTractionCutaway()`, `setTractionBrake()` |
 | 권상기 형상 | `blender/scripts/traction_machine.py` | 계약: `docs/TRACTION-MACHINE.md` |

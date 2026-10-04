@@ -967,9 +967,9 @@
           <span>설정</span>
         </button>
         <div class="rail-col">
-          <button class="rail-btn glass" id="c-shaft" data-menu="dd-overview" aria-expanded="false" aria-controls="dd-overview" title="전체 보기" aria-label="전체 보기">
+          <button class="rail-btn glass" id="c-shaft" data-menu="dd-overview" aria-expanded="false" aria-controls="dd-overview" title="보기" aria-label="보기">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
-            <span>전체 보기</span>
+            <span>보기</span>
           </button>
           <button class="rail-btn glass" id="c-cabin" title="카 정면 — 탑승 시점으로 카를 따라갑니다. 다시 누르면 해제" aria-label="카 정면" aria-pressed="false">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="1.5"/><path d="M12 16.5v-4.2"/><path d="M9.2 14.6 12 11.8l2.8 2.8"/></svg>
@@ -978,8 +978,8 @@
         </div>
       </nav>
 
-      <div class="sheet glass" id="dd-overview" role="dialog" aria-label="전체 보기">
-        <div class="sheet-head"><h3>전체 보기</h3><button class="sheet-close" data-close aria-label="닫기">✕</button></div>
+      <div class="sheet glass" id="dd-overview" role="dialog" aria-label="보기">
+        <div class="sheet-head"><h3>보기</h3><button class="sheet-close" data-close aria-label="닫기">✕</button></div>
         <button id="overview-home" class="act-code" style="width:100%;min-height:44px">처음 시점으로</button>
         <div id="pc-view-options"></div>
       </div>
@@ -1006,7 +1006,7 @@
           <dt>확대</dt><dd>마우스 휠 · 두 손가락 벌리기</dd>
           <dt>이동</dt><dd>우클릭 드래그 · 두 손가락 끌기</dd>
           <dt>가까이</dt><dd>부품 더블클릭 · 두 번 탭</dd>
-          <dt>돌아가기</dt><dd>「전체 보기」 → 「처음 시점으로」</dd>
+          <dt>돌아가기</dt><dd>「보기」 → 「처음 시점으로」</dd>
         </dl>
       </div>
 
@@ -1109,7 +1109,7 @@
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
   <script src="js/config.js"></script>
-  <script src="js/part-glow.js?v=20261003-single-direct"></script>
+  <script src="js/part-glow.js?v=20261004-terminal"></script>
   <script src="js/pit-tensioner.js"></script>
   <script src="js/character-walk.js?v=20261003-seunggom-1"></script>
   <script src="js/environment.js?v=20261004-pit-clearance"></script>
@@ -1129,7 +1129,7 @@
   <script src="js/car-panels.js?v=20261002-passenger-buttons"></script>
   <script src="js/leveling-sensors.js"></script>
   <script src="js/safety-device.js"></script>
-  <script src="js/elevator.js?v=20261003-switch-pin"></script>
+  <script src="js/elevator.js?v=20261004-terminal"></script>
   <script src="js/hall-finish.js?v=20261002-passenger-buttons"></script>
   <script src="js/hall-retention.js"></script>
   <script src="js/hall-emergency-guide.js"></script>
@@ -1141,7 +1141,7 @@
   <script src="js/buffer-demo.js?v=20261004-pit-spans-2"></script>
   <script src="js/part-actions.js?v=20261003-drunk-kick"></script>
   <script src="js/overspeed-effects.js?v=20260930-ovs-1"></script>
-  <script src="js/ui.js?v=20261003-pause-1"></script>
+  <script src="js/ui.js?v=20261004-terminal"></script>
   <script src="js/desktop-hud.js?v=20261004-1"></script>
   <script src="js/passenger-controls.js?v=20261002-passenger-buttons"></script>
   <script src="js/hall-inspector.js?v=20261002-manual-rescue"></script>
@@ -1152,11 +1152,14 @@
   <script src="js/relay-rope-demo.js?v=20261003-pause-1"></script>
   <script src="js/drunk-bear.js?v=20261003-polar-1"></script>
   <script src="js/retention-demo.js?v=20261003-front-cut"></script>
-  <script src="js/demo-pause.js?v=20261003-pause-2"></script>
+  <script src="js/demo-pause.js?v=20261004-terminal"></script>
   <script src="js/finger-gap.js?v=20260930-glow-1"></script>
   <script src="js/emergency-lighting.js?v=20260930-glow-1"></script>
   <script src="js/ard-demo.js?v=20261003-pause-1"></script>
   <script src="js/manual-rescue-demo.js?v=20261003-pause-1"></script>
+  <script src="js/photo-eye-demo.js?v=20261004-2"></script>
+  <script src="js/rope-measure.js?v=20261005-1"></script>
+  <script src="js/terminal-demo.js?v=20261004-1"></script>
 
   <script>
     // 층수 및 층고 배열 (피트 1.76m, 1층 4.0m, 2층 3.65m, 3층 3.7m)
@@ -1643,6 +1646,9 @@
       DemoPause.build();        // 모든 시연 공통 일시정지 버튼 (js/demo-pause.js)
       ARDDemo.build();
       ManualRescueDemo.build();
+      PhotoEyeDemo.build();     // 카문 문닫힘 안전장치(멀티빔) 시연 — 승곰이 (js/photo-eye-demo.js)
+      RopeMeasure.build();      // 카 상부 주로프 측정 교육
+      TerminalDemo.build();     // 종단 스위치 6개 발광 + 강제감속·리미트·파이널 시연 (js/terminal-demo.js)
 
       // ?tcam(해치 케이블 행거)만 빌드 결과(travelCable.hangerY)가 있어야 잡을 수 있다
       if (travelCable.ready && location.search.includes('tcam') && !location.search.includes('tcam=2')) {
@@ -1688,6 +1694,9 @@
       RelayRopeDemo.update();
       RetentionDemo.update();
       FingerGap.update();
+      PhotoEyeDemo.update();
+      RopeMeasure.update();
+      TerminalDemo.update();
       PitLadder.update();
       ControlPanel.update();
       MachineRoomPower.update();
