@@ -16,7 +16,7 @@ const EmergencyCall = (() => {
   let built = false, active = null, phase = 'idle', seq = 0, blinkT = 0, manualLink=false;
   let mrLed = null, caption = null, captionText = null, endBtn = null, audioCtx = null, filterIn = null;
   const leds = {}, anchors = {}, buttons = {}, playing = new Set();
-  const v = new THREE.Vector3(), local = new THREE.Vector3();
+  const v = new THREE.Vector3();
   const ICON = 'url("data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>') + '")';
 
   function ledMaterial() {
@@ -232,16 +232,17 @@ const EmergencyCall = (() => {
       else if (phase === 'connecting') { const on = Math.floor(t * 2.5) % 2 === 0; setLed(mrLed, on ? COLOR.red : null); if (!on) mrLed.color.setHex(0x4a1512); }
       else if (phase === 'idle') { setLed(mrLed, null); mrLed.color.setHex(0x4a1512); mrLed.metalness = 0; }
     }
-    carGrp.worldToLocal(local.copy(camera.position));
-    const inCar = Math.abs(local.x) < S.CAR_W / 2 && Math.abs(local.z) < S.CAR_D / 2 && Math.abs(local.y) < S.CAR_H / 2;
     for (const key of Object.keys(LOC)) {
       const b = buttons[key], a = anchors[key];
       if (!b || !a) continue;
       a.getWorldPosition(v);
+      // 카 안 두 곳도 층 버튼(passenger-controls.js)처럼 거리로만 판정한다. 「카메라가 카 안」 조건이 있으면
+      // 카 뒤 구석·문 밖(체험)에서 층 버튼은 눌리는데 통화 버튼만 안 눌렸다(사용자 2026-10-05). 벽 너머는 PartGlow 가림 판정이 막는다.
+      // 3.6m = 카 뒤 구석에서 맞은편 주조작반까지(약 3.2m) + 여유.
       const car = key === 'carMain' || key === 'carSide';
-      let shown = car ? inCar && camera.position.distanceToSquared(v) < 9 : camera.position.distanceToSquared(v) < 16;
+      let shown = camera.position.distanceToSquared(v) < (car ? 3.6 * 3.6 : 16);
       for (let p = a; p && shown; p = p.parent) if (!p.visible) shown = false;
-      if (shown) { v.project(camera); shown = v.z > -1 && v.z < 1 && Math.abs(v.x) < 0.95 && Math.abs(v.y) < 0.9; }
+      if (shown) { v.project(camera); shown = v.z > -1 && v.z < 1 && Math.abs(v.x) < 1 && Math.abs(v.y) < 1; }
       b.hidden = !shown;
       if (shown) PartActions.positionButton(b, (v.x + 1) * innerWidth / 2 + 16, (1 - v.y) * innerHeight / 2 - 18);
     }

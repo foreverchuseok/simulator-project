@@ -1,6 +1,7 @@
 /* ─────────────────────────────────────────────────────────────
    모바일 HUD (2026-10-05 모바일 개편) — 세로 폰 ≤600px · 가로 폰 높이 ≤500px 전용. PC 화면은 desktop-hud.js.
-   ▪ 하단 바 하나에 조작을 모은다: 운행(층·도어 띠 열기) · 전체 보기 · 카 정면 · 체험 · 설정 · 비상정지.
+   ▪ 하단 바 하나에 조작을 모은다: 운행(층·도어 띠 열기) · 수동(점검운전 전환) · 전체 보기 · 카 정면 · 체험 · 설정 · 비상정지.
+     수동이면 PC 패널의 ▲▼(#pc-manual-controls)를 바 위로 옮겨 띄운다.
    ▪ 바는 상황에 따라 바뀐다(body[data-m-mode]):
        base — 위 기본 조작
        walk — 승곰이 체험: 시작 위치 · 체험 종료 (방향키는 왼쪽, 호출·층 버튼은 체험 패널)
@@ -12,9 +13,10 @@ const MobileHUD = (() => {
   const media = matchMedia('(max-width: 600px) and (orientation: portrait), (max-height: 500px) and (orientation: landscape)');
   const homes = new Map();
   const $ = id => document.getElementById(id);
-  let bar, runBtn, exitBtn, mode = '', runOpen = false;
+  let bar, runBtn, insBtn, exitBtn, mode = '', runOpen = false, manualHome = null;
 
   const ICON = {
+    ins: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.1L4 16.7 7.3 20l5.3-5.3a4 4 0 0 0 5.1-5.4l-2.4 2.4-2.6-.7-.7-2.6z"/></svg>',
     run: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 9.5 12 6.5l3 3M9 14.5l3 3 3-3"/></svg>',
     home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>',
     cabin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="1.5"/><path d="M12 16.5v-4.2"/><path d="M9.2 14.6 12 11.8l2.8 2.8"/></svg>',
@@ -114,6 +116,10 @@ const MobileHUD = (() => {
       mode = next; document.body.dataset.mMode = mode;
       if (mode !== 'base') setRun(false);
     }
+    const insBusy = InspectionReturn.busy || inspectionResetting;
+    insBtn.setAttribute('aria-pressed', String(insMode));
+    insBtn.disabled = insBusy;
+    insBtn.title = insMode ? '수동(점검)운전 중 — 다시 누르면 자동운전으로' : '수동(점검)운전 — ▲▼ 누르는 동안 서행';
     $('m-cabin').setAttribute('aria-pressed', $('c-cabin').getAttribute('aria-pressed') || 'false');
     $('m-cabin').classList.toggle('active', $('c-cabin').getAttribute('aria-pressed') === 'true');
     $('m-walk').hidden = $('walk-toggle').hidden;
@@ -136,10 +142,15 @@ const MobileHUD = (() => {
       adopt($('demo-pause'), 'm-slot-pause');
       adopt($('fault-reset'), 'm-slot-reset');
       adopt($('btn-estop'), 'm-slot-estop');
+      // 점검 ▲▼ 는 PC 패널(모바일에선 숨김) 안에 있다 — 바 위로 옮긴다. 표시 여부는 desktop-hud.js state()가 그대로 정한다.
+      const manual = $('pc-manual-controls');
+      if (!manualHome) { manualHome = document.createComment('mobile-hud: pc-manual-controls'); manual.before(manualHome); }
+      $('hud').append(manual);
       mode = ''; update();
     } else {
       setRun(false);
       release();
+      if (manualHome) manualHome.after($('pc-manual-controls'));
       delete document.body.dataset.mMode; mode = '';
     }
   }
@@ -226,6 +237,11 @@ const MobileHUD = (() => {
       setRun(open);
     });
     runBtn.setAttribute('aria-controls', 'dd-op'); runBtn.setAttribute('aria-expanded', 'false');
+    // 수동(점검)운전: PC 패널의 자동/수동 버튼을 그대로 누른다 — 운행·시연 중 전환 차단은 desktop-hud.js 가 맡는다.
+    insBtn = barButton('m-ins', 'base', 'ins', '수동', () => {
+      setRun(false); closeAllMenus();
+      document.querySelector(`#pc-mode [data-ins="${insMode ? 'off' : 'on'}"]`).click();
+    });
     barButton('m-home', 'base', 'home', '전체 보기', () => { setRun(false); $('overview-home').click(); });
     barButton('m-cabin', 'base', 'cabin', '카 정면', () => { setRun(false); closeAllMenus(); $('c-cabin').click(); });
     barButton('m-walk', 'base', 'walk', '체험', () => { setRun(false); closeAllMenus(); $('walk-toggle').click(); });

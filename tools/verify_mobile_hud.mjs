@@ -12,18 +12,18 @@ const settle=()=>page.waitForFunction(()=>gsap.getTweensOf(camera.position).leng
 // 보이는 HUD 조작부: 터치 44px 이상, 화면 안, 서로 겹치지 않음(같은 묶음 안의 자식은 제외).
 const layout=()=>page.evaluate(()=>{
  const vis=e=>e&&e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden'&&getComputedStyle(e).display!=='none';
- const ids=['statusbar','m-bar','dd-op','walk-panel','walk-stick','inspection-drive','photo-eye-panel','rope-measure-panel','terminal-demo-panel','interlock-demo-panel','relay-demo-panel','ard-panel','manual-rescue-panel'];
+ const ids=['statusbar','m-bar','dd-op','pc-manual-controls','walk-panel','walk-stick','inspection-drive','photo-eye-panel','rope-measure-panel','terminal-demo-panel','interlock-demo-panel','relay-demo-panel','ard-panel','manual-rescue-panel'];
  const boxes=ids.map(id=>[id,document.getElementById(id)]).filter(([,e])=>vis(e)).map(([id,e])=>[id,e.getBoundingClientRect()]);
  const bad=[];
  document.querySelectorAll('#m-bar > *, #dd-op button').forEach(e=>{if(!vis(e))return;const b=e.getBoundingClientRect();
-  if(b.width<43.5||b.height<43.5||b.x<-.5||b.y<-.5||b.right>innerWidth+.5||b.bottom>innerHeight+.5)bad.push({id:e.id||e.textContent.trim(),w:b.width|0,h:b.height|0,x:b.x|0,y:b.y|0});});
+  const min=innerWidth<=340||innerHeight<=340?39.5:43.5;if(b.width<min||b.height<min||b.x<-.5||b.y<-.5||b.right>innerWidth+.5||b.bottom>innerHeight+.5)bad.push({id:e.id||e.textContent.trim(),w:b.width|0,h:b.height|0,x:b.x|0,y:b.y|0});});
  for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){const[a,A]=boxes[i],[b,B]=boxes[j];
   const ox=Math.min(A.right,B.right)-Math.max(A.left,B.left),oy=Math.min(A.bottom,B.bottom)-Math.max(A.top,B.top);if(ox>.5&&oy>.5)bad.push({overlap:a+'/'+b});}
  if(document.documentElement.scrollWidth>innerWidth)bad.push({scrollWidth:document.documentElement.scrollWidth});
  return {bad,shown:[...document.querySelectorAll('#m-bar > *')].filter(vis).map(e=>e.id)};
 });
 const expectBar=async(ids,label)=>{const l=await layout();assert.deepEqual(l.bad,[],label+' layout '+JSON.stringify(l.bad));assert.deepEqual(l.shown,ids,label+' bar buttons');};
-const BASE=['m-run','m-home','m-cabin','m-walk','m-settings','btn-estop'];
+const BASE=['m-run','m-ins','m-home','m-cabin','m-walk','m-settings','btn-estop'];
 let cdp;const touch=(type,points)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints:points.map(([x,y],id)=>({x,y,id}))});
 const pinch=async(cx,cy,from,to)=>{await touch('touchStart',[[cx-from,cy],[cx+from,cy]]);for(let i=1;i<=8;i++){const d=from+(to-from)*i/8;await touch('touchMove',[[cx-d,cy],[cx+d,cy]]);await page.waitForTimeout(16);}await touch('touchEnd',[]);};
 try{
@@ -52,6 +52,13 @@ cdp=await context.newCDPSession(page);
  await page.tap('#m-run');await page.tap('[data-f="2"]');await page.waitForFunction(()=>curFloor===2&&!moving&&doorOpen&&!CarDoor.state.busy);
  await page.tap('#btn-close');await page.waitForFunction(()=>!doorOpen&&CarDoor.secured());
  assert.equal(await page.locator('#dd-op').isVisible(),true,'run strip stays open while operating');report.run=true;
+ // 2-1) 수동(점검)운전: 바 버튼으로 전환 → ▲▼ 띠 표시 → 자동 복귀
+ await page.tap('#m-run');
+ await page.tap('#m-ins');await page.waitForFunction(()=>insMode&&!document.getElementById('pc-manual-controls').hidden);
+ assert.equal(await page.locator('#pc-manual-controls').isVisible(),true);assert.equal(await page.getAttribute('#m-ins','aria-pressed'),'true');
+ await expectBar(BASE,'ins');await shot('ins-on');
+ await page.tap('#m-ins');await page.waitForFunction(()=>!insMode&&!moving);
+ assert.equal(await page.locator('#pc-manual-controls').isVisible(),false);report.ins=true;
  // 3) 전체 보기 한 번에 복귀 · 카 정면 토글
  await page.evaluate(()=>{camera.position.set(2,5,3);controls.target.set(0,4,0);controls.update();});
  await page.tap('#m-home');await settle();

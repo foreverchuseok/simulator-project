@@ -38,13 +38,13 @@ body.m-hud #m-bar {
   align-items: center;
   justify-content: center;
   gap: 3px;
-  padding: 0 2px;
+  padding: 0 1px;
   border: none;
   border-radius: 14px;
   background: transparent;
   color: #e2e8f0;
-  font: 600 11px/1.15 var(--ui-font);
-  letter-spacing: -0.01em;
+  font: 600 10.5px/1.15 var(--ui-font);
+  letter-spacing: -0.05em;   /* 7칸에서도 「전체 보기」가 잘리지 않게 */
   white-space: nowrap;
   cursor: pointer;
   touch-action: manipulation;
@@ -56,6 +56,9 @@ body.m-hud #m-bar {
 .m-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .m-btn[hidden] { display: none !important; }
 
+/* 바 버튼 7개 — 좁은 폰(≤360px)은 여백·간격을 줄여 자리를 만든다 */
+@media (max-width: 360px) and (orientation: portrait) { body.m-hud { --edge: 6px; --edge-r: 6px; } body.m-hud #m-bar { gap: 2px !important; padding: 3px !important; } .m-btn span { letter-spacing: -0.08em; } }
+@media (max-height: 340px) and (orientation: landscape) { body.m-hud { --edge-t: 6px; --edge-b: 6px; } body.m-hud #m-bar { gap: 2px !important; padding: 3px !important; } body.m-hud #m-bar #btn-estop { flex-basis: 58px; } body.m-hud .m-btn svg { width: 18px; height: 18px; } }
 @media (max-width: 360px) and (orientation: portrait) { body.m-hud #m-bar { gap: 3px; padding: 4px; } body.m-hud #m-bar #btn-estop { flex-grow: 1; } .m-btn { padding: 0; font-size: 10px; letter-spacing: -0.04em; } body.m-hud #m-bar #btn-estop span { font-size: 10px; letter-spacing: -0.05em; } }
 
 /* 상황별 버튼 — data-modes 에 현재 모드가 없으면 숨긴다 */
@@ -109,6 +112,35 @@ body.m-hud #m-bar #fault-reset {
 }
 body.m-hud #m-bar #fault-reset[hidden] { display: none; }
 body.m-hud #m-bar #fault-reset small { display: none; }
+
+/* 점검(수동)운전 ▲▼ — PC 패널에서 옮겨 온 원본, 시연 카드 자리(바 위)에 띄운다 */
+body.m-hud #pc-manual-controls {
+  position: absolute;
+  left: var(--edge);
+  right: var(--m-right);
+  bottom: var(--m-card-bottom);
+  display: flex;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 16px;
+  background: rgba(13, 20, 33, 0.9);
+}
+body.m-hud #pc-manual-controls[hidden] { display: none; }
+body.m-hud #pc-manual-controls button {
+  flex: 1;
+  min-height: 52px;
+  border: 1px solid #ffffff24;
+  border-radius: 12px;
+  background: #ffffff15;
+  color: #fff;
+  font: 700 14px/1.2 var(--ui-font);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+body.m-hud #pc-manual-controls button:active:not(:disabled) { background: #397fab; }
+body.m-hud #pc-manual-controls button:disabled { opacity: 0.4; }
+body.m-hud #m-ins[aria-pressed="true"] { background: #b45309; color: #fff; }
 
 /* ── 상단 상태 카드: 화면 폭 전체, 상태 문구에 자리를 준다 ── */
 body.m-hud #statusbar {
@@ -301,7 +333,7 @@ body.m-hud #ucm-exit { top: calc(var(--edge-t) + 60px); }
   body.m-hud #interlock-demo-panel, body.m-hud #relay-demo-panel, body.m-hud #ard-panel { left: auto; width: min(340px, 46vw); top: calc(var(--edge-t) + 60px); bottom: auto; max-height: calc(100dvh - var(--edge-t) - 60px - var(--edge-b)); overflow: auto; }
   body.m-hud #walk-panel { left: auto; width: 250px; }
   body.m-hud.character-walking #walk-stick { bottom: var(--edge-b); width: 100px; height: 100px; }
-  body.m-hud #inspection-drive { left: auto; width: min(430px, calc(100vw - var(--m-right) - var(--edge))); }
+  body.m-hud #inspection-drive, body.m-hud #pc-manual-controls { left: auto; width: min(430px, calc(100vw - var(--m-right) - var(--edge))); }
   body.m-hud #ucm-exit { top: var(--edge-t); right: var(--m-right); }
 }
 
