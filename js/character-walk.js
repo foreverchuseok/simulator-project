@@ -6,6 +6,9 @@ const CharacterWalk = (() => {
   const cameraRay = new THREE.Ray(), direction = new THREE.Vector3(), cameraBoxes = [];
   let active = null, plaza, layout, panel, toggle, status, ring, saved;
   let yaw = 0, pitch = .30, lastTime = 0, viewY = 0, lookPointer = null, stickPointer = null;
+  // 체험 중 시야 확대·축소 — 두 손가락 벌리기/오므리기(PC 휠). 3인칭은 카메라 거리, 카 안 1인칭은 화각을 바꾼다.
+  const ZOOM_MIN = .45, ZOOM_MAX = 2.8, pinchPoints = new Map();
+  let zoom = 1, pinchStart = null;
   let carBoxes, floorOffset = 0, lastStatus = '';
   const clamp = THREE.MathUtils.clamp;
   const radius = a => .24 * a.scale;
@@ -91,7 +94,7 @@ const CharacterWalk = (() => {
     }
     return changed;
   }
-  function clearInput() { keys.clear(); stick.x = stick.y = 0; lookPointer = null; stickPointer = null;
+  function clearInput() { keys.clear(); stick.x = stick.y = 0; lookPointer = null; stickPointer = null; pinchPoints.clear(); pinchStart = null;
     const knob = document.getElementById('walk-stick-knob'); if (knob) knob.style.transform = ''; }
   function resetActor(a) {
     a.root.position.copy(a.home); a.root.rotation.y = a.homeYaw; a.zone = 'ground'; a.floor = 0;
@@ -111,7 +114,7 @@ const CharacterWalk = (() => {
     }
     const a = actors[0]; resetActor(a);
     if (!active) {
-      saved = { position: camera.position.clone(), target: controls.target.clone(), near: camera.near,
+      saved = { position: camera.position.clone(), target: controls.target.clone(), near: camera.near, fov: camera.fov,
         rotate: controls.enableRotate, pan: controls.enablePan, zoom: controls.enableZoom, damping: controls.enableDamping,
         mascotVisible: Mascot.root.visible };
       leaveCabinView(); gsap.killTweensOf(camera.position); gsap.killTweensOf(controls.target); PartGlow.closeMenu();
@@ -119,7 +122,7 @@ const CharacterWalk = (() => {
       controls.enableRotate = controls.enablePan = controls.enableZoom = false;
     }
     active = a; a.root.visible=true; a.visual.visible=true; Mascot.root.visible=false;
-    clearInput(); yaw = 0; pitch = .30; lastTime = 0; lastStatus='';
+    clearInput(); yaw = 0; pitch = .30; zoom = 1; lastTime = 0; lastStatus='';
     panel.hidden = false; ring.visible = true;
     document.body.classList.add('character-walking'); toggle.hidden=true;
     updateCamera(1); refreshStatus(); return true;
@@ -132,6 +135,7 @@ const CharacterWalk = (() => {
     document.body.classList.remove('character-walking'); toggle.hidden=false; toggle.textContent = '캐릭터 체험';
     controls.enableRotate = saved.rotate; controls.enablePan = saved.pan; controls.enableZoom = saved.zoom;
     controls.enableDamping = saved.damping;
+    camera.fov = saved.fov; camera.updateProjectionMatrix();
     if (restoreCamera) { camera.position.copy(saved.position); controls.target.copy(saved.target); camera.near = saved.near; camera.updateProjectionMatrix(); controls.update(); }
   }
   function refreshStatus() {
@@ -160,7 +164,9 @@ const CharacterWalk = (() => {
   function updateCamera(dt) {
     if (!active) return;
     const a = active, p = a.root.position, inCar = a.zone === 'car';
-    const h = .50 * a.scale, distance = 2.6;
+    const h = .50 * a.scale, distance = 2.6 * zoom;
+    const fov = inCar ? clamp(saved.fov * zoom, 30, 80) : saved.fov;
+    if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
     viewY += (p.y-viewY)*(1-Math.exp(-dt*16));
     // 좁은 카에서는 머리가 화면을 가리지 않도록 자연스럽게 탑승자 시점으로 전환한다.
     if (inCar) {
@@ -241,7 +247,7 @@ const CharacterWalk = (() => {
     const host = document.createElement('div'); host.innerHTML = `
       <button id="walk-toggle">캐릭터 체험</button>
       <section id="walk-panel" aria-label="캐릭터 체험" hidden><div id="walk-status"></div>
-        <div id="walk-help"><span class="walk-desktop-help">WASD 이동 · 마우스 드래그로 둘러보기</span><span class="walk-touch-help">왼쪽 방향키로 이동<br>화면을 밀어 둘러보기</span></div>
+        <div id="walk-help"><span class="walk-desktop-help">WASD 이동 · 마우스 드래그로 둘러보기 · 휠로 확대·축소</span><span class="walk-touch-help">왼쪽 방향키로 이동<br>화면을 밀어 둘러보기 · 두 손가락으로 확대·축소</span></div>
         <button id="walk-home">시작 위치</button> <button id="walk-exit">체험 종료</button>
         <button id="walk-call" hidden>승강기 호출</button><div id="walk-floors" hidden></div></section>
       <div id="walk-stick" aria-label="이동 방향키"><div id="walk-stick-arrows">↑<br>←　→<br>↓</div><div id="walk-stick-knob"></div></div>`;
@@ -249,7 +255,7 @@ const CharacterWalk = (() => {
     panel = document.getElementById('walk-panel'); status = document.getElementById('walk-status');
     toggle.onclick = start;
     document.getElementById('walk-exit').onclick = () => exit();
-    document.getElementById('walk-home').onclick = () => { if(active) {resetActor(active); clearInput(); yaw=0; pitch=.3;} };
+    document.getElementById('walk-home').onclick = () => { if(active) {resetActor(active); clearInput(); yaw=0; pitch=.3; zoom=1;} };
     document.getElementById('walk-call').onclick = () => { if(active?.zone==='landing') PassengerControls.request(active.floor,active.floor===FLOORS-1?'down':'up'); };
     for (let f=0;f<FLOORS;f++) { const b=document.createElement('button'); b.textContent=(f+1)+'층'; b.onclick=()=>PassengerControls.request(f); document.getElementById('walk-floors').appendChild(b); }
     ring = new THREE.Mesh(new THREE.RingGeometry(.24,.26,32),new THREE.MeshBasicMaterial({color:0xe4ff9f,side:THREE.DoubleSide,depthWrite:false}));
@@ -268,17 +274,28 @@ const CharacterWalk = (() => {
     pad.addEventListener('pointermove',e=>{if(e.pointerId===stickPointer)padMove(e);});
     for(const name of ['pointerup','pointercancel','lostpointercapture'])pad.addEventListener(name,e=>{if(e.pointerId===stickPointer){stickPointer=null;stick.x=stick.y=0;knob.style.transform='';}});
     const canvas=renderer.domElement;
+    const pinchDistance=()=>{const [a,b]=[...pinchPoints.values()];return Math.hypot(a.x-b.x,a.y-b.y);};
     canvas.addEventListener('pointerdown',e=>{
-      if(active){e.stopImmediatePropagation();if(lookPointer || e.button!==0)return;canvas.setPointerCapture(e.pointerId);}
+      if(active&&e.pointerType==='touch'){
+        pinchPoints.set(e.pointerId,{x:e.clientX,y:e.clientY});
+        // 두 번째 손가락: 둘러보기를 멈추고 벌리기/오므리기로 시야를 바꾼다(조이스틱은 별도 요소라 한 손 이동과 함께 쓴다).
+        if(pinchPoints.size===2){e.stopImmediatePropagation();canvas.setPointerCapture(e.pointerId);lookPointer=null;pinchStart={d:Math.max(1,pinchDistance()),zoom};return;}
+      }
+      if(active){e.stopImmediatePropagation();if(lookPointer || pinchStart || e.button!==0)return;canvas.setPointerCapture(e.pointerId);}
       if(e.button===0)lookPointer={id:e.pointerId,x:e.clientX,y:e.clientY,ox:e.clientX,oy:e.clientY,t:performance.now(),drag:false};
     },true);
     canvas.addEventListener('pointermove',e=>{
+      if(pinchPoints.has(e.pointerId)){pinchPoints.get(e.pointerId).x=e.clientX;pinchPoints.get(e.pointerId).y=e.clientY;}
+      if(active&&pinchStart&&pinchPoints.size===2){e.stopImmediatePropagation();zoom=clamp(pinchStart.zoom*pinchStart.d/Math.max(1,pinchDistance()),ZOOM_MIN,ZOOM_MAX);return;}
       if(!lookPointer||lookPointer.id!==e.pointerId)return;const p=lookPointer;
       if(Math.hypot(e.clientX-p.ox,e.clientY-p.oy)>6)p.drag=true;
       if(active){e.stopImmediatePropagation();yaw-=(e.clientX-p.x)*.006;pitch=clamp(pitch+(e.clientY-p.y)*.004,-.2,1.0);}
       p.x=e.clientX;p.y=e.clientY;
     },true);
+    const endPinch=e=>{if(!pinchPoints.delete(e.pointerId))return false;if(pinchPoints.size<2&&pinchStart){pinchStart=null;if(active)e.stopImmediatePropagation();return true;}return false;};
+    canvas.addEventListener('wheel',e=>{if(!active)return;e.preventDefault();e.stopImmediatePropagation();zoom=clamp(zoom*Math.exp(e.deltaY*.0012),ZOOM_MIN,ZOOM_MAX);},{capture:true,passive:false});
     canvas.addEventListener('pointerup',e=>{
+      if(endPinch(e))return;
       const p=lookPointer;if(!p||p.id!==e.pointerId)return;lookPointer=null;
       const wasActive=!!active;
       if(active&&!p.drag&&performance.now()-p.t<500){
@@ -286,9 +303,9 @@ const CharacterWalk = (() => {
       }
       if(wasActive)e.stopImmediatePropagation();
     },true);
-    canvas.addEventListener('pointercancel',()=>{lookPointer=null;});
+    canvas.addEventListener('pointercancel',e=>{endPinch(e);lookPointer=null;});
   }
-  return { setPlaza(value){plaza=value;}, init, update, start, exit, doorwayOccupied,
+  return { setPlaza(value){plaza=value;}, init, update, start, exit, doorwayOccupied, get zoom(){return zoom;},
     setRoofVisible(on){if(active)saved.mascotVisible=!!on;}, get roofVisible(){return !!saved?.mascotVisible;},
     get active(){return active;}, get actors(){return actors;} };
 })();

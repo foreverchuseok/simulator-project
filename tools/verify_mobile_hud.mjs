@@ -24,7 +24,10 @@ const layout=()=>page.evaluate(()=>{
 });
 const expectBar=async(ids,label)=>{const l=await layout();assert.deepEqual(l.bad,[],label+' layout '+JSON.stringify(l.bad));assert.deepEqual(l.shown,ids,label+' bar buttons');};
 const BASE=['m-run','m-home','m-cabin','m-walk','m-settings','btn-estop'];
+let cdp;const touch=(type,points)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints:points.map(([x,y],id)=>({x,y,id}))});
+const pinch=async(cx,cy,from,to)=>{await touch('touchStart',[[cx-from,cy],[cx+from,cy]]);for(let i=1;i<=8;i++){const d=from+(to-from)*i/8;await touch('touchMove',[[cx-d,cy],[cx+d,cy]]);await page.waitForTimeout(16);}await touch('touchEnd',[]);};
 try{
+cdp=await context.newCDPSession(page);
  await page.goto(`http://127.0.0.1:${server.address().port}/index.html`,{waitUntil:'networkidle'});
  await page.waitForFunction(()=>govHandles()?.ready&&document.querySelector('#loading.hide'));await page.waitForTimeout(1200);
  // 1) 화면 크기별 기본 배치 · 운행 띠
@@ -59,7 +62,22 @@ try{
  // 4) 비상정지 라벨 · 화면만 보기
  await page.tap('#btn-estop');assert.equal(await page.evaluate(()=>currentState),'ESTOP');assert.equal(await page.locator('#btn-estop span').textContent(),'정지 해제');
  await page.tap('#btn-estop');assert.equal(await page.locator('#btn-estop span').textContent(),'비상정지');
- await page.tap('#m-settings');await page.tap('#m-clean');
+ await page.tap('#m-settings');await page.waitForTimeout(300);
+ {const b=await page.locator('#dd-view').boundingBox(),x=b.x+b.width/2,y=b.y+20;
+  await touch('touchStart',[[x,y]]);for(let i=1;i<=6;i++){await touch('touchMove',[[x,y+i*25]]);await page.waitForTimeout(16);}await touch('touchEnd',[]);
+  await page.waitForTimeout(350);assert.equal(await page.evaluate(()=>document.getElementById('dd-view').classList.contains('open')),false,'drag down closes sheet');
+  await page.tap('#m-settings');await page.waitForTimeout(300);
+  await touch('touchStart',[[x,y]]);await touch('touchMove',[[x,y+30]]);await touch('touchEnd',[]);await page.waitForTimeout(300);
+  assert.equal(await page.evaluate(()=>document.getElementById('dd-view').classList.contains('open')&&!document.getElementById('dd-view').style.transform),true,'short drag snaps back');}
+ report.sheetDrag=true;
+ const barBefore=await page.locator('#m-bar').boundingBox();
+ await page.tap('#m-fullscreen');await page.waitForFunction(()=>!!document.fullscreenElement);await page.waitForTimeout(200);
+ const fsBar=await page.locator('#m-bar').boundingBox();
+ assert.ok(await page.locator('#m-fs-notice').isVisible()&&fsBar.y<=barBefore.y-80,'bar lifted above browser fullscreen notice');await shot('fullscreen-notice');
+ await page.waitForFunction(()=>document.getElementById('m-fs-notice').hidden,null,{timeout:8000});
+ assert.ok(Math.abs((await page.locator('#m-bar').boundingBox()).y-barBefore.y)<1,'bar returns after notice');
+ await page.tap('#m-fullscreen');await page.waitForFunction(()=>!document.fullscreenElement);report.fullscreenNotice=true;
+ await page.tap('#m-clean');
  assert.equal(await page.locator('#m-bar').evaluate(e=>getComputedStyle(e).visibility),'hidden');
  assert.equal(await page.locator('#mobile-visibility').isVisible(),true);await shot('clean');
  await page.tap('#mobile-visibility');assert.equal(await page.locator('#m-bar').evaluate(e=>getComputedStyle(e).visibility),'visible');report.estopClean=true;
@@ -67,7 +85,16 @@ try{
  await page.tap('#m-walk');await page.waitForFunction(()=>CharacterWalk.active&&MobileHUD.mode==='walk');await page.waitForTimeout(400);
  await expectBar(['m-walk-home','m-walk-exit','m-settings','btn-estop'],'walk');
  assert.equal(await page.locator('#walk-stick').isVisible(),true);await shot('walk');
- await page.tap('#m-walk-home');await page.tap('#m-walk-exit');await page.waitForFunction(()=>!CharacterWalk.active&&MobileHUD.mode==='base');report.walk=true;
+ // 두 손가락 벌리면 가까이(거리 감소), 오므리면 멀리. 한 손 조이스틱은 별도 요소.
+ const camDist=()=>page.evaluate(()=>camera.position.distanceTo(controls.target));
+ const d0=await camDist();await pinch(195,330,40,140);await page.waitForTimeout(150);
+ const zIn=await page.evaluate(()=>CharacterWalk.zoom),d1=await camDist();
+ await pinch(195,330,140,30);await page.waitForTimeout(150);
+ const zOut=await page.evaluate(()=>CharacterWalk.zoom),d2=await camDist();
+ assert.ok(zIn<.7&&d1<d0*.8&&zOut>zIn&&d2>d1,'walk pinch zoom '+JSON.stringify({d0,d1,d2,zIn,zOut}));
+ report.walkPinch={d0:+d0.toFixed(2),in:+d1.toFixed(2),out:+d2.toFixed(2)};await shot('walk-pinch');
+ await page.tap('#m-walk-home');assert.equal(await page.evaluate(()=>CharacterWalk.zoom),1);await page.tap('#m-walk-exit');
+ assert.equal(await page.evaluate(()=>camera.fov),50,'fov restored after walk');await page.waitForFunction(()=>!CharacterWalk.active&&MobileHUD.mode==='base');report.walk=true;
  // 6) 시연: 일시정지·시연 종료가 바에 있고, 시연의 클릭 차단 중에도 종료된다
  await page.evaluate(()=>PhotoEyeDemo.start());await page.waitForFunction(()=>PhotoEyeDemo.active&&MobileHUD.mode==='demo');await page.waitForTimeout(2500);
  await expectBar(['demo-pause','m-demo-exit','btn-estop'],'demo');
@@ -76,6 +103,12 @@ try{
  await page.tap('#demo-pause');assert.equal(await page.evaluate(()=>DemoPause.paused),false);
  await page.tap('#m-demo-exit');await page.waitForFunction(()=>!PhotoEyeDemo.active&&MobileHUD.mode==='base');
  assert.equal(await page.locator('#photo-eye-panel').isVisible(),false);await expectBar(BASE,'after demo');report.demoExit=true;
+ // 6b) 진한 시연 설명 카드는 모바일에서 반투명
+ await page.waitForFunction(()=>!moving&&!CarDoor.state.busy);
+ await page.evaluate(()=>ManualRescueDemo.start());await page.waitForFunction(()=>!document.getElementById('manual-rescue-panel').hidden,null,{timeout:30000});await page.waitForTimeout(2500);
+ const alpha=await page.evaluate(()=>{const m=getComputedStyle(document.getElementById('manual-rescue-panel')).backgroundColor.match(/[\d.]+/g);return m.length>3?+m[3]:1;});
+ assert.ok(alpha<=.45,'translucent demo card '+alpha);await shot('manual-rescue-card');
+ await page.tap('#m-demo-exit');await page.waitForFunction(()=>!ManualRescueDemo.active,null,{timeout:90000});report.translucentCard=alpha;
  // 7) 과속 시연: 낙하 중 종료 비활성 → 트립 뒤 고장 복귀가 바에 나타나 정상 복귀
  await page.waitForFunction(()=>!moving&&!CarDoor.state.busy&&!doorOpen);await page.waitForTimeout(500);
  await page.evaluate(()=>startOverspeedFault(document.getElementById('btn-overspeed')));

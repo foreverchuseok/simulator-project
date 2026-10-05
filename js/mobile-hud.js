@@ -143,9 +143,57 @@ const MobileHUD = (() => {
       if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
       else document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
     });
-    document.addEventListener('fullscreenchange', paintFull); paintFull();
+    // 전체 화면에 들어가면 브라우저가 화면 아래에 「Esc 키를 누르세요」 안내를 띄워 하단 바를 가린다(웹에서 끌 수 없음).
+    // 잠시 하단 조작부를 그 위로 올리고, 위쪽에 이유를 알려 준다(사용자 2026-10-05 영상).
+    const notice = document.createElement('div');
+    notice.id = 'm-fs-notice'; notice.hidden = true; notice.setAttribute('role', 'status');
+    notice.textContent = '아래 브라우저 안내는 옆으로 밀거나 잠시 기다리면 사라집니다. 그동안 메뉴를 위로 올려 둡니다.';
+    $('hud').append(notice);
+    let noticeTimer = 0;
+    const endNotice = () => { clearTimeout(noticeTimer); notice.hidden = true; document.body.classList.remove('m-fs-notice'); };
+    notice.addEventListener('click', endNotice);
+    document.addEventListener('fullscreenchange', () => {
+      paintFull();
+      if (!document.fullscreenElement || !media.matches) { endNotice(); return; }
+      document.body.classList.add('m-fs-notice'); notice.hidden = false;
+      clearTimeout(noticeTimer); noticeTimer = setTimeout(endNotice, 6000);
+    });
+    paintFull();
     $('m-clean').addEventListener('click', () => { closeAllMenus(); $('mobile-visibility').click(); });
     $('m-reload').addEventListener('click', () => location.replace(location.pathname));
+  }
+
+  // 시트(설정·보기)를 손가락으로 끌어내려 닫는다. 머리 부분은 언제나, 본문은 맨 위까지 스크롤된 상태에서만 끌린다.
+  function bindSheetDrag(sheet) {
+    let start = null, dy = 0, dragging = false;
+    sheet.addEventListener('touchstart', e => {
+      if (!media.matches || e.touches.length !== 1 || !sheet.classList.contains('open')) return;
+      const t = e.touches[0], head = t.clientY - sheet.getBoundingClientRect().top < 64;
+      if (!head && sheet.scrollTop > 0) return;
+      start = { x: t.clientX, y: t.clientY, time: performance.now(), head }; dy = 0; dragging = false;
+    }, { passive: true });
+    sheet.addEventListener('touchmove', e => {
+      if (!start) return;
+      if (e.touches.length !== 1) { start = null; return; }
+      const t = e.touches[0], d = t.clientY - start.y, dx = t.clientX - start.x;
+      if (!dragging) {
+        if (d > 8 && d > Math.abs(dx) && (start.head || sheet.scrollTop <= 0)) { dragging = true; sheet.style.transition = 'none'; }
+        else { if (Math.abs(dx) > 8 || d < -8) start = null; return; }
+      }
+      e.preventDefault();
+      dy = Math.max(0, d); sheet.style.transform = `translateY(${dy}px)`;
+    }, { passive: false });
+    const end = () => {
+      if (!start) return;
+      const speed = dy / Math.max(1, performance.now() - start.time);
+      start = null;
+      if (!dragging) return;
+      dragging = false; sheet.style.transition = '';
+      if (dy > 90 || speed > 0.6) closeAllMenus();
+      sheet.style.transform = '';
+    };
+    sheet.addEventListener('touchend', end);
+    sheet.addEventListener('touchcancel', end);
   }
 
   function init() {
@@ -181,6 +229,7 @@ const MobileHUD = (() => {
     settings.setAttribute('aria-controls', 'dd-view');
     bar.insertAdjacentHTML('beforeend', '<span class="m-slot-estop-slot"></span>');
     buildScreenSection();
+    document.querySelectorAll('#hud .sheet').forEach(bindSheetDrag);
     // 다른 시트를 열면 운행 띠를 닫아 겹치지 않게 한다.
     document.querySelectorAll('[data-menu]').forEach(b => b.addEventListener('click', () => setRun(false)));
     media.addEventListener('change', sync);

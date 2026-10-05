@@ -304,3 +304,31 @@ body.m-hud #ucm-exit { top: calc(var(--edge-t) + 60px); }
   body.m-hud #inspection-drive { left: auto; width: min(430px, calc(100vw - var(--m-right) - var(--edge))); }
   body.m-hud #ucm-exit { top: var(--edge-t); right: var(--m-right); }
 }
+
+/* ── 전체 화면 직후: 브라우저 「Esc」 안내(화면 아래)가 사라질 때까지 하단 조작부를 그 위로 올린다 ── */
+body.m-hud.m-fs-notice { --edge-b: calc(max(10px, env(safe-area-inset-bottom)) + 84px); }
+#m-fs-notice[hidden], body:not(.m-hud) #m-fs-notice { display: none; }
+body.m-hud #m-fs-notice {
+  position: absolute;
+  left: var(--edge);
+  right: var(--m-right);
+  top: calc(var(--edge-t) + 60px);
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(13, 20, 33, 0.88);
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  color: #e0f2fe;
+  font: 600 12.5px/1.5 var(--ui-font);
+  word-break: keep-all;
+}
+
+/* ── 시연 설명 카드: 모바일은 반투명 — 뒤 장면이 비치고, 글씨는 그림자로 읽힌다(사용자 2026-10-05 영상) ── */
+body.m-hud #manual-rescue-panel, body.m-hud #ard-panel, body.m-hud #relay-demo-panel, body.m-hud #interlock-demo-panel,
+body.m-hud #ascent-stage, body.m-hud #brake-compare-stage, body.m-hud #ovs-stage, body.m-hud #ucm-stage, body.m-hud #buffer-stage {
+  background: rgba(8, 18, 28, 0.4) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 8px rgba(0, 0, 0, 0.7);
+}
