@@ -604,7 +604,7 @@ function updateManualCameraNear() {
         estop=false;
         const stop=document.getElementById('btn-estop');
         stop.classList.remove('armed');stop.setAttribute('aria-pressed','false');stop.setAttribute('aria-label','비상정지');
-        stop.querySelector('span').textContent=portraitHUD?.isPortrait()?'STOP':'정지';
+        stop.querySelector('span').textContent=estopLabel(!!portraitHUD?.isPortrait(),false);
         HallManual.resetAll();
         await new Promise(resolve=>CarDoor.close(resolve));
         doorOpen=false;currentState=ELEVATOR_STATE.IDLE;
@@ -1137,17 +1137,18 @@ function updateManualCameraNear() {
       document.querySelectorAll('[data-menu].active').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-expanded', 'false'); });
     }
 
-    // 세로 폰은 기존 컨트롤 자체를 옮긴다. ID/이벤트/고장 복귀 상태를 복제하지 않는다.
+    // 모바일(세로 폰·가로 폰) 화면만 보기 토글과 비상정지 라벨. 하단 바 배치는 js/mobile-hud.js.
     let portraitHUD = null;
+    const estopLabel = (mobile, on) => mobile ? (on ? '정지 해제' : '비상정지') : (on ? '해제' : '정지');
     function bindPortraitHUD() {
-      const media=matchMedia('(max-width: 600px) and (orientation: portrait)');
+      const media=matchMedia('(max-width: 600px) and (orientation: portrait), (max-height: 500px) and (orientation: landscape)');
       const hud=document.getElementById('hud'),visibility=document.getElementById('mobile-visibility');
       const sync=()=>{
         insHold=0;insStop();
         hud.classList.remove('tools-hidden');document.body.classList.remove('portrait-tools-hidden');
         visibility.setAttribute('aria-pressed','false');visibility.setAttribute('aria-label','도구 숨기기');visibility.title='도구 숨기기';
         document.getElementById('mobile-eye-slash').style.display='';
-        document.querySelector('#btn-estop span').textContent=media.matches?(estop?'RESET':'STOP'):(estop?'해제':'정지');
+        document.querySelector('#btn-estop span').textContent=estopLabel(media.matches,estop);
       };
       visibility.addEventListener('click',()=>{
         const hide=!hud.classList.contains('tools-hidden');closeAllMenus();
@@ -1269,7 +1270,7 @@ function updateManualCameraNear() {
         estopBtn.classList.toggle('armed', estop);
         estopBtn.setAttribute('aria-pressed', String(estop));
         estopBtn.setAttribute('aria-label', estop ? '비상정지 해제' : '비상정지');
-        estopBtn.querySelector('span').textContent = portraitHUD?.isPortrait() ? (estop ? 'RESET' : 'STOP') : (estop ? '해제' : '정지');
+        estopBtn.querySelector('span').textContent = estopLabel(!!portraitHUD?.isPortrait(), estop);
       };
       estopBtn.addEventListener('click', e => {
         if (ManualRescueDemo.active) { ManualRescueDemo.reset(); return; }
@@ -1446,14 +1447,16 @@ function updateManualCameraNear() {
     }
 
     function overviewCameraPose() {
-      if (!matchMedia('(max-width: 600px) and (orientation: portrait)').matches) {
+      const portrait = matchMedia('(max-width: 600px) and (orientation: portrait)').matches;
+      const landscapePhone = matchMedia('(max-height: 500px) and (orientation: landscape)').matches;
+      if (!portrait && !landscapePhone) {
         const y = Y0 + TOTAL_H * 0.4;
         return { position: [18, y, 21], target: [0, y, 0] };
       }
-      // 기계실 지붕과 피트를 상태 카드 아래의 관찰 공간 안에 함께 담는다.
+      // 기계실 지붕과 피트를 상태 카드와 하단 바(가로 폰은 상태 카드만) 사이의 관찰 공간 안에 함께 담는다.
       const height = TOTAL_H + S.MR_H + 0.6;
       const y = Y0 + height * 0.5;
-      const distance = Math.max(Math.hypot(18, 21), height / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 0.68));
+      const distance = Math.max(Math.hypot(18, 21), height / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * (portrait ? 0.68 : 0.78)));
       const scale = distance / Math.hypot(18, 21);
       return { position: [18 * scale, y, 21 * scale], target: [0, y, 0] };
     }

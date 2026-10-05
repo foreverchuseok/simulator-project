@@ -59,10 +59,11 @@ try{
   assert.match(await page.locator('#interlock-demo-message').innerText(),/점검운전/);
   assert.equal(await page.evaluate(()=>insMode&&!InterlockDemo.active),true);
   await page.keyboard.press('Escape');await page.evaluate(()=>setInspectionMode(false));
-  await page.tap('#btn-open');await page.waitForFunction(()=>currentState===ELEVATOR_STATE.DOOR_OPEN);
+  await page.tap('#m-run');await page.tap('#btn-open');await page.waitForFunction(()=>currentState===ELEVATOR_STATE.DOOR_OPEN);
   await page.evaluate(()=>clearTimeout(autoTimer));await page.tap('#interlock-action-1');
   assert.match(await page.locator('#interlock-demo-message').innerText(),/문이 열려/);
   assert.equal(await page.evaluate(()=>doorOpen&&!InterlockDemo.active),true);
+  if(!(await page.locator('#btn-close').isVisible()))await page.tap('#m-run');
   await page.tap('#btn-close');await page.waitForFunction(()=>!doorOpen&&CarDoor.secured());
   await page.tap('#interlock-action-1');await page.waitForFunction(()=>InterlockDemo.phase==='unlock');
   assert.equal(await page.locator('#interlock-demo-message').isVisible(),false);

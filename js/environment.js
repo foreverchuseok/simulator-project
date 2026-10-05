@@ -3,6 +3,7 @@
     // Cache only the main view; the overspeed inset temporarily hides other meshes.
     function installShadowCache(renderScene, mainCamera, webglRenderer) {
       const values = [];
+      const checkedMaterials = new Set();
       let cursor = 0, previousLength = -1, dirty = true;
       const previousHook = renderScene.onBeforeRender;
       function remember(value) {
@@ -17,7 +18,11 @@
         remember(attribute?.isInterleavedBufferAttribute ? attribute.data.version : attribute?.version);
       }
       function rememberMaterial(material) {
-        remember(material); remember(material.version); remember(material.visible);
+        // 각 메시의 재질 교체는 추적하되, 공유 재질의 속성은 프레임당 한 번만 검사한다.
+        remember(material);
+        if (checkedMaterials.has(material)) return;
+        checkedMaterials.add(material);
+        remember(material.version); remember(material.visible);
         remember(material.side); remember(material.shadowSide); remember(material.alphaTest);
         remember(material.map); remember(material.map?.version);
         remember(material.alphaMap); remember(material.alphaMap?.version);
@@ -62,6 +67,7 @@
         previousHook.call(this, r, s, c, target);
         if (c !== mainCamera || !r.shadowMap.enabled || r.shadowMap.autoUpdate) return;
         cursor = 0; dirty = false;
+        checkedMaterials.clear();
         remember(r.shadowMap.type); remember(mainCamera.layers.mask);
         renderScene.traverseVisible(visit);
         if (cursor !== previousLength) dirty = true;
@@ -2315,8 +2321,27 @@
       _tactileMats = [side, side, top, side, side, side];
       return _tactileMats;
     }
+    const tactileGeometries = new Map();
+    function getTactileGeometry(size) {
+      if (tactileGeometries.has(size)) return tactileGeometries.get(size);
+      const geometry = new THREE.BoxGeometry(size, 0.006, size);
+      // 같은 옆면 재질의 다섯 면을 한 번에 그린다. 상면 UV·법선·삼각형은 그대로다.
+      const indices = [], groups = geometry.groups.slice(), source = geometry.index;
+      geometry.clearGroups();
+      for (const materialIndex of [0, 2]) {
+        const start = indices.length;
+        for (const group of groups) {
+          if ((group.materialIndex === 2 ? 2 : 0) !== materialIndex) continue;
+          for (let i = group.start; i < group.start + group.count; i++) indices.push(source.getX(i));
+        }
+        geometry.addGroup(start, indices.length - start, materialIndex);
+      }
+      geometry.setIndex(indices);
+      tactileGeometries.set(size, geometry);
+      return geometry;
+    }
     function addTactileBlock(parent, x, y, z, size = 0.3) {
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(size, 0.006, size), getTactileFaceMats());
+      const mesh = new THREE.Mesh(getTactileGeometry(size), getTactileFaceMats());
       mesh.position.set(x, y, z);
       parent.add(mesh);
       return mesh;
@@ -2324,9 +2349,12 @@
 
     function addTactileStrip(parent, cx, y, z, count = 4, size = 0.3) {
       const startX = cx - (count - 1) * size / 2;
+      const strip = new THREE.InstancedMesh(getTactileGeometry(size), getTactileFaceMats(), count);
+      const matrix = new THREE.Matrix4();
       for (let k = 0; k < count; k++) {
-        addTactileBlock(parent, startX + k * size, y, z, size);
+        strip.setMatrixAt(k, matrix.makeTranslation(startX + k * size, y, z));
       }
+      parent.add(strip);
     }
 
     /* ── 1층 진입 계단·직선 경사로 배치 계약 ──────────────────────────
@@ -2575,6 +2603,7 @@
       );
       approachGrp.add(new THREE.Mesh(new THREE.TubeGeometry(leftRailCurve, 10, RAIL_TOP_R, 8, false), ssRailMat));
 
+      batchStaticChildren(approachGrp, 'lobbyApproach');
       parent.add(approachGrp);
     }
 
@@ -2855,10 +2884,10 @@
 
     // 명시한 고정 조립체에만 적용한다. 이름·userData·자식이 있는 부품은 개별 유지한다.
     // 부모 로컬 좌표로 묶으므로 카 이동 및 층별 그룹의 표시/숨김을 그대로 따른다.
-    function batchStaticChildren(parent, label) {
+    function batchStaticChildren(parent, label, excluded = []) {
       const buckets = new Map();
       for (const mesh of parent.children) {
-        if (!mesh.isMesh || mesh.isSkinnedMesh || mesh.isInstancedMesh || mesh.name ||
+        if (excluded.includes(mesh) || !mesh.isMesh || mesh.isSkinnedMesh || mesh.isInstancedMesh || mesh.name ||
             mesh.children.length || Object.keys(mesh.userData).length || !mesh.visible ||
             Array.isArray(mesh.material) || mesh.material.transparent || mesh.material.opacity !== 1 ||
             Object.keys(mesh.geometry.morphAttributes).length || mesh.geometry.drawRange.start !== 0 ||

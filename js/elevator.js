@@ -1253,6 +1253,8 @@
         const latchSpec = {}; // Populated from Blender GLB extras by HallInterlock.
 
         hcGrp.position.set(0, fy, trackCtrZ);
+        // 고정 브라켓·레일·커버만 묶는다. 길이가 변하는 주 스프링은 개별 메시로 유지한다.
+        batchStaticChildren(hcGrp, 'headerFixed', [sprCoil]);
         parent.add(hcGrp);
 
         return {
@@ -1450,6 +1452,7 @@
               new THREE.Vector3(RB_OFF+sign*0.081,y,END_Z),new THREE.Vector3(entry,y,END_Z)];
             const lead=makeRopeTube(end,points);lead.name='relayTerminalLead';
             lead.userData.start=points[0].toArray();lead.userData.end=points.at(-1).toArray();
+            batchStaticChildren(end, 'relayTerminalFasteners');
           }
           grp.userData.relayTerminalType='opposed-threaded-studs';
 

@@ -10,7 +10,7 @@ const root=process.cwd(),out=path.join(root,'.shot-render-performance');fs.mkdir
 const server=http.createServer((req,res)=>{
  const file=path.resolve(root,'.'+decodeURIComponent(new URL(req.url,'http://localhost').pathname));
  if(!file.startsWith(root+path.sep)||!fs.existsSync(file)||!fs.statSync(file).isFile()){res.writeHead(404).end();return;}
- res.setHeader('Content-Type',({'.html':'text/html','.js':'text/javascript','.glb':'model/gltf-binary','.png':'image/png'})[path.extname(file)]||'application/octet-stream');fs.createReadStream(file).pipe(res);
+ res.setHeader('Content-Type',({'.html':'text/html','.js':'text/javascript','.css':'text/css','.glb':'model/gltf-binary','.png':'image/png'})[path.extname(file)]||'application/octet-stream');fs.createReadStream(file).pipe(res);
 });
 await new Promise(r=>server.listen(0,'127.0.0.1',r));let browser;
 const errors=[];
@@ -51,6 +51,14 @@ try{
   compare('parent-hidden',()=>{railGrp.visible=false;},()=>{railGrp.visible=visible;});
   const g=new THREE.BoxGeometry(.2,.2,.2),m=M.ss(),mesh=new THREE.Mesh(g,m);mesh.castShadow=true;
   compare('late-model-added',()=>scene.add(mesh),()=>scene.remove(mesh));g.dispose();m.dispose();
+  // 공유 재질도 속성 변경과 메시별 재질 교체를 다음 렌더에서 반드시 감지해야 한다.
+  const sharedMesh=carGrp.getObjectByName('staticBatch_carPanelBolts_0');
+  const shared=sharedMesh.material,other=shared.clone(),side=shared.side,shown=shared.visible,alpha=shared.alphaTest;
+  compare('shared-material-side',()=>{shared.side=THREE.DoubleSide;},()=>{shared.side=side;});
+  compare('shared-material-visible',()=>{shared.visible=false;},()=>{shared.visible=shown;});
+  compare('shared-material-alpha',()=>{shared.alphaTest=.4;},()=>{shared.alphaTest=alpha;});
+  compare('shared-material-replaced',()=>{sharedMesh.material=other;},()=>{sharedMesh.material=shared;});
+  other.dispose();
   const rope=ropeObjs[0].line.geometry.attributes.position,oldX=rope.getX(0);
   compare('geometry-buffer',()=>{rope.setX(0,oldX+.1);rope.needsUpdate=true;},()=>{rope.setX(0,oldX);rope.needsUpdate=true;});
   const sx=sun.position.x;

@@ -7,7 +7,7 @@ const server=http.createServer((req,res)=>{
   const rel=decodeURIComponent(req.url.split('?')[0]);
   const file=path.resolve(root,'.'+(rel==='/'?'/index.html':rel));
   if(!file.startsWith(root+path.sep)||!fs.existsSync(file)||fs.statSync(file).isDirectory()){res.writeHead(404).end();return;}
-  res.setHeader('Content-Type',({'.html':'text/html','.js':'text/javascript','.png':'image/png','.jpg':'image/jpeg','.glb':'model/gltf-binary'})[path.extname(file)]||'application/octet-stream');
+  res.setHeader('Content-Type',({'.html':'text/html','.css':'text/css','.js':'text/javascript','.png':'image/png','.jpg':'image/jpeg','.glb':'model/gltf-binary'})[path.extname(file)]||'application/octet-stream');
   fs.createReadStream(file).pipe(res);
 });
 await new Promise(r=>server.listen(8896,'127.0.0.1',r));

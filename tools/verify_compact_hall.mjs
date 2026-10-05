@@ -48,8 +48,9 @@ try {
   await page.setViewportSize({width,height:844});await page.evaluate(()=>{HallManual.select(2);HallManual.observe();HallManual.dismiss();});
   await page.tap('#hall-action-2');await page.tap('#hall-half');await page.waitForFunction(()=>HallManual.phase==='holding');
   assert.equal(await page.evaluate(()=>insMode),true);
-  const bounds=await page.evaluate(()=>Object.fromEntries(['statusbar','hall-panel'].map(id=>{const r=document.getElementById(id).getBoundingClientRect();return [id,{x:r.x,right:r.right,width:r.width,bottom:r.bottom}];})));
-  assert.ok(bounds.statusbar.width<=180&&bounds['hall-panel'].width<=160);
+  const bounds=await page.evaluate(()=>Object.fromEntries(['statusbar','hall-panel'].map(id=>{const r=document.getElementById(id).getBoundingClientRect();return [id,{x:r.x,y:r.y,right:r.right,width:r.width,bottom:r.bottom}];})));
+  // 모바일 개편(js/mobile-hud.js): 상태 카드는 상단 전체 폭, 점검 패널은 그 아래 왼쪽 좁은 열.
+  assert.ok(bounds.statusbar.right<=width&&bounds['hall-panel'].width<=160&&bounds['hall-panel'].y>=bounds.statusbar.bottom);
   assert.ok(bounds['hall-panel'].right<=width&&bounds['hall-panel'].bottom<=844);
   await page.screenshot({path:`${out}/compact-${width}.png`});
   await page.tap('#hall-dismiss');assert.equal(await page.locator('#hall-panel').isHidden(),true);

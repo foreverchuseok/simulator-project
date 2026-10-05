@@ -6,7 +6,7 @@ const root=process.cwd();
 const server=http.createServer((req,res)=>{
  const file=path.resolve(root,'.'+new URL(req.url,'http://localhost').pathname);
  if(!file.startsWith(root+path.sep)||!fs.existsSync(file)||!fs.statSync(file).isFile()){res.writeHead(404).end();return;}
- res.setHeader('Content-Type',({'.html':'text/html','.js':'text/javascript','.glb':'model/gltf-binary'})[path.extname(file)]||'application/octet-stream');fs.createReadStream(file).pipe(res);
+ res.setHeader('Content-Type',({'.html':'text/html','.css':'text/css','.js':'text/javascript','.glb':'model/gltf-binary'})[path.extname(file)]||'application/octet-stream');fs.createReadStream(file).pipe(res);
 });
 await new Promise(r=>server.listen(0,'127.0.0.1',r));
 let browser;
@@ -66,7 +66,7 @@ try {
  await page.setViewportSize({width:390,height:844});
  await page.evaluate(()=>{const y=carGrp.position.y,z=CAR_CTR_Z;camera.fov=70;camera.updateProjectionMatrix();camera.position.set(.55,y-S.CAR_H/2+1.4,z+S.CAR_D/2-.15);controls.target.set(-.25,y-S.CAR_H/2+.85,z-S.CAR_D/2+.2);controls.update();});
  await page.screenshot({path:path.join(root,'.shot-handrail-mobile.png')});
- await page.tap('[data-f="1"]');await page.waitForFunction(()=>curFloor===1&&!moving);await page.waitForFunction(()=>doorOpen&&!CarDoor.state.busy);
+ await page.tap('#m-run');await page.tap('[data-f="1"]');await page.waitForFunction(()=>curFloor===1&&!moving);await page.waitForFunction(()=>doorOpen&&!CarDoor.state.busy);
  checks.push({name:'touch floor call and door opening',pass:await page.evaluate(()=>curFloor===1&&doorOpen&&!estop)});
  checks.push({name:'runtime errors',pass:errors.length===0,detail:errors});
  console.log(JSON.stringify(checks,null,2));

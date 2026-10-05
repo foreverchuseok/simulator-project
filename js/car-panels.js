@@ -44,6 +44,7 @@ function buildCarPanels(parent) {
           bolt.rotation.x=Math.PI/2;
         }
       }
+      batchStaticChildren(panel,'carPanelBolts');
     }
     for(const y of [bottom+0.025,top-0.025]) box('mountingChannel',length,0.05,0.026,trim,0,y,0.01,group);
     if(glazed) {

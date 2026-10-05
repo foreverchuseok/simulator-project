@@ -10,7 +10,7 @@ const root=process.cwd(),out=path.join(root,'.shot-render-performance');fs.mkdir
 const server=http.createServer((req,res)=>{
  const file=path.resolve(root,'.'+decodeURIComponent(new URL(req.url,'http://localhost').pathname));
  if(!file.startsWith(root+path.sep)||!fs.existsSync(file)||!fs.statSync(file).isFile()){res.writeHead(404).end();return;}
- res.setHeader('Content-Type',({'.html':'text/html','.js':'text/javascript','.glb':'model/gltf-binary','.png':'image/png'})[path.extname(file)]||'application/octet-stream');fs.createReadStream(file).pipe(res);
+ res.setHeader('Content-Type',({'.html':'text/html','.js':'text/javascript','.css':'text/css','.glb':'model/gltf-binary','.png':'image/png'})[path.extname(file)]||'application/octet-stream');fs.createReadStream(file).pipe(res);
 });
 await new Promise(r=>server.listen(0,'127.0.0.1',r));let browser;
 const errors=[];
@@ -24,8 +24,8 @@ try{
   const probe=`
     window.staticBatchSources=[];
     const batchOriginal=batchStaticChildren;
-    batchStaticChildren=function(parent,label){
-      const children=[...parent.children];batchOriginal(parent,label);
+    batchStaticChildren=function(parent,label,...options){
+      const children=[...parent.children];batchOriginal(parent,label,...options);
       const removed=children.filter(m=>m.parent!==parent);
       const merged=parent.children.filter(m=>!children.includes(m));
       staticBatchSources.push({parent,label,removed,merged,retained:children.filter(m=>m.parent===parent)});
@@ -72,9 +72,21 @@ try{
  });
  assert.ok(result.maxPositionError<1e-6);assert.ok(result.maxNormalError<1e-6);assert.equal(result.maxUVError,0);assert.equal(result.retained,true);
  assert.equal(result.counts.sillSupport.groups,20);assert.equal(result.counts.jamb.groups,4);assert.equal(result.counts.carFrame.groups,1);
+ assert.equal(result.counts.carPanelBolts.groups,9);
+ assert.equal(result.counts.headerFixed.groups,4);
+ assert.equal(result.counts.relayTerminalFasteners.groups,8);
+ assert.equal(result.counts.lobbyApproach.groups,1);
+ assert.ok(await page.evaluate(()=>hatchDoors.every(h=>h.link.closer.coil.parent && h.link.closer.opposite.coil.parent)), 'Moving springs must remain attached');
  await page.waitForFunction(()=>getComputedStyle(document.getElementById('loading')).opacity==='0');
- for(const view of ['car','landing']){
+ for(const view of ['approach','car','landing']){
   await page.evaluate(view=>{
+   if(view==='approach'){
+    const approach=scene.getObjectByName('lobbyApproachRampAndStairs');
+    scene.children.forEach(o=>{if(!o.isLight)o.visible=o===approach.parent;});
+    controls.enableDamping=false;controls.minDistance=.1;
+    controls.target.set(1,lobbyApproachLayout().slabY,lobbyApproachLayout().lobbyFrontZ+1);
+    camera.position.copy(controls.target).add(new THREE.Vector3(8,6,10));controls.update();return;
+   }
    scene.children.forEach(o=>{if(!o.isLight)o.visible=view==='car'?o===carGrp:o===sillSupportGrp;});
    controls.enableDamping=false;controls.minDistance=.1;
    const y=carGrp.position.y;controls.target.set(0,view==='car'?y:FLOOR_Y[0]+1.2,view==='car'?CAR_CTR_Z:FRONT_WALL_INNER_Z);

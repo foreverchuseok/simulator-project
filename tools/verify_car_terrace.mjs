@@ -55,7 +55,7 @@ try {
   await view('front');await view('ceiling');await view('glass');
   await page.setViewportSize({width:390,height:844});await view('mobile');
   await page.evaluate(()=>{targetSpeed=240;gsap.ticker.lagSmoothing(0);});
-  await page.tap('[data-f="1"]');await page.waitForFunction(()=>curFloor===1&&!moving&&doorOpen&&!CarDoor.state.busy);
+  await page.tap('#m-run');await page.tap('[data-f="1"]');await page.waitForFunction(()=>curFloor===1&&!moving&&doorOpen&&!CarDoor.state.busy);
   assert.ok(await page.evaluate(()=>!estop&&scene.getObjectByName('terraceCeiling').userData.ready));
   await page.screenshot({path:`${out}/mobile-open.png`});
   await page.setViewportSize({width:1440,height:1000});await view('front-open');

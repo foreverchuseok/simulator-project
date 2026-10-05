@@ -33,7 +33,9 @@ try {
   await page.goto(process.env.SIMULATOR_URL || 'http://127.0.0.1:5500/index.html', { waitUntil: 'networkidle' });
   await page.waitForFunction(() => typeof CharacterWalk !== 'undefined' && CharacterWalk.actors.length === 0 &&
     CarDoor.state?.ready && hatchDoors.every(h => h.interlock?.ready) && document.getElementById('loading').classList.contains('hide'));
-  const tap = async selector => mobile ? page.locator(selector).tap() : page.locator(selector).click();
+  // 모바일은 체험 시작·시작 위치·종료가 하단 바(js/mobile-hud.js)에 있다.
+  const MOBILE_IDS = { '#walk-toggle': '#m-walk', '#walk-home': '#m-walk-home', '#walk-exit': '#m-walk-exit' };
+  const tap = async selector => mobile ? page.locator(MOBILE_IDS[selector] || selector).tap() : page.locator(selector).click();
   check('no walker allocated before entering', await page.evaluate(() => !scene.getObjectByName('SeunggomWalker')));
   check('garden animals restored to static batch', await page.evaluate(() => !!scene.getObjectByName('meadowDecor') && !scene.getObjectByName('meadowAnimal_0')));
   await page.evaluate(() => { window.roofHome={p:Mascot.root.position.toArray(),visible:Mascot.root.visible}; });

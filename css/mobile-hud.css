@@ -1,0 +1,306 @@
+/* 모바일 HUD (js/mobile-hud.js) — body.m-hud 는 세로 폰 ≤600px · 가로 폰 높이 ≤500px 에서만 붙는다. PC 화면은 desktop-hud.css.
+   ▪ 하단 바 한 줄(가로 폰은 오른쪽 세로 바) + 필요할 때 여는 운행 띠·설정 시트.
+   ▪ 시연 자막·설명 카드는 모두 바 바로 위(--m-above)에 맞춘다. */
+#m-bar[hidden], .m-only { display: none; }
+
+body.m-hud {
+  --edge: max(10px, env(safe-area-inset-left));
+  --edge-r: max(10px, env(safe-area-inset-right));
+  --edge-t: max(10px, env(safe-area-inset-top));
+  --edge-b: max(10px, env(safe-area-inset-bottom));
+  --m-bar-h: 62px;
+  --m-right: var(--edge-r);
+  --m-above: calc(var(--edge-b) + var(--m-bar-h) + 8px);
+  --caption-bottom: calc(var(--m-above) + 4px);
+  --m-card-bottom: var(--m-above);   /* 시연 카드·점검 ▲▼: 운행 띠가 열리면 그 위로 */
+}
+body.m-hud .m-only { display: block; }
+
+/* ── 하단 바 ── */
+body.m-hud #m-bar {
+  position: absolute;
+  left: var(--edge);
+  right: var(--edge-r);
+  bottom: var(--edge-b);
+  height: var(--m-bar-h);
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  padding: 5px;
+  border-radius: 20px;
+  background: rgba(13, 20, 33, 0.9);
+}
+.m-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 0 2px;
+  border: none;
+  border-radius: 14px;
+  background: transparent;
+  color: #e2e8f0;
+  font: 600 11px/1.15 var(--ui-font);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.m-btn svg { width: 22px; height: 22px; flex: none; }
+.m-btn span { overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.m-btn:active:not(:disabled) { background: var(--ui-fill-2); }
+.m-btn.active, .m-btn[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.m-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.m-btn[hidden] { display: none !important; }
+
+@media (max-width: 360px) and (orientation: portrait) { body.m-hud #m-bar { gap: 3px; padding: 4px; } body.m-hud #m-bar #btn-estop { flex-grow: 1; } .m-btn { padding: 0; font-size: 10px; letter-spacing: -0.04em; } body.m-hud #m-bar #btn-estop span { font-size: 10px; letter-spacing: -0.05em; } }
+
+/* 상황별 버튼 — data-modes 에 현재 모드가 없으면 숨긴다 */
+body[data-m-mode="base"] #m-bar .m-btn:not([data-modes~="base"]),
+body[data-m-mode="walk"] #m-bar .m-btn:not([data-modes~="walk"]),
+body[data-m-mode="demo"] #m-bar .m-btn:not([data-modes~="demo"]) { display: none; }
+body[data-m-mode="demo"] #m-demo-exit { flex-grow: 1.5; background: #f1f5f9; color: #0f172a; font-size: 13px; }
+body[data-m-mode="demo"] #m-demo-exit:disabled { background: var(--ui-fill); color: #e2e8f0; }
+body[data-m-mode="walk"] #m-walk-exit { background: #2f5d3a; color: #ecfdf3; }
+
+/* 바로 옮긴 원본: 비상정지 · 시연 일시정지 · 고장 복귀 */
+body.m-hud #m-bar #btn-estop {
+  position: static;
+  order: 0;
+  flex: 1.15 1 0;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  margin: 0;
+  gap: 3px;
+  border-radius: 14px;
+  box-shadow: none;
+}
+body.m-hud #m-bar #btn-estop svg { width: 18px; height: 18px; }
+body.m-hud #m-bar #btn-estop span { display: block; font-size: 11px; font-weight: 800; white-space: nowrap; }
+body.m-hud #m-bar #demo-pause {
+  position: static !important;
+  left: auto !important;
+  top: auto !important;
+  transform: none !important;
+  flex: 1.5 1 0;
+  min-width: 0;
+  padding: 0 6px !important;
+  border-radius: 14px !important;
+  box-shadow: none !important;
+  font: 800 13px/1.1 var(--ui-font) !important;
+  white-space: nowrap;
+}
+body.m-hud #m-bar #demo-pause[hidden] { display: none; }
+body.m-hud #m-bar #fault-reset {
+  position: static;
+  flex: 1.7 1 0;
+  min-width: 0;
+  height: auto;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 8px;
+  border-radius: 14px;
+  font-size: 12.5px;
+  max-width: none;
+}
+body.m-hud #m-bar #fault-reset[hidden] { display: none; }
+body.m-hud #m-bar #fault-reset small { display: none; }
+
+/* ── 상단 상태 카드: 화면 폭 전체, 상태 문구에 자리를 준다 ── */
+body.m-hud #statusbar {
+  left: var(--edge);
+  right: var(--m-right);
+  top: var(--edge-t);
+  width: auto;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px 6px 10px;
+  border-radius: 16px;
+  background: rgba(13, 20, 33, 0.88);
+}
+body.m-hud #statusbar .st-floor { min-width: 46px; }
+body.m-hud #statusbar #v-floor { font-size: 26px; }
+body.m-hud #statusbar .st-meta { flex: 1; min-width: 0; flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; overflow: hidden; }
+body.m-hud #statusbar #v-dir { flex: 0 1 auto; min-width: 0; max-width: none; padding: 5px 9px; font-size: 12px; }
+body.m-hud #statusbar #v-spd { font-size: 12px; }
+body.m-hud #rail, body.m-hud #walk-toggle { display: none !important; }
+body.m-hud .ui-hint { top: calc(var(--edge-t) + 60px); max-width: calc(100vw - 24px); font-size: 12px; white-space: normal; }
+
+/* ── 운행 띠: 도어 2 + 층 4. 「운행」을 누르면 바 위에 열린다 ── */
+body.m-hud #dd-op { display: none; }
+body.m-hud.m-run-open[data-m-mode="base"] #dd-op {
+  position: absolute;
+  left: var(--edge);
+  right: var(--m-right);
+  bottom: var(--m-above);
+  transform: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1px 1fr 1fr 1fr 1fr;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 18px;
+  background: rgba(13, 20, 33, 0.92);
+}
+body.m-hud #dd-op #fbtns { display: contents; }
+body.m-hud #dd-op > *, body.m-hud #dd-op #fbtns > * { order: 0; }
+body.m-hud #dd-op .rb-sep { display: block; width: 1px; height: 34px; margin: 0; }
+body.m-hud #dd-op .rb-sep ~ .rb-sep { display: none; }
+body.m-hud #dd-op .rb-btn, body.m-hud #dd-op #fbtns .c-btn {
+  width: auto;
+  min-width: 0;
+  height: 52px;
+  border-radius: 14px;
+}
+body.m-hud #dd-op .rb-btn span { display: block; font-size: 11px; }
+body.m-hud #dd-op #fbtns .c-btn { background: #1c2b40; font-size: 17px; }
+body.m-hud #dd-op .rb-btn:active, body.m-hud #dd-op #fbtns .c-btn:active { transform: none; background: var(--ui-fill-2); }
+@media (max-width: 360px) and (orientation: portrait) { body.m-hud.m-run-open[data-m-mode="base"] #dd-op { gap: 3px; padding: 5px; } }
+body.m-hud.m-run-open { --caption-bottom: calc(var(--m-above) + 72px); --m-card-bottom: calc(var(--m-above) + 70px); }
+
+/* ── 시트(설정·보기): 바 위 바텀시트 ── */
+body.m-hud .sheet {
+  top: auto;
+  left: var(--edge);
+  right: var(--m-right);
+  bottom: var(--m-above);
+  width: auto;
+  max-height: calc(100dvh - var(--edge-t) - 60px - var(--m-above));
+  border-radius: 18px;
+  transform: translateY(12px);
+  transform-origin: bottom center;
+}
+body.m-hud .sheet.open { transform: none; }
+body.m-hud .sheet::before { display: block; }
+body.m-hud #dd-view .toggles { grid-template-columns: 1fr 1fr; }
+body.m-hud #dd-view .toggle { flex-direction: row; justify-content: space-between; min-height: 48px; padding: 8px 10px; text-align: left; }
+.m-screen-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.m-screen-btn {
+  width: 100%;
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ui-text);
+  text-align: left;
+  font-family: var(--ui-font);
+  cursor: pointer;
+}
+.m-screen-btn[hidden] { display: none; }
+.m-screen-btn b { font-size: 14px; font-weight: 700; }
+.m-screen-btn small { display: block !important; font-size: 11px; color: var(--ui-sub); line-height: 1.35; }
+.m-screen-btn[aria-pressed="true"] { background: var(--accent); }
+.m-screen-btn.m-reload { margin-top: 6px; background: rgba(239, 68, 68, 0.14); border: 1px solid rgba(239, 68, 68, 0.35); }
+.m-screen-btn.m-reload b { color: #fecaca; }
+.m-screen-row:has(> :only-child:not([hidden])) { grid-template-columns: 1fr; }
+
+/* ── 화면만 보기: 바·패널을 숨기고 「도구 보이기」 하나만 남긴다 ── */
+body.m-hud #mobile-visibility { display: none; }
+body.m-hud #hud.tools-hidden #mobile-visibility {
+  position: absolute;
+  right: var(--m-right);
+  left: auto;
+  bottom: var(--edge-b);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: auto;
+  height: 48px;
+  padding: 0 16px 0 12px;
+  border-radius: 24px;
+  background: rgba(13, 20, 33, 0.82);
+  color: #e2e8f0;
+  font: 700 13px var(--ui-font);
+}
+body.m-hud #hud.tools-hidden #mobile-visibility::after { content: '도구 보이기'; }
+body.m-hud #hud.tools-hidden #mobile-visibility svg { width: 21px; height: 21px; }
+body.m-hud #hud.tools-hidden > :not(#mobile-visibility):not(#statusbar) { visibility: hidden !important; pointer-events: none !important; }
+body.m-hud #hud.tools-hidden #statusbar { opacity: 0.8; }
+body.m-hud.portrait-tools-hidden .part-action, body.m-hud.portrait-tools-hidden #rope-brake-panel,
+body.m-hud.portrait-tools-hidden #walk-panel, body.m-hud.portrait-tools-hidden #walk-stick { visibility: hidden !important; }
+
+/* ── 점검운전 ▲▼ · 승장문 점검 ── */
+body.m-hud #inspection-drive { left: var(--edge); right: var(--m-right); bottom: var(--m-card-bottom); transform: none; }
+body.m-hud #inspection-drive button { flex: 1; min-width: 0; }
+body.m-hud #hall-panel, body.m-hud.fault-latched #hall-panel { top: calc(var(--edge-t) + 60px); max-height: calc(100dvh - var(--edge-t) - 60px - var(--m-above)); }
+
+/* ── 승곰이 체험: 방향키는 왼쪽, 호출·층 버튼은 오른쪽 카드, 시작 위치·종료는 바 ── */
+body.m-hud.character-walking #walk-stick { display: flex; left: calc(var(--edge) + 2px); bottom: calc(var(--m-above) + 4px); width: 112px; height: 112px; }
+body.m-hud #walk-panel {
+  left: calc(var(--edge) + 124px);
+  right: var(--m-right);
+  top: auto;
+  bottom: var(--m-above);
+  width: auto;
+  max-width: none;
+  padding: 10px 12px;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+body.m-hud #walk-help { max-width: none; margin: 2px 0 0; }
+body.m-hud #walk-home, body.m-hud #walk-exit { display: none; }
+body.m-hud #walk-call { width: 100%; min-height: 48px; margin-top: 8px; }
+body.m-hud #walk-floors { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+body.m-hud #walk-floors[hidden] { display: none; }
+body.m-hud #walk-floors button { min-width: 0; min-height: 48px; padding: 4px; }
+
+/* ── 시연 설명 카드: 바 바로 위 전체 폭(기존 오른쪽 세로 운행바 자리 72px 제거) ── */
+body.m-hud #photo-eye-panel, body.m-hud #rope-measure-panel, body.m-hud #terminal-demo-panel,
+body.m-hud #interlock-demo-panel, body.m-hud #relay-demo-panel, body.m-hud #ard-panel {
+  left: var(--edge);
+  right: var(--m-right);
+  top: auto;
+  bottom: var(--m-card-bottom);
+  transform: none;
+  width: auto;
+  max-width: none;
+}
+body.m-hud #rope-measure-panel, body.m-hud #terminal-demo-panel { max-height: calc(100dvh - var(--edge-t) - 60px - var(--m-card-bottom)); overflow: auto; }
+body.m-hud.relay-story #relay-demo-panel { bottom: var(--edge-b); }
+body.m-hud #ucm-exit { top: calc(var(--edge-t) + 60px); }
+
+/* ── 가로 폰: 바는 오른쪽 세로 레일, 띠·시트·자막은 그 왼쪽 ── */
+@media (orientation: landscape) {
+  body.m-hud {
+    --m-bar-w: 66px;
+    --m-right: calc(var(--edge-r) + var(--m-bar-w) + 8px);
+    --m-above: var(--edge-b);
+    --caption-bottom: calc(var(--edge-b) + 4px);
+  }
+  body.m-hud #m-bar {
+    left: auto;
+    top: var(--edge-t);
+    width: var(--m-bar-w);
+    height: auto;
+    flex-direction: column;
+    gap: 3px;
+    padding: 4px;
+  }
+  body.m-hud .m-btn { flex: 0 1 58px; gap: 2px; font-size: 10px; }
+  body.m-hud #m-bar #demo-pause, body.m-hud #m-bar #fault-reset, body.m-hud[data-m-mode="demo"] #m-demo-exit { flex: 0 1 76px; }
+  body.m-hud #m-bar #btn-estop { flex: 0 1 64px; margin-top: auto; }
+  body.m-hud .m-btn svg { width: 20px; height: 20px; }
+  body.m-hud #m-bar #demo-pause, body.m-hud #m-bar #fault-reset, body.m-hud[data-m-mode="demo"] #m-demo-exit { font-size: 11px !important; white-space: normal; padding: 0 4px !important; }
+  body.m-hud #statusbar { right: auto; width: min(360px, calc(100vw - var(--m-right) - var(--edge))); }
+  body.m-hud .sheet { top: calc(var(--edge-t) + 60px); bottom: var(--edge-b); left: auto; width: 330px; max-height: none; }
+  body.m-hud.m-run-open[data-m-mode="base"] #dd-op { left: auto; width: min(430px, calc(100vw - var(--m-right) - var(--edge))); }
+  body.m-hud.m-run-open { --caption-bottom: calc(var(--edge-b) + 72px); --m-card-bottom: calc(var(--edge-b) + 70px); }
+  body.m-hud #photo-eye-panel, body.m-hud #rope-measure-panel, body.m-hud #terminal-demo-panel,
+  body.m-hud #interlock-demo-panel, body.m-hud #relay-demo-panel, body.m-hud #ard-panel { left: auto; width: min(340px, 46vw); top: calc(var(--edge-t) + 60px); bottom: auto; max-height: calc(100dvh - var(--edge-t) - 60px - var(--edge-b)); overflow: auto; }
+  body.m-hud #walk-panel { left: auto; width: 250px; }
+  body.m-hud.character-walking #walk-stick { bottom: var(--edge-b); width: 100px; height: 100px; }
+  body.m-hud #inspection-drive { left: auto; width: min(430px, calc(100vw - var(--m-right) - var(--edge))); }
+  body.m-hud #ucm-exit { top: var(--edge-t); right: var(--m-right); }
+}

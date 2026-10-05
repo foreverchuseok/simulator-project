@@ -55,7 +55,7 @@ try{
  await page.evaluate(()=>{HallManual.resetAll();setInspectionMode(false);});await view('interior');const interior=await sample();
  if(!before){
   await page.setViewportSize({width:390,height:844});await view('interior');
-  await page.tap('[data-f="1"]');await page.waitForFunction(()=>curFloor===1&&currentState===ELEVATOR_STATE.DOOR_OPEN);
+  await page.tap('#m-run');await page.tap('[data-f="1"]');await page.waitForFunction(()=>curFloor===1&&currentState===ELEVATOR_STATE.DOOR_OPEN);
   await page.tap('#btn-close');await page.waitForFunction(()=>CarDoor.secured()&&!doorOpen);
   await page.evaluate(()=>{HallManual.select(1);HallManual.request(1);});await page.waitForFunction(()=>HallManual.phase==='holding');
   await view('front');await view('sensor');
