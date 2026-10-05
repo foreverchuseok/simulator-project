@@ -4,7 +4,7 @@
      나머지 3곳은 꺼진 채(스테인리스), 기계실 인터폰은 연결 중 빨간 LED 깜박임 → 통화 중 초록 점등 → 종료 시 소등.
    ▪ 소리: 호출 삐 → 안내 음성(연결 중) → 자동 다이얼 DTMF → 호출음 → 상담원 "코엘사 엘리베이터…" 대화 → 종료.
      상담원 음성은 전화선 대역(300–3400Hz) 필터를 거친다. 음성 파일은 sound/ec_*.mp3 (edge-tts 신경망 음성).
-   ▪ 통화 중 아무 아이콘이나 다시 누르면 끊는다. */
+   ▪ 통화 중 아무 아이콘이나 다시 누르거나 자막의 「통화 종료」를 누르면 끊는다. 시연이 시작돼도 끊는다. */
 const EmergencyCall = (() => {
   const LOC = {
     carMain: { label: '카 주조작반', passenger: true },
@@ -14,7 +14,7 @@ const EmergencyCall = (() => {
   };
   const COLOR = { yellow: 0xff9a00, green: 0x00d23c, red: 0xff1400 };   // sRGB 출력에서 옅어지므로 채도를 높게
   let built = false, active = null, phase = 'idle', seq = 0, blinkT = 0, manualLink=false;
-  let mrLed = null, caption = null, audioCtx = null, filterIn = null;
+  let mrLed = null, caption = null, captionText = null, endBtn = null, audioCtx = null, filterIn = null;
   const leds = {}, anchors = {}, buttons = {}, playing = new Set();
   const v = new THREE.Vector3(), local = new THREE.Vector3();
   const ICON = 'url("data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>') + '")';
@@ -91,8 +91,21 @@ const EmergencyCall = (() => {
     }
     caption = document.createElement('div');
     caption.id = 'ec-caption'; caption.className = 'glass'; caption.hidden = true;
-    caption.style.cssText = 'position:fixed;left:50%;top:96px;transform:translateX(-50%);z-index:95;max-width:min(560px,calc(100vw - 24px));padding:10px 14px;border-radius:14px;font:500 14px/1.5 var(--ui-font,sans-serif);color:var(--ui-text,#fff);text-align:center;pointer-events:none;';
+    caption.style.cssText = 'position:fixed;left:50%;top:96px;transform:translateX(-50%);z-index:95;width:max-content;max-width:min(560px,calc(100vw - 24px));box-sizing:border-box;padding:10px 14px;border-radius:14px;font:500 14px/1.5 var(--ui-font,sans-serif);color:var(--ui-text,#fff);text-align:center;pointer-events:none;';
+    captionText = document.createElement('div');
+    // 통화는 30초 넘게 이어진다 — 다른 기능으로 넘어가도 자막이 남지 않게 언제든 끊는 버튼(사용자 2026-10-05).
+    endBtn = document.createElement('button');
+    endBtn.type = 'button'; endBtn.id = 'ec-hangup'; endBtn.textContent = '통화 종료';
+    endBtn.setAttribute('aria-label', '비상통화 종료');
+    endBtn.style.cssText = 'pointer-events:auto;margin-top:8px;min-height:44px;padding:0 22px;border-radius:999px;border:1px solid #ff6b5e;background:#d93a2b;color:#fff;font:700 14px/1 var(--ui-font,sans-serif);cursor:pointer;';
+    caption.append(captionText, endBtn);
     document.body.appendChild(caption);
+    // 시연 모듈은 document 캡처 단계에서 허용목록 밖 클릭을 막는다 — window 캡처에서 먼저 받는다.
+    window.addEventListener('click', e => {
+      if (!e.target.closest?.('#ec-hangup')) return;
+      e.stopImmediatePropagation();
+      if (active) { hangUp(); tone([480, 620], 0.35); }
+    }, true);
   }
 
   // ── 소리 ──────────────────────────────────────────────────────────
@@ -133,7 +146,7 @@ const EmergencyCall = (() => {
   function say(who, text) {
     if (!caption) return;
     caption.hidden = !text;
-    caption.innerHTML = text ? `<b style="opacity:.75">${who}</b>&nbsp; ${text}` : '';
+    captionText.innerHTML = text ? `<b style="opacity:.75">${who}</b>&nbsp; ${text}` : '';
   }
 
   // ── 상태 ──────────────────────────────────────────────────────────
@@ -197,8 +210,15 @@ const EmergencyCall = (() => {
   }
 
   // ── 매 프레임: 기계실 LED 깜박임 · 아이콘 위치 ──────────────────────────
+  // 통화 중 시연이 시작되면 끊는다 — 시연 자막·소리와 겹치지 않게(수동 구출은 스스로 끊는다).
+  function demoRunning() {
+    try {
+      return !!(DemoPause.demo || overspeedActive || UCMDemo.state.active || BufferDemo.active || ARDDemo.active || RetentionDemo.active);
+    } catch (e) { return false; }
+  }
   function update(t) {
     if (!built) return;
+    if (active && demoRunning()) hangUp();
     if (!mrLed) {
       const phone = scene.getObjectByName('ControlPanelIntercom');
       if (phone) {

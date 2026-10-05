@@ -87,9 +87,28 @@ const MobileHUD = (() => {
     } catch (e) { return false; }
   }
 
+  // 시연 넓게 보기(사용자 2026-10-05 「모바일은 시연 시야가 너무 좁다 · 캐릭터가 너무 크다」).
+  // 세로 폰은 가로 화각이 PC 의 절반 남짓이라 옆 승장 바닥 높이·주변 구도가 잘린다. 카메라를 실제로 뒤로 빼면
+  // 승강로 벽을 뚫으므로, 위치·각 시연의 카메라 경로는 그대로 두고 camera.zoom(<1)으로 화각만 넓힌다.
+  // 시연이 이미 넓은 fov 를 쓰면(카 안 88°·완충기 피트) 실효 세로 화각이 WIDE_MAX_FOV 를 넘지 않게 덜 넓힌다.
+  const WIDE_ZOOM = { portrait: 0.62, landscape: 0.85 }, WIDE_MAX_FOV = 80;
+  function wideView() {
+    let goal = 1;
+    if (media.matches && mode === 'demo') {
+      const base = camera.aspect < 1 ? WIDE_ZOOM.portrait : WIDE_ZOOM.landscape;
+      const deg = THREE.MathUtils.degToRad;
+      goal = Math.min(1, Math.max(base, Math.tan(deg(camera.fov / 2)) / Math.tan(deg(WIDE_MAX_FOV / 2))));
+    }
+    if (Math.abs(camera.zoom - goal) < 1e-3) { if (camera.zoom !== goal) { camera.zoom = goal; camera.updateProjectionMatrix(); } return; }
+    camera.zoom += (goal - camera.zoom) * 0.12;
+    camera.updateProjectionMatrix();
+  }
+
   // 렌더 루프에서 호출 — 바 모드·라벨만 갱신한다(가벼운 DOM 비교만).
   function update() {
-    if (!bar || !media.matches) return;
+    if (!bar) return;
+    wideView();
+    if (!media.matches) return;
     const next = demoActive() ? 'demo' : CharacterWalk.active ? 'walk' : 'base';
     if (next !== mode) {
       mode = next; document.body.dataset.mMode = mode;
