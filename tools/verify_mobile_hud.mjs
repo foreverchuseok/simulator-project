@@ -23,7 +23,7 @@ const layout=()=>page.evaluate(()=>{
  return {bad,shown:[...document.querySelectorAll('#m-bar > *')].filter(vis).map(e=>e.id)};
 });
 const expectBar=async(ids,label)=>{const l=await layout();assert.deepEqual(l.bad,[],label+' layout '+JSON.stringify(l.bad));assert.deepEqual(l.shown,ids,label+' bar buttons');};
-const BASE=['m-run','m-ins','m-home','m-cabin','m-walk','m-settings','btn-estop'];
+const BASE=['m-run','m-view','m-walk','m-settings','btn-estop'];
 let cdp;const touch=(type,points)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints:points.map(([x,y],id)=>({x,y,id}))});
 const pinch=async(cx,cy,from,to)=>{await touch('touchStart',[[cx-from,cy],[cx+from,cy]]);for(let i=1;i<=8;i++){const d=from+(to-from)*i/8;await touch('touchMove',[[cx-d,cy],[cx+d,cy]]);await page.waitForTimeout(16);}await touch('touchEnd',[]);};
 try{
@@ -53,19 +53,18 @@ cdp=await context.newCDPSession(page);
  await page.tap('#btn-close');await page.waitForFunction(()=>!doorOpen&&CarDoor.secured());
  assert.equal(await page.locator('#dd-op').isVisible(),true,'run strip stays open while operating');report.run=true;
  // 2-1) 수동(점검)운전: 바 버튼으로 전환 → ▲▼ 띠 표시 → 자동 복귀
- await page.tap('#m-run');
  await page.tap('#m-ins');await page.waitForFunction(()=>insMode&&!document.getElementById('pc-manual-controls').hidden);
  assert.equal(await page.locator('#pc-manual-controls').isVisible(),true);assert.equal(await page.getAttribute('#m-ins','aria-pressed'),'true');
  await expectBar(BASE,'ins');await shot('ins-on');
- await page.tap('#m-ins');await page.waitForFunction(()=>!insMode&&!moving);
+ await page.tap('#m-run');await page.tap('#m-ins');await page.waitForFunction(()=>!insMode&&!moving);
  assert.equal(await page.locator('#pc-manual-controls').isVisible(),false);report.ins=true;
  // 3) 전체 보기 한 번에 복귀 · 카 정면 토글
  await page.evaluate(()=>{camera.position.set(2,5,3);controls.target.set(0,4,0);controls.update();});
- await page.tap('#m-home');await settle();
+ await page.tap('#m-view');await page.tap('#m-home');await settle();
  const home=await page.evaluate(()=>{const p=overviewCameraPose();return camera.position.distanceTo(new THREE.Vector3(...p.position))+controls.target.distanceTo(new THREE.Vector3(...p.target));});
  assert.ok(home<1e-3,'one-tap overview '+home);
- await page.tap('#m-cabin');assert.equal(await page.evaluate(()=>!!cabinFollow),true);assert.equal(await page.getAttribute('#m-cabin','aria-pressed'),'true');
- await page.tap('#m-cabin');assert.equal(await page.evaluate(()=>!!cabinFollow),false);report.view=true;
+ await page.tap('#m-view');await page.tap('#m-cabin');assert.equal(await page.evaluate(()=>!!cabinFollow),true);assert.equal(await page.getAttribute('#m-cabin','aria-pressed'),'true');
+ await page.tap('#m-view');await page.tap('#m-cabin');assert.equal(await page.evaluate(()=>!!cabinFollow),false);report.view=true;
  // 4) 비상정지 라벨 · 화면만 보기
  await page.tap('#btn-estop');assert.equal(await page.evaluate(()=>currentState),'ESTOP');assert.equal(await page.locator('#btn-estop span').textContent(),'정지 해제');
  await page.tap('#btn-estop');assert.equal(await page.locator('#btn-estop span').textContent(),'비상정지');

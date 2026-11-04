@@ -212,6 +212,9 @@ const PartGlow = (() => {
 
   /* ── 상태 ── */
   const bodyHas = c => document.body.classList.contains(c);
+  // 모바일(세로·가로 폰 HUD)은 3D 부품 단일 탭으로 메뉴·시연을 열지 않는다(오터치 방지, 2026-11-04).
+  // 시연은 오른쪽 「시연」 목록으로, 부품은 두 번 탭 확대로 본다. 승곰이 체험 중 카 안 버튼은 예외.
+  const touchLocked = () => typeof MobileHUD !== 'undefined' && MobileHUD.isMobile() && !(typeof CharacterWalk !== 'undefined' && CharacterWalk.active);
   function suppressed(e) {
     if (e.direct && e.button.id.startsWith('ec-action-')) return false;
     if (typeof overspeedActive !== 'undefined' && overspeedActive) return true;
@@ -240,7 +243,7 @@ const PartGlow = (() => {
   function syncPart(part, now, ease) {
     const lit = hover === part || menuPart === part;
     const live = liveEntries(part), dim = live.every(e => e.button.disabled);
-    const target = !part.active ? 0 : lit ? 1 : enabled ? .72 : 0;
+    const target = !part.active || touchLocked() ? 0 : lit ? 1 : enabled ? .72 : 0;
     part.glow += (target - part.glow) * ease;   // 시간 기준(프레임 속도와 무관하게 약 0.2초)
     if (part.glow < .01) { part.root.visible = false; return; }
     part.root.visible = true;
@@ -436,6 +439,7 @@ const PartGlow = (() => {
       const d = down; down = null;
       if (!d || e.pointerId !== d.id || performance.now() - d.t > 450) return;
       if (typeof controls !== 'undefined' && !controls.enabled) return;
+      if (touchLocked()) return;
       const part = pickAt(e.clientX, e.clientY);
       if (part) activate(part);
     });

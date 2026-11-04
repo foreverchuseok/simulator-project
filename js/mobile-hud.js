@@ -1,6 +1,6 @@
 /* ─────────────────────────────────────────────────────────────
    모바일 HUD (2026-10-05 모바일 개편) — 세로 폰 ≤600px · 가로 폰 높이 ≤500px 전용. PC 화면은 desktop-hud.js.
-   ▪ 하단 바 하나에 조작을 모은다: 운행(층·도어 띠 열기) · 수동(점검운전 전환) · 전체 보기 · 카 정면 · 체험 · 설정 · 비상정지.
+   ▪ 하단 바: 운행 · 관찰 · 체험 · 설정 · 비상정지. 운행 패널에 층·도어·수동, 관찰 패널에 전체 보기·카 정면을 둔다.
      수동이면 PC 패널의 ▲▼(#pc-manual-controls)를 바 위로 옮겨 띄운다.
    ▪ 바는 상황에 따라 바뀐다(body[data-m-mode]):
        base — 위 기본 조작
@@ -59,6 +59,7 @@ const MobileHUD = (() => {
 
   function setRun(open) {
     runOpen = !!open && mode === 'base';
+    if (runOpen && demoWrap) demoWrap.classList.remove('open'), demoFab.setAttribute('aria-expanded', 'false'), demoList.hidden = true;
     document.body.classList.toggle('m-run-open', runOpen);
     runBtn.classList.toggle('active', runOpen);
     runBtn.setAttribute('aria-expanded', String(runOpen));
@@ -114,23 +115,36 @@ const MobileHUD = (() => {
     const next = demoActive() ? 'demo' : CharacterWalk.active ? 'walk' : 'base';
     if (next !== mode) {
       mode = next; document.body.dataset.mMode = mode;
-      if (mode !== 'base') setRun(false);
+      if (mode !== 'base') { setRun(false); if (demoWrap) setDemoMenu(false); }
     }
+    // 렌더 루프에서 매 프레임 불리므로 값이 바뀔 때만 DOM 을 쓴다(같은 값을 다시 써도 스타일 무효화·:has() 재계산이 일어난다).
+    const attr = (el, name, v) => { v = String(v); if (el.getAttribute(name) !== v) el.setAttribute(name, v); };
+    const flag = (el, cls, on) => { if (el.classList.contains(cls) !== !!on) el.classList.toggle(cls, !!on); };
     const insBusy = InspectionReturn.busy || inspectionResetting;
-    insBtn.setAttribute('aria-pressed', String(insMode));
-    insBtn.disabled = insBusy;
-    insBtn.title = insMode ? '수동(점검)운전 중 — 다시 누르면 자동운전으로' : '수동(점검)운전 — ▲▼ 누르는 동안 서행';
-    $('m-cabin').setAttribute('aria-pressed', $('c-cabin').getAttribute('aria-pressed') || 'false');
-    $('m-cabin').classList.toggle('active', $('c-cabin').getAttribute('aria-pressed') === 'true');
-    $('m-walk').hidden = $('walk-toggle').hidden;
-    $('m-settings').classList.toggle('active', $('dd-view').classList.contains('open'));
+    attr(insBtn, 'aria-pressed', insMode);
+    if (insBtn.disabled !== !!insBusy) insBtn.disabled = !!insBusy;
+    const insTitle = insMode ? '수동(점검)운전 중 — 다시 누르면 자동운전으로' : '수동(점검)운전 — ▲▼ 누르는 동안 서행';
+    if (insBtn.title !== insTitle) insBtn.title = insTitle;
+    const cabinOn = $('c-cabin').getAttribute('aria-pressed') === 'true';
+    attr($('m-cabin'), 'aria-pressed', cabinOn);
+    flag($('m-cabin'), 'active', cabinOn);
+    if ($('m-walk').hidden !== $('walk-toggle').hidden) $('m-walk').hidden = $('walk-toggle').hidden;
+    const setOpen = $('dd-view').classList.contains('open');
+    flag($('m-settings'), 'active', setOpen);
+    attr($('m-settings'), 'aria-expanded', setOpen);
+    const viewOpen = $('dd-overview').classList.contains('open');
+    flag($('m-view'), 'active', viewOpen);
+    attr($('m-view'), 'aria-expanded', viewOpen);
+    const insLabel = insMode ? '자동운전으로 전환' : '수동 점검운전';
+    if (insBtn.querySelector('span').textContent !== insLabel) insBtn.querySelector('span').textContent = insLabel;
     if (mode === 'demo') {
       const ucmExit = $('ucm-exit');
       const latched = !$('fault-reset').hidden || shown(ucmExit);
       const target = latched ? null : exitTarget();
-      exitBtn.hidden = latched;
-      exitBtn.disabled = !target;
-      exitBtn.title = target ? '시연을 끝내고 정상 운행 화면으로' : '진행 중인 장면이 끝나면 종료할 수 있습니다';
+      if (exitBtn.hidden !== latched) exitBtn.hidden = latched;
+      if (exitBtn.disabled !== !target) exitBtn.disabled = !target;
+      const exitTitle = target ? '시연을 끝내고 정상 운행 화면으로' : '진행 중인 장면이 끝나면 종료할 수 있습니다';
+      if (exitBtn.title !== exitTitle) exitBtn.title = exitTitle;
     }
   }
 
@@ -226,6 +240,75 @@ const MobileHUD = (() => {
     sheet.addEventListener('touchcancel', end);
   }
 
+
+  /* ── 시연 메뉴 (2026-11-04) ─────────────────────────────────────────
+     모바일에서는 3D 부품을 한 번 탭해 시연을 여는 방식이 없다(오터치 방지, PartGlow 가 모바일 탭을 무시한다).
+     오른쪽의 「시연」 아이콘을 눌러 읽을 수 있는 이름의 목록에서 고르고, 고르면 목록은 바로 닫혀 3D 장면을 가리지 않는다.
+     각 시연은 PC 부품 클릭이 부르는 것과 같은 시작 함수를 부른다(출발 조건·안내는 각 시연이 판단). 시작 후에는 하단 바가
+     시연 모드로 바뀌어 일시정지 · 시연 종료만 남긴다. 한 시연의 단계는 자동 진행되며 시연끼리 이어 붙이지 않는다. */
+  const DEMO_ICON = {
+    gov: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2"/><path d="m12 10 4-5M10 13l-5 3m9-3 5 3"/>',
+    door: '<rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M12 3v18M9 12h.01M15 12h.01"/>',
+    up: '<path d="M12 20V6M6 12l6-6 6 6"/><path d="M5 3h14"/>',
+    brake: '<path d="M10 3v18m4-18v18M7 7H4v10h3m10-10h3v10h-3M4 12h4m8 0h4"/>',
+    power: '<path d="M13 3 5 14h6l-1 7 8-11h-6z"/>',
+    hand: '<path d="M8 13V6a1.5 1.5 0 0 1 3 0v5m0-1V5a1.5 1.5 0 0 1 3 0v6m0-3a1.5 1.5 0 0 1 3 0v6a6 6 0 0 1-6 6h-1a5 5 0 0 1-4-2l-3-4a1.5 1.5 0 0 1 2.3-1.9L8 14"/>',
+    eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+    limit: '<path d="M5 4v16M5 8h9l-2-2m2 2-2 2M19 20V4"/>',
+    rope: '<path d="M8 3v18M12 3v18M16 3v18"/><path d="M5 9h14M5 15h14" stroke-dasharray="2 2"/>',
+    lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+    link: '<circle cx="6" cy="12" r="3"/><circle cx="18" cy="12" r="3"/><path d="M9 12h6"/>',
+    buffer: '<path d="M6 21h12M9 21v-4h6v4M12 17V4M8 8h8"/>',
+    shield: '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/>'
+  };
+  const clickIf = id => () => { const b = $(id); if (b) b.click(); };
+  const DEMOS = [
+    ['gov', '조속기 과속', clickIf('btn-overspeed')],
+    ['door', '개문발차(UCM)', () => UCMDemo.start($('btn-ucm'))],
+    ['up', '상승과속', () => AscentDemo.start('normal')],
+    ['brake', '브레이크 비교', () => BrakeDemo.start('dual')],
+    ['power', 'ARD 자동구출', () => ARDDemo.start()],
+    ['hand', '수동 구출', () => ManualRescueDemo.start()],
+    ['eye', '문닫힘 안전장치', () => PhotoEyeDemo.start()],
+    ['limit', '종단 스위치', clickIf('terminal-demo-USD')],
+    ['rope', '주로프 측정', () => RopeMeasure.start()],
+    ['lock', '인터록', () => InterlockDemo.start(1)],
+    ['link', '연동로프', () => RelayRopeDemo.start(1)],
+    ['buffer', '카 완충기', () => BufferDemo.start('car')],
+    ['shield', '문 이탈방지', () => RetentionDemo.start(1)]
+  ];
+  let demoWrap, demoFab, demoList;
+  function setDemoMenu(open) {
+    open = !!open && media.matches && mode === 'base';
+    demoWrap.classList.toggle('open', open);
+    demoFab.setAttribute('aria-expanded', String(open));
+    demoList.hidden = !open;
+    if (open) { setRun(false); closeAllMenus(); }
+  }
+  function buildDemoMenu() {
+    demoWrap = document.createElement('div');
+    demoWrap.id = 'm-demo';
+    demoWrap.innerHTML = '<button type="button" id="m-demo-fab" aria-label="시연 목록" aria-expanded="false" aria-controls="m-demo-list">' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5z" fill="currentColor"/></svg><span>시연</span></button>' +
+      '<ul id="m-demo-list" role="menu" hidden></ul>';
+    demoFab = demoWrap.querySelector('#m-demo-fab'); demoList = demoWrap.querySelector('#m-demo-list');
+    for (const [icon, name, run] of DEMOS) {
+      const li = document.createElement('li'), b = document.createElement('button');
+      b.type = 'button'; b.setAttribute('role', 'menuitem');
+      b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + DEMO_ICON[icon] + '</svg><span>' + name + '</span>';
+      b.addEventListener('click', () => {
+        setDemoMenu(false);   // 고르는 즉시 목록을 접어 장면을 가리지 않는다
+        try { run(); } catch (err) { console.warn('시연 시작 실패:', name, err); }
+      });
+      li.append(b); demoList.append(li);
+    }
+    demoFab.addEventListener('click', () => setDemoMenu(!demoWrap.classList.contains('open')));
+    // 바깥(3D 장면·다른 버튼)을 누르거나 Esc 로 접는다. 장면을 누른 터치는 그대로 카메라 조작으로 이어진다.
+    document.addEventListener('pointerdown', e => { if (demoWrap.classList.contains('open') && !demoWrap.contains(e.target)) setDemoMenu(false); }, true);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') setDemoMenu(false); });
+    $('hud').append(demoWrap);
+  }
+
   function init() {
     const hud = $('hud');
     bar = document.createElement('nav');
@@ -242,7 +325,9 @@ const MobileHUD = (() => {
       setRun(false); closeAllMenus();
       document.querySelector(`#pc-mode [data-ins="${insMode ? 'off' : 'on'}"]`).click();
     });
-    barButton('m-home', 'base', 'home', '전체 보기', () => { setRun(false); $('overview-home').click(); });
+    const viewBtn = barButton('m-view', 'base', 'home', '관찰', () => { setRun(false); $('c-shaft').click(); });
+    viewBtn.setAttribute('aria-controls', 'dd-overview');
+    barButton('m-home', 'base', 'home', '전체 보기', () => { setRun(false); closeAllMenus(); $('overview-home').click(); });
     barButton('m-cabin', 'base', 'cabin', '카 정면', () => { setRun(false); closeAllMenus(); $('c-cabin').click(); });
     barButton('m-walk', 'base', 'walk', '체험', () => { setRun(false); closeAllMenus(); $('walk-toggle').click(); });
     barButton('m-walk-home', 'walk', 'back', '시작 위치', () => $('walk-home').click());
@@ -263,7 +348,24 @@ const MobileHUD = (() => {
     });
     settings.setAttribute('aria-controls', 'dd-view');
     bar.insertAdjacentHTML('beforeend', '<span class="m-slot-estop-slot"></span>');
+    // 목적별 패널. 기존 원본 이벤트와 ID를 유지하고 모바일 대리 버튼만 옮긴다.
+    const runHead = document.createElement('div');
+    runHead.className = 'm-only m-run-head';
+    runHead.innerHTML = '<div><strong>엘리베이터 운행</strong><small>목적층을 선택하세요</small></div><button type="button" aria-label="운행 패널 닫기">×</button>';
+    runHead.querySelector('button').addEventListener('click', () => setRun(false));
+    $('dd-op').prepend(runHead);
+    insBtn.classList.add('m-only');
+    $('dd-op').append(insBtn);
+    const views = document.createElement('div');
+    views.className = 'm-only m-view-grid';
+    views.append($('m-home'), $('m-cabin'));
+    $('dd-overview').querySelector('.sheet-head').after(views);
+    const help = document.createElement('p');
+    help.className = 'm-only m-view-help';
+    help.textContent = '한 손가락으로 회전 · 두 손가락으로 확대·이동 · 부품을 두 번 탭하면 가까이 봅니다. 시연은 오른쪽 「시연」에서 고르세요.';
+    views.after(help);
     buildScreenSection();
+    buildDemoMenu();
     document.querySelectorAll('#hud .sheet').forEach(bindSheetDrag);
     // 다른 시트를 열면 운행 띠를 닫아 겹치지 않게 한다.
     document.querySelectorAll('[data-menu]').forEach(b => b.addEventListener('click', () => setRun(false)));

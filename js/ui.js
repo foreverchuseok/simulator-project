@@ -1188,7 +1188,7 @@ function updateManualCameraNear() {
       const hint = document.getElementById('hint'); if (!hint) return;
       const touch = matchMedia('(hover: none)').matches;
       hint.textContent = touch
-        ? '빛나는 부품 탭 → 메뉴 · 두 번 탭하면 가까이 · 두 손가락 확대·이동'
+        ? '부품을 두 번 탭하면 가까이 · 두 손가락 확대·이동 · 시연은 오른쪽 「시연」'
         : '빛나는 부품 클릭 → 메뉴 · 드래그 회전 · 휠 확대 · 우클릭 이동 · 더블클릭하면 가까이';
       hint.classList.add('show');
       const hide = () => hint.classList.remove('show');
@@ -1385,7 +1385,7 @@ function updateManualCameraNear() {
       canvas.addEventListener('pointerdown', e => {
         if (CharacterWalk.active) { lastTap = null; return; }
         if (e.button !== 0) { lastTap = null; return; }
-        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, time: performance.now(), invalid: false });
+        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, time: e.timeStamp || performance.now(), invalid: false });
         if (pointers.size > 1) {
           pointers.forEach(p => p.invalid = true);
           lastTap = null;
@@ -1401,7 +1401,7 @@ function updateManualCameraNear() {
       canvas.addEventListener('pointerup', e => {
         const p = pointers.get(e.pointerId);
         pointers.delete(e.pointerId);
-        const now = performance.now();
+        const now = e.timeStamp || performance.now();
         if (!p || p.invalid || now - p.time > 450 || overspeedActive || !controls.enabled || CharacterWalk.active) {
           ignored.add(e); lastTap = null; return;
         }
@@ -1410,9 +1410,9 @@ function updateManualCameraNear() {
         ray.setFromCamera(ndc, camera);
         // Preserve the existing immediate single-tap emergency-key action.
         const keys = hatchDoors.map(h => h.right.userData.triKey?.group).filter(Boolean);
-        if (ray.intersectObjects(keys, true).length) { lastTap = null; return; }
+        if (!MobileHUD.isMobile() && ray.intersectObjects(keys, true).length) { lastTap = null; return; }
         const part=PartGlow.pickAt(e.clientX,e.clientY);
-        if(part?.entries.some(entry=>entry.direct)){lastTap=null;return;}
+        if(!MobileHUD.isMobile()&&part?.entries.some(entry=>entry.direct)){lastTap=null;return;}
         const previous = lastTap;
         lastTap = { x: e.clientX, y: e.clientY, time: now, type: e.pointerType };
         if (!previous || previous.type !== e.pointerType || now - previous.time > 350 ||
