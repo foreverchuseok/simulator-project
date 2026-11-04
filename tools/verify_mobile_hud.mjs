@@ -9,21 +9,23 @@ const context=await browser.newContext({viewport:{width:390,height:844},deviceSc
 const page=await context.newPage();page.setDefaultTimeout(90000);page.on('pageerror',e=>errors.push(e.message));
 const shot=n=>page.screenshot({path:path.join(out,n+'.png')});
 const settle=()=>page.waitForFunction(()=>gsap.getTweensOf(camera.position).length===0&&gsap.getTweensOf(controls.target).length===0);
-// 보이는 HUD 조작부: 터치 44px 이상, 화면 안, 서로 겹치지 않음(같은 묶음 안의 자식은 제외).
+// 보이는 HUD 조작부: 화면 안·겹침 없음. 사용자 요청의 축소 운행 메뉴는 높이 22px.
 const layout=()=>page.evaluate(()=>{
  const vis=e=>e&&e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden'&&getComputedStyle(e).display!=='none';
  const ids=['statusbar','m-bar','dd-op','pc-manual-controls','walk-panel','walk-stick','inspection-drive','photo-eye-panel','rope-measure-panel','terminal-demo-panel','interlock-demo-panel','relay-demo-panel','ard-panel','manual-rescue-panel'];
  const boxes=ids.map(id=>[id,document.getElementById(id)]).filter(([,e])=>vis(e)).map(([id,e])=>[id,e.getBoundingClientRect()]);
  const bad=[];
  document.querySelectorAll('#m-bar > *, #dd-op button').forEach(e=>{if(!vis(e))return;const b=e.getBoundingClientRect();
-  const min=innerWidth<=340||innerHeight<=340?39.5:43.5;if(b.width<min||b.height<min||b.x<-.5||b.y<-.5||b.right>innerWidth+.5||b.bottom>innerHeight+.5)bad.push({id:e.id||e.textContent.trim(),w:b.width|0,h:b.height|0,x:b.x|0,y:b.y|0});});
+  const menu=e.closest('#dd-op');if(menu){const clip=menu.getBoundingClientRect();if(b.top<clip.top||b.bottom>clip.bottom)return;}
+  const min=menu?21.5:(innerWidth<=340||innerHeight<=340?39.5:43.5);if(b.width<min||b.height<min||b.x<-.5||b.y<-.5||b.right>innerWidth+.5||b.bottom>innerHeight+.5)bad.push({id:e.id||e.textContent.trim(),w:b.width|0,h:b.height|0,x:b.x|0,y:b.y|0});});
  for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){const[a,A]=boxes[i],[b,B]=boxes[j];
+  if(document.getElementById(a).contains(document.getElementById(b))||document.getElementById(b).contains(document.getElementById(a)))continue;
   const ox=Math.min(A.right,B.right)-Math.max(A.left,B.left),oy=Math.min(A.bottom,B.bottom)-Math.max(A.top,B.top);if(ox>.5&&oy>.5)bad.push({overlap:a+'/'+b});}
  if(document.documentElement.scrollWidth>innerWidth)bad.push({scrollWidth:document.documentElement.scrollWidth});
  return {bad,shown:[...document.querySelectorAll('#m-bar > *')].filter(vis).map(e=>e.id)};
 });
 const expectBar=async(ids,label)=>{const l=await layout();assert.deepEqual(l.bad,[],label+' layout '+JSON.stringify(l.bad));assert.deepEqual(l.shown,ids,label+' bar buttons');};
-const BASE=['m-run','m-view','m-walk','m-settings','btn-estop'];
+const BASE=['m-view','m-walk','m-settings','btn-estop'];
 let cdp;const touch=(type,points)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints:points.map(([x,y],id)=>({x,y,id}))});
 const pinch=async(cx,cy,from,to)=>{await touch('touchStart',[[cx-from,cy],[cx+from,cy]]);for(let i=1;i<=8;i++){const d=from+(to-from)*i/8;await touch('touchMove',[[cx-d,cy],[cx+d,cy]]);await page.waitForTimeout(16);}await touch('touchEnd',[]);};
 try{
@@ -35,9 +37,13 @@ cdp=await context.newCDPSession(page);
   await page.setViewportSize(v);await page.waitForTimeout(300);
   assert.equal(await page.evaluate(()=>document.body.classList.contains('m-hud')&&MobileHUD.mode),'base');
   await expectBar(BASE,`${v.width}x${v.height} base`);
+  const icon=await page.locator('#m-run').boundingBox();
+  assert.ok(icon.x<=10&&icon.width===46&&icon.height===52,'small left run icon');
   assert.equal(await page.locator('#rail').isVisible(),false);assert.equal(await page.locator('#dd-op').isVisible(),false);
   await page.tap('#m-run');assert.equal(await page.locator('#dd-op').isVisible(),true);await expectBar(BASE,`${v.width} run`);
   await shot(`run-${v.width}x${v.height}`);
+  await page.touchscreen.tap(v.width/2,100);assert.equal(await page.locator('#dd-op').isVisible(),false,'outside tap closes run menu');
+  await page.tap('#m-run');
   await page.tap('#m-settings');await page.waitForTimeout(350);assert.equal(await page.locator('#dd-op').isVisible(),false,'settings closes run strip');
   assert.equal(await page.evaluate(()=>document.getElementById('dd-view').classList.contains('open')),true);
   const sheet=await page.locator('#dd-view').boundingBox(),barBox=await page.locator('#m-bar').boundingBox(),status=await page.locator('#statusbar').boundingBox();
@@ -50,13 +56,17 @@ cdp=await context.newCDPSession(page);
  // 2) 운행: 띠의 층 버튼·도어 → 도착·폐문
  await page.setViewportSize({width:390,height:844});await page.waitForTimeout(300);
  await page.tap('#m-run');await page.tap('[data-f="2"]');await page.waitForFunction(()=>curFloor===2&&!moving&&doorOpen&&!CarDoor.state.busy);
+ assert.equal(await page.locator('#dd-op').isVisible(),false,'floor selection closes menu');
+ await page.tap('#m-run');
  await page.tap('#btn-close');await page.waitForFunction(()=>!doorOpen&&CarDoor.secured());
- assert.equal(await page.locator('#dd-op').isVisible(),true,'run strip stays open while operating');report.run=true;
+ assert.equal(await page.locator('#dd-op').isVisible(),false,'door selection closes menu');report.run=true;
  // 2-1) 수동(점검)운전: 바 버튼으로 전환 → ▲▼ 띠 표시 → 자동 복귀
- await page.tap('#m-ins');await page.waitForFunction(()=>insMode&&!document.getElementById('pc-manual-controls').hidden);
+ await page.tap('#m-run');await page.tap('#m-ins');await page.waitForFunction(()=>insMode&&!document.getElementById('pc-manual-controls').hidden);
  assert.equal(await page.locator('#pc-manual-controls').isVisible(),true);assert.equal(await page.getAttribute('#m-ins','aria-pressed'),'true');
+ const manual=await page.locator('#pc-manual-controls').boundingBox(),automatic=await page.locator('#m-ins').boundingBox();
+ assert.ok(Math.abs(manual.x-automatic.x)<1&&manual.y>=automatic.y+automatic.height&&manual.y-automatic.y-automatic.height<=8,'manual controls below automatic');
  await expectBar(BASE,'ins');await shot('ins-on');
- await page.tap('#m-run');await page.tap('#m-ins');await page.waitForFunction(()=>!insMode&&!moving);
+ await page.tap('#m-ins');await page.waitForFunction(()=>!insMode&&!moving);
  assert.equal(await page.locator('#pc-manual-controls').isVisible(),false);report.ins=true;
  // 3) 전체 보기 한 번에 복귀 · 카 정면 토글
  await page.evaluate(()=>{camera.position.set(2,5,3);controls.target.set(0,4,0);controls.update();});
@@ -87,11 +97,11 @@ cdp=await context.newCDPSession(page);
  assert.equal(await page.locator('#m-bar').evaluate(e=>getComputedStyle(e).visibility),'hidden');
  assert.equal(await page.locator('#mobile-visibility').isVisible(),true);await shot('clean');
  await page.tap('#mobile-visibility');assert.equal(await page.locator('#m-bar').evaluate(e=>getComputedStyle(e).visibility),'visible');report.estopClean=true;
- // 5) 승곰이 체험: 방향키·체험 패널·바 분리
+ // 5) 승곰이 체험: 방향 패드 제거·체험 패널·바 분리
  await page.tap('#m-walk');await page.waitForFunction(()=>CharacterWalk.active&&MobileHUD.mode==='walk');await page.waitForTimeout(400);
  await expectBar(['m-walk-home','m-walk-exit','m-settings','btn-estop'],'walk');
- assert.equal(await page.locator('#walk-stick').isVisible(),true);await shot('walk');
- // 두 손가락 벌리면 가까이(거리 감소), 오므리면 멀리. 한 손 조이스틱은 별도 요소.
+ assert.equal(await page.locator('#walk-stick').count(),0);await shot('walk');
+ // 두 손가락 벌리면 가까이(거리 감소), 오므리면 멀리. 핀치로 이동 지점이 생기지 않아야 한다.
  const camDist=()=>page.evaluate(()=>camera.position.distanceTo(controls.target));
  const d0=await camDist();await pinch(195,330,40,140);await page.waitForTimeout(150);
  const zIn=await page.evaluate(()=>CharacterWalk.zoom),d1=await camDist();

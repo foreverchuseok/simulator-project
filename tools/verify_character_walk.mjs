@@ -28,6 +28,16 @@ const walk = async (x, z) => page.evaluate(([x, z]) => {
   }
   return { from: start.toArray(), to: a.root.position.toArray(), zone: a.zone };
 }, [x, z]);
+// 바닥만 보이는 시점을 만든 뒤 실제 캔버스 포인터 바인딩으로 목적지를 선택한다.
+const destination = async (x,y,z,view) => page.evaluate(([x,y,z,view])=>{
+ const p=new THREE.Vector3(x,y,z);camera.position.set(...(view||[x,y+1,z+.2]));camera.lookAt(p);camera.updateMatrixWorld(true);
+ const canvas=renderer.domElement,r=canvas.getBoundingClientRect(),args={pointerId:91,pointerType:'mouse',button:0,clientX:r.left+r.width/2,clientY:r.top+r.height/2,bubbles:true};
+ const capture=canvas.setPointerCapture;canvas.setPointerCapture=()=>{};
+ try {canvas.dispatchEvent(new PointerEvent('pointerdown',args));canvas.dispatchEvent(new PointerEvent('pointerup',args));}
+ finally {canvas.setPointerCapture=capture;}
+ return scene.getObjectByName('characterDestination').visible;
+},[x,y,z,view]);
+const finishRoute=()=>page.evaluate(()=>{let t=performance.now()/1000;CharacterWalk.update(t);for(let i=0;i<1200&&scene.getObjectByName('characterDestination').visible;i++)CharacterWalk.update(t+=.04);return !scene.getObjectByName('characterDestination').visible;});
 try {
   const cdp = await context.newCDPSession(page); await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
   await page.goto(process.env.SIMULATOR_URL || 'http://127.0.0.1:5500/index.html', { waitUntil: 'networkidle' });
@@ -47,6 +57,10 @@ try {
   await page.screenshot({path:`${out}/${width}-start.png`});
   const before = await state();
   if (!mobile) {
+    const point=await page.evaluate(()=>{camera.updateMatrixWorld(true);const p=CharacterWalk.active.root.position.clone();p.x+=.45;p.z-=.3;p.y+=.005;p.project(camera);return{x:(p.x+1)*innerWidth/2,y:(1-p.y)*innerHeight/2};});
+    await page.mouse.click(point.x,point.y);await page.waitForFunction(()=>scene.getObjectByName('characterDestination').visible);
+    await page.waitForFunction(()=>!scene.getObjectByName('characterDestination').visible);
+    check('mouse ground click walks to destination',(await state()).p[0]>.35);await tap('#walk-home');
     await page.keyboard.down('d'); await page.waitForTimeout(650); await page.keyboard.up('d');
     check('WASD moves at walking speed', (await state()).p[0] > before.p[0] + .3);
     await page.keyboard.down('w'); await page.evaluate(() => window.dispatchEvent(new Event('blur')));
@@ -54,21 +68,51 @@ try {
     check('blur clears held input', Math.abs((await state()).p[2] - stopped.p[2]) < .001);
     await page.keyboard.up('w');
   } else {
-    const pad = await page.locator('#walk-stick').boundingBox(); check('mobile joystick visible', pad?.width > 80);
-    const x = pad.x + pad.width / 2, y = pad.y + pad.height / 2;
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x + 30, y, id: 1 }] });
-    await page.waitForTimeout(500);
+    check('mobile directional pad removed', await page.locator('#walk-stick').count() === 0);
+    const point=await page.evaluate(()=>{camera.updateMatrixWorld(true);const a=CharacterWalk.active,p=a.root.position.clone();p.x+=.45;p.z-=.3;p.y+=.005;p.project(camera);return{x:(p.x+1)*innerWidth/2,y:(1-p.y)*innerHeight/2};});
+    await page.touchscreen.tap(point.x,point.y);
+    await page.waitForFunction(()=>scene.getObjectByName('characterDestination').visible);
+    await page.waitForFunction(()=>!scene.getObjectByName('characterDestination').visible);
+    check('ground tap walks to destination', (await state()).p[0]>before.p[0]+.35);
+    const jitterPoint=await page.evaluate(()=>{camera.updateMatrixWorld(true);const p=CharacterWalk.active.root.position.clone();p.x+=.35;p.z-=.25;p.y+=.005;p.project(camera);return{x:(p.x+1)*innerWidth/2,y:(1-p.y)*innerHeight/2};});
+    await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:jitterPoint.x-4,y:jitterPoint.y,id:1}]});
+    await page.waitForTimeout(620);
+    await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:jitterPoint.x+4,y:jitterPoint.y,id:1}]});
+    await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+    await page.waitForFunction(()=>scene.getObjectByName('characterDestination').visible);
+    await page.waitForFunction(()=>!scene.getObjectByName('characterDestination').visible);
+    check('slow finger tap with 8px drift still walks',true);
+    const stopped = await state();
     const c0 = await page.evaluate(() => camera.position.toArray());
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x + 30, y, id: 1 }, { x: width - 45, y: 430, id: 2 }] });
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x + 30, y, id: 1 }, { x: width - 95, y: 460, id: 2 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: width/2, y: 330, id: 1 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: width/2-50, y: 360, id: 1 }] });
     await page.waitForTimeout(200);
-    check('joystick plus camera multi-touch', (await state()).p[0] > before.p[0] + .25 &&
+    check('drag rotates view without walking', Math.abs((await state()).p[0]-stopped.p[0])<.001 &&
       await page.evaluate(c => Math.abs(camera.position.z - c[2]) > .1, c0));
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchCancel', touchPoints: [] });
-    const stopped = await state(); await page.waitForTimeout(150);
-    check('touch cancel stops movement', Math.abs((await state()).p[0] - stopped.p[0]) < .001);
+    await page.waitForTimeout(150);
+    check('touch cancel creates no destination', !await page.evaluate(()=>scene.getObjectByName('characterDestination').visible));
   }
   // Reset yaw and location through the user-facing home action.
+  await tap('#walk-home');
+  const riser=await page.evaluate(()=>{const l=lobbyApproachLayout(),i=APPROACH_STEP_COUNT-2,z=l.lobbyFrontZ+i*APPROACH_STEP_TREAD,high=l.slabY-(i-1)*l.deltaH/APPROACH_STEP_COUNT;return{x:.4,y:high-l.deltaH/APPROACH_STEP_COUNT/2,z,view:[.4,high-.04,z+.7]};});
+  check('tap on vertical stair front selects tread',await destination(riser.x,riser.y,riser.z,riser.view));await finishRoute();
+  check('stair-front tap walks onto stairs',(await state()).zone==='stairs');await tap('#walk-home');
+  const landingY=await page.evaluate(()=>FLOOR_Y[0]);
+  check('tap routes from garden up stairs', await destination(0,landingY,2.5));await finishRoute();
+  check('tap arrives on landing without teleport', (await state()).zone==='landing'&&Math.abs((await state()).p[2]-2.5)<.04);
+  const floorY=await page.evaluate(()=>carGrp.position.y+carGrp.getObjectByName('carPanelAssembly').userData.floorY);
+  check('closed door rejects tap into car', !await destination(0,floorY,.15));
+  await tap('#walk-call');
+  await page.waitForFunction(()=>currentState===ELEVATOR_STATE.DOOR_OPEN&&!CarDoor.state.busy);
+  check('open doorway accepts tap into car',await destination(0,floorY,.15));await finishRoute();
+  check('tap walks through open doorway', (await state()).zone==='car');
+  await tap('#walk-home');await page.evaluate(()=>closeDoors());await page.waitForFunction(()=>currentState===ELEVATOR_STATE.IDLE);
+  const rampX=await page.evaluate(()=>{const l=lobbyApproachLayout();return(l.rampX0+l.rampX1)/2;});
+  check('tap plans route through ramp',await destination(rampX,landingY,2.5));await finishRoute();check('tap ramp route arrives on landing',(await state()).zone==='landing');
+  await tap('#walk-home');
+  check('tap plans route around pond',await destination(-14,.055,17));await finishRoute();
+  check('tap route avoids pond and reaches far side',Math.hypot((await state()).p[0]+14,(await state()).p[2]-17)<.05);
   await tap('#walk-home');
   await page.screenshot({ path: `${out}/${width}-garden.png` });
   await walk(0, 2.5);

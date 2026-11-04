@@ -1,10 +1,10 @@
 /* ─────────────────────────────────────────────────────────────
    모바일 HUD (2026-10-05 모바일 개편) — 세로 폰 ≤600px · 가로 폰 높이 ≤500px 전용. PC 화면은 desktop-hud.js.
-   ▪ 하단 바: 운행 · 관찰 · 체험 · 설정 · 비상정지. 운행 패널에 층·도어·수동, 관찰 패널에 전체 보기·카 정면을 둔다.
-     수동이면 PC 패널의 ▲▼(#pc-manual-controls)를 바 위로 옮겨 띄운다.
+   ▪ 왼쪽 운행 아이콘: 층·도어 선택 후 접힘, 수동 선택 시 목록 유지. 하단 바: 시점 · 체험 · 설정 · 비상정지.
+     수동이면 PC 패널의 ▲▼(#pc-manual-controls)를 자동 항목 아래에 이어 붙인다.
    ▪ 바는 상황에 따라 바뀐다(body[data-m-mode]):
        base — 위 기본 조작
-       walk — 승곰이 체험: 시작 위치 · 체험 종료 (방향키는 왼쪽, 호출·층 버튼은 체험 패널)
+       walk — 승곰이 체험: 시작 위치 · 체험 종료 (바닥 탭 이동·드래그 시야 회전, 호출·층 버튼은 체험 패널)
        demo — 시연: 일시정지 · 고장 복귀 · 시연 종료 · 비상정지 (층·도어·시점 버튼은 숨김)
    ▪ 기존 버튼의 id·이벤트를 그대로 쓴다. 바에 옮긴 노드(비상정지·일시정지·고장 복귀)는 주석 자리표시로
      원래 위치를 기억했다가 PC·태블릿 화면으로 바뀌면 되돌린다. 나머지 바 버튼은 원본을 누르는 대리 버튼이다.
@@ -135,7 +135,8 @@ const MobileHUD = (() => {
     const viewOpen = $('dd-overview').classList.contains('open');
     flag($('m-view'), 'active', viewOpen);
     attr($('m-view'), 'aria-expanded', viewOpen);
-    const insLabel = insMode ? '자동운전으로 전환' : '수동 점검운전';
+    const insLabel = insMode ? '자동' : '수동';
+    attr(insBtn, 'aria-label', insTitle);
     if (insBtn.querySelector('span').textContent !== insLabel) insBtn.querySelector('span').textContent = insLabel;
     if (mode === 'demo') {
       const ucmExit = $('ucm-exit');
@@ -156,10 +157,10 @@ const MobileHUD = (() => {
       adopt($('demo-pause'), 'm-slot-pause');
       adopt($('fault-reset'), 'm-slot-reset');
       adopt($('btn-estop'), 'm-slot-estop');
-      // 점검 ▲▼ 는 PC 패널(모바일에선 숨김) 안에 있다 — 바 위로 옮긴다. 표시 여부는 desktop-hud.js state()가 그대로 정한다.
+      // 점검 ▲▼ 원본을 자동 항목 아래에 놓는다. 작은 화면에서는 운행 목록과 함께 스크롤한다.
       const manual = $('pc-manual-controls');
       if (!manualHome) { manualHome = document.createComment('mobile-hud: pc-manual-controls'); manual.before(manualHome); }
-      $('hud').append(manual);
+      $('dd-op').append(manual);
       mode = ''; update();
     } else {
       setRun(false);
@@ -320,14 +321,24 @@ const MobileHUD = (() => {
       setRun(open);
     });
     runBtn.setAttribute('aria-controls', 'dd-op'); runBtn.setAttribute('aria-expanded', 'false');
+    // 시연 아이콘과 마주 보는 왼쪽 진입점. 원본 층·도어 버튼과 이벤트는 유지한다.
+    hud.append(runBtn);
+    $('dd-op').addEventListener('click', e => {
+      if (media.matches && e.target.closest('[data-f], #btn-open, #btn-close')) setRun(false);
+    });
+    document.addEventListener('pointerdown', e => {
+      if (runOpen && !runBtn.contains(e.target) && !$('dd-op').contains(e.target) && !$('pc-manual-controls').contains(e.target)) setRun(false);
+    }, true);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') setRun(false); });
     // 수동(점검)운전: PC 패널의 자동/수동 버튼을 그대로 누른다 — 운행·시연 중 전환 차단은 desktop-hud.js 가 맡는다.
     insBtn = barButton('m-ins', 'base', 'ins', '수동', () => {
-      setRun(false); closeAllMenus();
+      closeAllMenus();
       document.querySelector(`#pc-mode [data-ins="${insMode ? 'off' : 'on'}"]`).click();
+      setRun(true);
     });
-    const viewBtn = barButton('m-view', 'base', 'home', '관찰', () => { setRun(false); $('c-shaft').click(); });
+    const viewBtn = barButton('m-view', 'base', 'home', '시점', () => { setRun(false); $('c-shaft').click(); });
     viewBtn.setAttribute('aria-controls', 'dd-overview');
-    barButton('m-home', 'base', 'home', '전체 보기', () => { setRun(false); closeAllMenus(); $('overview-home').click(); });
+    barButton('m-home', 'base', 'home', '전체', () => { setRun(false); closeAllMenus(); $('overview-home').click(); }).setAttribute('aria-label', '전체 보기');
     barButton('m-cabin', 'base', 'cabin', '카 정면', () => { setRun(false); closeAllMenus(); $('c-cabin').click(); });
     barButton('m-walk', 'base', 'walk', '체험', () => { setRun(false); closeAllMenus(); $('walk-toggle').click(); });
     barButton('m-walk-home', 'walk', 'back', '시작 위치', () => $('walk-home').click());

@@ -1,11 +1,14 @@
 /* 승곰이 한 명의 체험. 운행 FSM은 기존 PassengerControls/ui.js가 소유한다.
    보행면은 environment의 치수 계약에서 파생하고 카 탑승자는 카의 실제 Y를 따른다. */
 const CharacterWalk = (() => {
-  const actors = [], keys = new Set(), stick = { x: 0, y: 0 };
+  const actors = [], keys = new Set();
   const target = new THREE.Vector3(), desired = new THREE.Vector3(), hit = new THREE.Vector3();
   const cameraRay = new THREE.Ray(), direction = new THREE.Vector3(), cameraBoxes = [];
   let active = null, plaza, layout, panel, toggle, status, ring, saved;
-  let yaw = 0, pitch = .30, lastTime = 0, viewY = 0, lookPointer = null, stickPointer = null;
+  let yaw = 0, pitch = .30, lastTime = 0, viewY = 0, lookPointer = null;
+  const walkRay = new THREE.Raycaster(), walkNdc = new THREE.Vector2();
+  const floorPlane = new THREE.Plane(), floorNormal = new THREE.Vector3(), floorHit = new THREE.Vector3();
+  let route = [], destinationRing, blockedTime = 0;
   // 체험 중 시야 확대·축소 — 두 손가락 벌리기/오므리기(PC 휠). 3인칭은 카메라 거리, 카 안 1인칭은 화각을 바꾼다.
   const ZOOM_MIN = .45, ZOOM_MAX = 2.8, pinchPoints = new Map();
   let zoom = 1, pinchStart = null;
@@ -94,8 +97,96 @@ const CharacterWalk = (() => {
     }
     return changed;
   }
-  function clearInput() { keys.clear(); stick.x = stick.y = 0; lookPointer = null; stickPointer = null; pinchPoints.clear(); pinchStart = null;
-    const knob = document.getElementById('walk-stick-knob'); if (knob) knob.style.transform = ''; }
+  function stopRoute() { route = []; blockedTime = 0; if (destinationRing) destinationRing.visible = false; }
+  // 이동 경로도 실제 보행과 같은 지지면·단차·문 검사로 검증한다. 순간이동이나 승강로 관통은 없다.
+  function clearSegment(from, to) {
+    const a = { root: { position: from.point.clone() }, zone: from.zone, floor: from.floor, scale: active.scale };
+    const dx = to.point.x - from.point.x, dz = to.point.z - from.point.z;
+    const count = Math.max(1, Math.ceil(Math.hypot(dx, dz) / .04));
+    for (let i = 0; i < count; i++) if (!tryStep(a, dx / count, dz / count)) return false;
+    return Math.abs(a.root.position.y - to.point.y) < .1;
+  }
+  function planRoute(point) {
+    const a = active, L = layout;
+    const node = (x, z) => {
+      const s = support(x, z, a) || (a.zone === 'ground' ? support(x, z, { ...a, zone: 'landing' }) : null);
+      return s && { ...s, point: new THREE.Vector3(x, s.y, z) };
+    };
+    const goal = node(point.x, point.z);
+    if (!goal || Math.abs(goal.point.y - point.y) > .18) return [];
+    const start = { point: a.root.position.clone(), zone: a.zone, floor: a.floor };
+    if (clearSegment(start, goal)) return [goal.point];
+    // 계단·경사로·열린 출입구의 중앙과 연못 외곽을 경유점으로 삼는다.
+    const points = [[0, L.lobbyFrontZ + APPROACH_STEP_COUNT * APPROACH_STEP_TREAD + .4], [0, L.lobbyFrontZ - .4],
+      [(L.rampX0 + L.rampX1) / 2, L.rampEndZ + .4], [(L.rampX0 + L.rampX1) / 2, L.lobbyFrontZ - .4],
+      [0, L.lobbyBackZ + radius(a) + .12], [0, CAR_FRONT_Z - radius(a) - .12], [0, (CAR_FRONT_Z + CAR_BACK_Z) / 2]];
+    if (a.floor === 0) for (let i = 0; i < 8; i++) {
+      const angle = i * Math.PI / 4, r = (MEADOW_POND.r + radius(a) + .4) / Math.cos(Math.PI / 8);
+      points.push([MEADOW_POND.x + Math.cos(angle) * r, MEADOW_POND.z + Math.sin(angle) * r]);
+    }
+    const nodes = [start, goal, ...points.map(([x,z]) => node(x,z)).filter(Boolean)];
+    const distance = nodes.map(() => Infinity), previous = [], visited = new Set(); distance[0] = 0;
+    while (visited.size < nodes.length) {
+      let best = -1;
+      for (let i = 0; i < nodes.length; i++) if (!visited.has(i) && (best < 0 || distance[i] < distance[best])) best = i;
+      if (best < 0 || !Number.isFinite(distance[best])) return [];
+      if (best === 1) { const path = []; for (let i = 1; i !== 0; i = previous[i]) path.unshift(nodes[i].point); return path; }
+      visited.add(best);
+      for (let i = 1; i < nodes.length; i++) {
+        if (visited.has(i)) continue;
+        const cost = distance[best] + nodes[best].point.distanceTo(nodes[i].point);
+        if (cost < distance[i] && clearSegment(nodes[best], nodes[i])) { distance[i] = cost; previous[i] = best; }
+      }
+    }
+    return [];
+  }
+  function tapDestination(x, y) {
+    const rect = renderer.domElement.getBoundingClientRect();
+    camera.updateMatrixWorld(true);
+    walkNdc.set((x - rect.left) / rect.width * 2 - 1, -(y - rect.top) / rect.height * 2 + 1);
+    walkRay.setFromCamera(walkNdc, camera);
+    // 보행면 수치 계약에 직접 투영한다. 계단 앞면·점자 돌기·캐릭터가 바닥 탭을 가로채지 않는다.
+    const a = active, L = layout, ray = walkRay.ray;
+    let point = null, distance = Infinity;
+    const consider = (y, slope = 0) => {
+      floorNormal.set(0,1,slope).normalize();
+      floorPlane.set(floorNormal, -y / Math.sqrt(1+slope*slope));
+      if (!ray.intersectPlane(floorPlane,floorHit)) return;
+      const s = support(floorHit.x,floorHit.z,a) || (a.zone==='ground' ? support(floorHit.x,floorHit.z,{...a,zone:'landing'}) : null);
+      if (!s || Math.abs(s.y-floorHit.y)>.045) return;
+      const d = ray.origin.distanceTo(floorHit);
+      if (d < distance) { distance=d; point=floorHit.clone(); point.y=s.y; }
+    };
+    if (a.floor===0 && a.zone!=='car') {
+      consider(plaza.y); consider(Y0-.03);
+      for(let i=0;i<APPROACH_STEP_COUNT;i++) consider(L.slabY-i*L.deltaH/APPROACH_STEP_COUNT);
+      // 눈높이보다 높은 계단 앞면을 눌러도 바로 위 디딤판으로 이동한다.
+      if(Math.abs(ray.direction.z)>1e-6)for(let i=1;i<=APPROACH_STEP_COUNT;i++) {
+        const z=L.lobbyFrontZ+i*APPROACH_STEP_TREAD,t=(z-ray.origin.z)/ray.direction.z;
+        if(t<=0)continue;
+        ray.at(t,floorHit);
+        const high=L.slabY-(i-1)*L.deltaH/APPROACH_STEP_COUNT,low=Math.max(L.groundY,high-L.deltaH/APPROACH_STEP_COUNT);
+        if(Math.abs(floorHit.x)>L.stairW/2-radius(a)-.06||floorHit.y<low||floorHit.y>high)continue;
+        const s=support(floorHit.x,z-.08,a),d=ray.origin.distanceTo(floorHit);
+        if(s&&d<distance){distance=d;point=new THREE.Vector3(floorHit.x,s.y,z-.08);}
+      }
+      const slope=L.deltaH/(L.rampEndZ-L.lobbyFrontZ);
+      consider(L.slabY+slope*L.lobbyFrontZ,slope);
+    }
+    if (a.zone!=='car' || portalOpen(a.floor)) consider(FLOOR_Y[a.floor]);
+    if (a.zone==='car' || portalOpen(a.floor)) consider(carY());
+    if (!point) return;
+    // 보행면을 골라도 닫힌 문·벽 너머를 직접 찍지는 못한다.
+    for(const b of cameraBoxes) {
+      if(b===carBoxes[4]&&portalOpen(a.floor))continue;
+      if(ray.intersectBox(b,floorHit)&&ray.origin.distanceTo(floorHit)<distance-.08)return;
+    }
+    const path = planRoute(point); stopRoute();
+    if (!path.length) return;
+    route = path; const end = route[route.length - 1];
+    destinationRing.position.set(end.x, end.y + .025, end.z); destinationRing.visible = true;
+  }
+  function clearInput() { keys.clear(); lookPointer = null; pinchPoints.clear(); pinchStart = null; stopRoute(); }
   function resetActor(a) {
     a.root.position.copy(a.home); a.root.rotation.y = a.homeYaw; a.zone = 'ground'; a.floor = 0;
     a.visual.position.y = 0; a.resetPose(); viewY = a.root.position.y;
@@ -207,12 +298,19 @@ const CharacterWalk = (() => {
       active.root.position.y = carY(); const f = CarDoor.alignedFloor(); if (f >= 0) active.floor = f;
     }
     const dt = lastTime ? Math.min(.05, Math.max(0, now - lastTime)) : 0; lastTime = now;
-    let x = Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft')) + stick.x;
-    let z = Number(keys.has('KeyS') || keys.has('ArrowDown')) - Number(keys.has('KeyW') || keys.has('ArrowUp')) + stick.y;
+    let x = Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft'));
+    let z = Number(keys.has('KeyS') || keys.has('ArrowDown')) - Number(keys.has('KeyW') || keys.has('ArrowUp'));
     const len = Math.hypot(x, z); if (len > 1) { x /= len; z /= len; }
-    const dx = Math.cos(yaw) * x + Math.sin(yaw) * z, dz = -Math.sin(yaw) * x + Math.cos(yaw) * z;
+    let dx = Math.cos(yaw) * x + Math.sin(yaw) * z, dz = -Math.sin(yaw) * x + Math.cos(yaw) * z;
+    let step = .85 * dt;
+    if (route.length) {
+      const p = active.root.position, next = route[0], distance = Math.hypot(next.x-p.x, next.z-p.z);
+      if (distance < .025) { route.shift(); if (!route.length) stopRoute(); }
+      else { dx = (next.x-p.x)/distance; dz = (next.z-p.z)/distance; step = Math.min(step,distance); }
+    }
     const oldX=active.root.position.x,oldY=active.root.position.y,oldZ=active.root.position.z;
-    const walking = (x || z) && move(active, dx * .85 * dt, dz * .85 * dt);
+    const walking = (dx || dz) && move(active, dx * step, dz * step);
+    if (route.length) { blockedTime = walking ? 0 : blockedTime + dt; if (blockedTime > .25) stopRoute(); }
     const travel=Math.hypot(active.root.position.x-oldX,active.root.position.z-oldZ);
     if (walking) {
       const angle=Math.atan2(dx,dz)-active.root.rotation.y;
@@ -237,20 +335,16 @@ const CharacterWalk = (() => {
       #walk-status{margin-bottom:6px;color:#dfffbc} #walk-help{font-size:11px;font-weight:400;color:#d4e9dc;margin:4px 0 10px}
       .walk-touch-help{display:none}
       #walk-floors{display:flex;gap:5px;margin-top:8px} #walk-floors .called{background:#637d2f;border-color:#dbff9b}
-      #walk-stick{display:none;position:fixed;z-index:110;left:22px;bottom:132px;width:110px;height:110px;border-radius:50%;background:#17392988;border:2px solid #d6f4ce88;touch-action:none;user-select:none;align-items:center;justify-content:center;color:#efffe5;font-size:20px}
-      #walk-stick-knob{position:absolute;width:46px;height:46px;border-radius:50%;background:#e5f3d5b8;box-shadow:0 2px 12px #0003;pointer-events:none}
-      #walk-stick-arrows{line-height:32px;text-align:center;pointer-events:none;opacity:.7}
       #walk-toggle[hidden],#walk-panel[hidden],#walk-floors[hidden],#walk-call[hidden]{display:none}
-      @media(pointer:coarse),(max-width:700px){body.character-walking #walk-stick{display:flex} #walk-panel{top:86px;font-size:12px;padding:10px;width:240px;max-width:calc(100vw - 126px);box-sizing:border-box} .walk-desktop-help{display:none}.walk-touch-help{display:inline} #walk-help{max-width:230px} #walk-floors button{flex:1;min-width:0;padding:6px 4px} }
-      @media(max-height:520px){#walk-panel{top:65px;left:auto;right:10px} #walk-stick{bottom:90px;width:94px;height:94px}}
+      @media(pointer:coarse),(max-width:700px){#walk-panel{top:86px;font-size:12px;padding:10px;width:240px;max-width:calc(100vw - 126px);box-sizing:border-box} .walk-desktop-help{display:none}.walk-touch-help{display:inline} #walk-help{max-width:230px} #walk-floors button{flex:1;min-width:0;padding:6px 4px} }
+      @media(max-height:520px){#walk-panel{top:65px;left:auto;right:10px}}
     `; document.head.appendChild(style);
     const host = document.createElement('div'); host.innerHTML = `
       <button id="walk-toggle">캐릭터 체험</button>
       <section id="walk-panel" aria-label="캐릭터 체험" hidden><div id="walk-status"></div>
-        <div id="walk-help"><span class="walk-desktop-help">WASD 이동 · 마우스 드래그로 둘러보기 · 휠로 확대·축소</span><span class="walk-touch-help">왼쪽 방향키로 이동<br>화면을 밀어 둘러보기 · 두 손가락으로 확대·축소</span></div>
+        <div id="walk-help"><span class="walk-desktop-help">바닥 클릭으로 이동 · 드래그로 시야 회전 · 휠로 확대·축소</span><span class="walk-touch-help">바닥을 찍어 이동 · 밀어서 시야 회전<br>두 손가락으로 확대·축소</span></div>
         <button id="walk-home">시작 위치</button> <button id="walk-exit">체험 종료</button>
-        <button id="walk-call" hidden>승강기 호출</button><div id="walk-floors" hidden></div></section>
-      <div id="walk-stick" aria-label="이동 방향키"><div id="walk-stick-arrows">↑<br>←　→<br>↓</div><div id="walk-stick-knob"></div></div>`;
+        <button id="walk-call" hidden>승강기 호출</button><div id="walk-floors" hidden></div></section>`;
     document.body.appendChild(host); toggle = document.getElementById('walk-toggle');
     panel = document.getElementById('walk-panel'); status = document.getElementById('walk-status');
     toggle.onclick = start;
@@ -260,36 +354,33 @@ const CharacterWalk = (() => {
     for (let f=0;f<FLOORS;f++) { const b=document.createElement('button'); b.textContent=(f+1)+'층'; b.onclick=()=>PassengerControls.request(f); document.getElementById('walk-floors').appendChild(b); }
     ring = new THREE.Mesh(new THREE.RingGeometry(.24,.26,32),new THREE.MeshBasicMaterial({color:0xe4ff9f,side:THREE.DoubleSide,depthWrite:false}));
     ring.name='characterSelectionRing'; ring.rotation.x=-Math.PI/2; ring.visible=false; scene.add(ring);
+    destinationRing = new THREE.Mesh(new THREE.RingGeometry(.13,.17,24),new THREE.MeshBasicMaterial({color:0x59d9ff,side:THREE.DoubleSide,depthWrite:false}));
+    destinationRing.name='characterDestination'; destinationRing.rotation.x=-Math.PI/2; destinationRing.visible=false; scene.add(destinationRing);
     window.addEventListener('keydown', e => {
       if (!active || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || e.target.isContentEditable) return;
       if (e.code==='Escape') { exit(); return; }
-      if (/^(Key[WASD]|Arrow(Up|Down|Left|Right))$/.test(e.code)) { e.preventDefault(); keys.add(e.code); }
+      if (/^(Key[WASD]|Arrow(Up|Down|Left|Right))$/.test(e.code)) { e.preventDefault(); stopRoute(); keys.add(e.code); }
     });
     window.addEventListener('keyup',e=>keys.delete(e.code)); window.addEventListener('blur',clearInput);
     document.addEventListener('visibilitychange',clearInput);
-    const pad=document.getElementById('walk-stick'), knob=document.getElementById('walk-stick-knob');
-    const padMove=e=>{const r=pad.getBoundingClientRect(),dx=e.clientX-r.left-r.width/2,dy=e.clientY-r.top-r.height/2,d=Math.max(35,Math.hypot(dx,dy));
-      stick.x=dx/d;stick.y=dy/d;knob.style.transform=`translate(${stick.x*32}px,${stick.y*32}px)`;};
-    pad.addEventListener('pointerdown',e=>{if(stickPointer!=null)return;e.preventDefault();stickPointer=e.pointerId;pad.setPointerCapture(e.pointerId);padMove(e);});
-    pad.addEventListener('pointermove',e=>{if(e.pointerId===stickPointer)padMove(e);});
-    for(const name of ['pointerup','pointercancel','lostpointercapture'])pad.addEventListener(name,e=>{if(e.pointerId===stickPointer){stickPointer=null;stick.x=stick.y=0;knob.style.transform='';}});
     const canvas=renderer.domElement;
     const pinchDistance=()=>{const [a,b]=[...pinchPoints.values()];return Math.hypot(a.x-b.x,a.y-b.y);};
     canvas.addEventListener('pointerdown',e=>{
       if(active&&e.pointerType==='touch'){
         pinchPoints.set(e.pointerId,{x:e.clientX,y:e.clientY});
-        // 두 번째 손가락: 둘러보기를 멈추고 벌리기/오므리기로 시야를 바꾼다(조이스틱은 별도 요소라 한 손 이동과 함께 쓴다).
+        // 두 번째 손가락부터는 핀치만 처리하고 이동 지점 탭으로 판정하지 않는다.
         if(pinchPoints.size===2){e.stopImmediatePropagation();canvas.setPointerCapture(e.pointerId);lookPointer=null;pinchStart={d:Math.max(1,pinchDistance()),zoom};return;}
       }
       if(active){e.stopImmediatePropagation();if(lookPointer || pinchStart || e.button!==0)return;canvas.setPointerCapture(e.pointerId);}
-      if(e.button===0)lookPointer={id:e.pointerId,x:e.clientX,y:e.clientY,ox:e.clientX,oy:e.clientY,t:performance.now(),drag:false};
+      if(e.button===0)lookPointer={id:e.pointerId,x:e.clientX,y:e.clientY,ox:e.clientX,oy:e.clientY,t:e.timeStamp,drag:false};
     },true);
     canvas.addEventListener('pointermove',e=>{
       if(pinchPoints.has(e.pointerId)){pinchPoints.get(e.pointerId).x=e.clientX;pinchPoints.get(e.pointerId).y=e.clientY;}
       if(active&&pinchStart&&pinchPoints.size===2){e.stopImmediatePropagation();zoom=clamp(pinchStart.zoom*pinchStart.d/Math.max(1,pinchDistance()),ZOOM_MIN,ZOOM_MAX);return;}
       if(!lookPointer||lookPointer.id!==e.pointerId)return;const p=lookPointer;
-      if(Math.hypot(e.clientX-p.ox,e.clientY-p.oy)>6)p.drag=true;
-      if(active){e.stopImmediatePropagation();yaw-=(e.clientX-p.x)*.006;pitch=clamp(pitch+(e.clientY-p.y)*.004,-.2,1.0);}
+      const moved=Math.hypot(e.clientX-p.ox,e.clientY-p.oy),wasDragging=p.drag;
+      if(moved>(e.pointerType==='touch'?14:6))p.drag=true;
+      if(active){e.stopImmediatePropagation();if(p.drag){yaw-=(e.clientX-(wasDragging?p.x:p.ox))*.006;pitch=clamp(pitch+(e.clientY-(wasDragging?p.y:p.oy))*.004,-.2,1.0);}}
       p.x=e.clientX;p.y=e.clientY;
     },true);
     const endPinch=e=>{if(!pinchPoints.delete(e.pointerId))return false;if(pinchPoints.size<2&&pinchStart){pinchStart=null;if(active)e.stopImmediatePropagation();return true;}return false;};
@@ -298,8 +389,10 @@ const CharacterWalk = (() => {
       if(endPinch(e))return;
       const p=lookPointer;if(!p||p.id!==e.pointerId)return;lookPointer=null;
       const wasActive=!!active;
-      if(active&&!p.drag&&performance.now()-p.t<500){
-        const part=PartGlow.pickAt(e.clientX,e.clientY);if(part)PartGlow.activate(part);
+      if(active&&!p.drag&&e.timeStamp-p.t<(e.pointerType==='touch'?850:500)){
+        const part=active.zone==='car'?PartGlow.pickAt(e.clientX,e.clientY):null;
+        if(part?.entries.some(entry=>entry.button?.id.startsWith('ec-action-')))PartGlow.activate(part);
+        else tapDestination(e.clientX,e.clientY);
       }
       if(wasActive)e.stopImmediatePropagation();
     },true);
