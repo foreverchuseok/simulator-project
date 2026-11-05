@@ -200,6 +200,7 @@ const TerminalDemo = (() => {
 
   /* ── 카메라: 카 안쪽(반투명)에서 스위치 열을 비스듬히 — 레버·롤러와 유리창 면이 함께 보인다. 캠 끝을 따라간다 ── */
   function aim(snap) {
+    if (DemoPause.paused) return;
     const dir = state.side, list = ['slowdown', 'limit', 'final'].map(k => sw(k, dir));
     const ys = list.map(s => s.y), lo = Math.min(...ys), hi = Math.max(...ys);
     const camEnd = carGrp.position.y + (dir < 0 ? TERMINAL_CAM.botLY : TERMINAL_CAM.topLY);
@@ -252,10 +253,15 @@ const TerminalDemo = (() => {
     return '';
   }
   function start(kind, dir) {
+    if (state.pending) return false;
     const why = reason();
     if (why) { updateStatus('v-dir', why, '#f0883e'); return false; }
     // 문이 열려 있으면 먼저 닫는다.
-    if (doorOpen || CarDoor.state.busy) { clearTimeout(autoTimer); closeDoors(() => setTimeout(() => start(kind, dir), 200)); return true; }
+    if (doorOpen || CarDoor.state.busy) {
+      state.pending = true; clearTimeout(autoTimer);
+      closeDoors(() => { state.startTimer = setTimeout(() => { if (!state.pending) return; state.pending = false; start(kind, dir); }, 200); });
+      return true;
+    }
     if (!CarDoor.secured() || !DoorBypass.hallSecured()) { updateStatus('v-dir', '카문·승장문 닫힘 확인 후 실행하세요.', '#f0883e'); return false; }
     clearTimeout(autoTimer); closeAllMenus(); leaveCabinView(); PartGlow.closeMenu?.();
     saved = { floor: insNearestFloor(), p: camera.position.clone(), t: controls.target.clone(), fov: camera.fov, near: camera.near, min: controls.minDistance, enabled: controls.enabled };
@@ -273,7 +279,7 @@ const TerminalDemo = (() => {
   }
   function finish() {
     epoch++; jobs.forEach(j => j?.kill?.()); jobs = []; drive = null; waitReset = null; gsap.ticker.remove(tick);
-    if (DemoPause.paused) DemoPause.set(false);
+    if (DemoPause.paused) DemoPause.set(false, { exit: true });
     state.active = false; panel.hidden = true; tags.forEach(t => t.hidden = true); ghostCar(false);
     camera.position.copy(saved.p); controls.target.copy(saved.t); camera.fov = saved.fov; camera.near = saved.near; camera.updateProjectionMatrix();
     controls.minDistance = saved.min; controls.enabled = saved.enabled; controls.update();
@@ -282,6 +288,7 @@ const TerminalDemo = (() => {
   // 종료(완료 후 「종료 · 원위치」·×·Esc·비상정지): 고장 가정·래치를 지우고 시연 전 층·시점으로 되돌린다.
   // 점검 전체 리셋 없이 바로 다시 운행할 수 있는 상태로 끝낸다.
   function cancel() {
+    state.pending = false; clearTimeout(state.startTimer);
     if (!state.active) return;
     const f = saved.floor;
     finish(); clearFaults();
@@ -355,10 +362,10 @@ const TerminalDemo = (() => {
       if (type === 'keydown' && e.key === 'Escape') { e.preventDefault(); cancel(); return; }
       if (e.target.closest?.('button,input,select,canvas') || type === 'keydown') { e.preventDefault(); e.stopImmediatePropagation(); }
     }, true);
-    window.addEventListener('resize', () => { if (state.active) { camera.fov = camera.aspect < .9 ? 66 : 52; camera.updateProjectionMatrix(); aim(true); } });
+    window.addEventListener('resize', () => { if (state.active && !DemoPause.paused) { camera.fov = camera.aspect < .9 ? 66 : 52; camera.updateProjectionMatrix(); aim(true); } });
   }
   return {
     build, update, start, cancel, isOpen, blockReason, latchFinal, resetFinal, clearFaults,
-    get active() { return state.active; }, get blocksCommands() { return state.active; }, get latched() { return state.latched; }, get state() { return state; }
+    get active() { return state.active; }, get blocksCommands() { return state.active || !!state.pending; }, get latched() { return state.latched; }, get state() { return state; }
   };
 })();

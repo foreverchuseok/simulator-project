@@ -71,14 +71,29 @@ try{
  const lb=await page.evaluate(()=>{const b=document.getElementById('m-demo-list').getBoundingClientRect();return{top:b.top,bottom:b.bottom,h:innerHeight};});
  assert.ok(lb.top>=0&&lb.bottom<=lb.h+.5,'landscape list inside screen '+JSON.stringify(lb));await shot('6-landscape');await page.tap('#m-demo-fab');
  await page.setViewportSize({width:1280,height:800});await page.waitForTimeout(600);
- assert.equal(await vis('#m-demo-fab'),false,'PC: no fab');
- // 6) PC 직접 클릭 유지
+ assert.equal(await vis('#m-demo-fab'),true,'PC: shared demo fab');
+ // 6) PC 부품 클릭은 선택 메뉴를 열고 시연을 바로 시작하지 않는다.
  await lookAtGovernor();await page.waitForTimeout(800);
  const pc=await findPart();assert.ok(pc,'PC part on screen');
  await page.mouse.click(pc.x,pc.y);await page.waitForTimeout(500);
  const pcResult=await page.evaluate(()=>({menu:!document.getElementById('part-menu').hidden,demo:!!DemoPause.demo||overspeedActive||UCMDemo.state.active}));
- report.pcClick={part:pc.name,...pcResult};assert.ok(pcResult.menu||pcResult.demo,'PC click activates part');
+ report.pcClick={part:pc.name,...pcResult};assert.equal(pcResult.menu,true,'PC click opens part menu');assert.equal(pcResult.demo,false,'PC click does not start demo');
  await shot('7-pc');
+ // 단일 시연과 direct 피킹 부품도 먼저 선택 메뉴를 연다.
+ report.pcChoices=await page.evaluate(()=>['과속 조절기','ARD 자동구출장치','카 완충기','카문 멀티빔(문닫힘 안전장치)','카 상부 주로프'].map(name=>{
+  const p=PartGlow.parts.find(p=>p.name===name&&p.entries.length);if(!p)return{name,menu:false};
+  const saved=p.entries.map(e=>e.button.hidden);p.entries.forEach(e=>e.button.hidden=false);
+  const box=new THREE.Box3();p.objects.forEach(o=>box.expandByObject(o));const center=box.getCenter(new THREE.Vector3());
+  controls.enableDamping=false;camera.position.copy(center).add(new THREE.Vector3(1,1,2));controls.target.copy(center);controls.update();PartGlow.render();
+  PartGlow.activate(p);const menu=PartGlow.menuPart===p&&!document.getElementById('part-menu').hidden;
+  p.entries.forEach((e,i)=>e.button.hidden=saved[i]);PartGlow.closeMenu();return{name,menu};
+ }));assert.ok(report.pcChoices.every(p=>p.menu),JSON.stringify(report.pcChoices));assert.equal(await demoOn(),false);
+ await page.click('#m-demo-fab');assert.equal(await vis('#m-demo-list'),true,'PC list opens');
+ await page.click('#m-demo-list button:has-text("문닫힘 안전장치")');
+ await page.waitForFunction(()=>PhotoEyeDemo.active);assert.equal(await vis('#m-demo-list'),false,'PC choice closes list');
+ await page.waitForFunction(()=>document.getElementById('m-demo').hidden);
+ await page.click('#photo-eye-exit');await page.waitForFunction(()=>!PhotoEyeDemo.active&&!document.getElementById('m-demo').hidden);
+ report.pcDemo='choose→start→hide→exit→return';
  assert.deepEqual(errors,[],'page errors '+errors.join('|'));
  fs.writeFileSync(path.join(out,'report.json'),JSON.stringify(report,null,1));console.log(JSON.stringify(report,null,1));console.log('PASS');
 }catch(e){await shot('fail').catch(()=>{});console.error('FAIL',e.message,errors);process.exitCode=1;}finally{await browser.close();server.close();}

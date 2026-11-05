@@ -289,6 +289,7 @@ const PhotoEyeDemo = (() => {
   }
   function stopJobs() { epoch++; jobs.forEach(j => j?.kill?.()); jobs = []; pending = {}; gsap.killTweensOf(a); }
   function finish(completed) {
+    if (DemoPause.paused) DemoPause.set(false, { exit: true });
     if (!state.active) return;
     stopJobs(); state.active = false; state.completed = completed; state.stage = completed ? 'done' : 'idle';
     worker.endInspection(); arms.reset(); worker.root.visible = false; worker.root.scale.setScalar(1);

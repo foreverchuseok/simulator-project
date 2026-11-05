@@ -87,7 +87,7 @@ const AscentDemo = (() => {
   function close(){if(panel)panel.hidden=true;if(button)button.setAttribute('aria-expanded','false');}
   function update(){
     if(!button)return;
-    if(state.active&&state.stage!=='resetting')poseBear();
+    if(state.active&&state.stage!=='resetting'&&!DemoPause.paused)poseBear();
     const anchor=document.getElementById('rope-brake-action');
     button.hidden=anchor.hidden||!PartActions.iconsVisible||state.active;
     if(!button.hidden){
@@ -299,8 +299,9 @@ const AscentDemo = (() => {
       shot('car',.35);later(1.2,()=>{setTractionCutaway(true,true);setTractionBrake(false,true);shot('gear',.65);later(1.25,breakDrive);});
     }}));
   }
-  function reset(){
-    if(!state.active||state.stage==='resetting')return;
+  function reset({instant=false}={}){
+    if(!state.active||(state.stage==='resetting'&&!instant))return;
+    if(DemoPause.paused)DemoPause.set(false,{exit:true});
     state.stage='resetting';jobs.forEach(t=>t.kill());jobs=[];gsap.ticker.remove(tick);inset.hidden=true;UCMEffects.clear();
     play.disabled=true;passenger().visible=false;state.lift=0;state.v=0;shake?.cancel();if(dust)dust.visible=ring.visible=false;
     mainSheaveGrp.position.copy(saved.mainP);deflectorSheaveGrp.position.copy(saved.defP);cwtGrp.position.x=saved.cwtP.x;
@@ -311,13 +312,13 @@ const AscentDemo = (() => {
     if(saved.buffer)bufferGrp.userData.cwt.urethane.scale.copy(saved.buffer);
     gsap.killTweensOf(camera.position);gsap.killTweensOf(controls.target);state.view='resetting';moving=true;estop=false;currentState=ELEVATOR_STATE.MOVING;
     say('상승과속 시연 종료 · 정상 복귀');const q={y:carGrp.position.y};
-    own(gsap.to(q,{y:saved.y,duration:1.1,ease:'power2.inOut',onUpdate:()=>setCar(q.y),onComplete:()=>{
+    own(gsap.to(q,{y:saved.y,duration:instant?0:1.1,ease:'power2.inOut',onUpdate:()=>setCar(q.y),onComplete:()=>{
       carGrp.position.y=saved.y;cwtGrp.position.y=saved.cwt;mainSheaveGrp.rotation.z=saved.sheave;deflectorSheaveGrp.rotation.z=saved.deflector;tr().worm.rotation.z=saved.worm;g.wheel.rotation.z=saved.wheel;tensionSheaveGrp.rotation.x=saved.tension;
       refreshRopes();refreshGovernorRope();saved.bearParent.add(passenger());Mascot.endInspection();
       saved.bearPose.forEach(({o,p,q,s,visible})=>{o.position.copy(p);o.quaternion.copy(q);o.scale.copy(s);o.visible=visible;});
-      _restoreCam(.4);
-      own(gsap.delayedCall(.45,()=>{curFloor=saved.floor;moving=false;estop=false;overspeedActive=false;currentState=ELEVATOR_STATE.IDLE;state.active=false;state.stage='rest';play.disabled=false;play.textContent='상승과속 시연';caption.hidden=true;document.body.classList.remove('ucm-active');MACH.motorOff();syncAllIndicators(curFloor+1,'');updateStatus('v-spd','0 m/min');updateStatus('v-dir','정지 대기','#8b949e');}));
+      _restoreCam(instant?0:.4);
+      own(gsap.delayedCall(instant?0:.45,()=>{curFloor=saved.floor;moving=false;estop=false;overspeedActive=false;currentState=ELEVATOR_STATE.IDLE;state.active=false;state.stage='rest';play.disabled=false;play.textContent='상승과속 시연';caption.hidden=true;document.body.classList.remove('ucm-active');MACH.motorOff();syncAllIndicators(curFloor+1,'');updateStatus('v-spd','0 m/min');updateStatus('v-dir','정지 대기','#8b949e');}));
     }}));
   }
-  return {build,update,renderInset,start,reset,close,motion,state,get active(){return state.active;}};
+  return {build,update,renderInset,start,reset,cancel:()=>reset({instant:true}),close,motion,state,get active(){return state.active;}};
 })();

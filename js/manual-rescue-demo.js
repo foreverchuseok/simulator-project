@@ -362,7 +362,7 @@ const ManualRescueDemo=(()=>{
   function update(){
     if(!button)return;
     if(state.active){
-      poseWorkers();updateWire();button.hidden=true;
+      if(!DemoPause.paused){poseWorkers();updateWire();}button.hidden=true;
       if(!levelLabel.hidden){
         point.set(S.CAR_W/2+.03,FLOOR_Y[state.floor]-FAULT_GAP/2,CAR_CTR_Z-S.CAR_D*.28).project(camera);
         levelLabel.style.left=Math.max(12,Math.min(innerWidth-levelLabel.offsetWidth-12,(point.x+1)*innerWidth/2+16))+'px';
@@ -381,7 +381,7 @@ const ManualRescueDemo=(()=>{
     button.hidden=false;PartActions.positionButton(button,(point.x+1)*innerWidth/2-22,(1-point.y)*innerHeight/2-22);
   }
   function reset(){
-    if(!state.active)return false;state.active=false;jobs.forEach(t=>t.kill());jobs=[];clearTimeout(autoTimer);CarDoor.state.timeline?.kill();impact?.cancel();if(levelMarker)levelMarker.visible=false;
+    if(!state.active)return false;if(DemoPause.paused)DemoPause.set(false,{exit:true});state.active=false;jobs.forEach(t=>t.kill());jobs=[];clearTimeout(autoTimer);CarDoor.state.timeline?.kill();impact?.cancel();if(levelMarker)levelMarker.visible=false;
     alarm.hidden=true;levelLabel.hidden=true;
     if(activeAnnouncement){activeAnnouncement.pause();activeAnnouncement=null;}announcementRequest++;window.speechSynthesis?.cancel();MACH.duck(false);
     if(state.call)HallInspector.end();EmergencyCall.setManualLink(false);actors?.forEach(a=>{a.rig.reset();a.carry=null;a.toolGrip=null;a.secondGrip=null;a.hand=null;a.platform=null;});platforms.forEach(p=>p.visible=false);friend?.endInspection();Mascot.endInspection();Mascot.root.scale.copy(saved.bearScale);

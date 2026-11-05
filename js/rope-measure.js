@@ -245,7 +245,7 @@ const RopeMeasure = (() => {
   }
   function cancel() {
     if (!state.active) { panel.hidden = true; return; }
-    timeline?.kill(); if (DemoPause.paused) DemoPause.set(false);
+    timeline?.kill(); if (DemoPause.paused) DemoPause.set(false, { exit: true });
     gsap.killTweensOf(camera.position); gsap.killTweensOf(controls.target); restoreDrop(); setCar(saved.car); cwtGrp.position.y = saved.cwt; refreshRopes();
     curFloor = saved.floor; state.active = false; root.visible = false; panel.hidden = true;
     arms.reset(); worker.endInspection(); Mascot.root.visible = saved.mascotVisible;

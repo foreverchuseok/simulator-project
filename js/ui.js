@@ -826,7 +826,8 @@ function updateManualCameraNear() {
       const gov = mrGrp.userData.governor;
       if (insMode) { updateStatus('v-dir', '점검운전 중 — 자동 시연 불가 (AUT 전환)', '#f0883e'); return; }
       if (!gov?.ready || !carGrp.userData.safetyGear || moving || estop || CarDoor.state.busy) return;
-      if (doorOpen) { clearTimeout(autoTimer); closeDoors(()=>startOverspeedFault(btn)); return; }
+      if (ovsDemo.pendingStart) return;
+      if (doorOpen) { ovsDemo.pendingStart=true;clearTimeout(autoTimer);closeDoors(()=>{if(!ovsDemo.pendingStart)return;ovsDemo.pendingStart=false;startOverspeedFault(btn);});return; }
       // 시연에 필요한 낙하 거리는 자동 준비한다. 사용자가 먼저 3층을 호출할 필요가 없다.
       const startFloor=Math.max(curFloor,Math.min(2,FLOORS-1));
       const setupY=FLOOR_Y[startFloor]+S.CAR_H/2,setupDelta=setupY-carGrp.position.y;
@@ -986,8 +987,11 @@ function updateManualCameraNear() {
       ovsDemo.stop=tween;return tween;
     }
 
-    function resetGovernorFault(btn) {
-      if(ovsDemo.stage==='resetting'||!overspeedActive)return;
+    function resetGovernorFault(btn, { instant = false } = {}) {
+      if(instant&&ovsDemo.pendingStart){ovsDemo.pendingStart=false;return;}
+      if((ovsDemo.stage==='resetting'&&!instant)||!overspeedActive)return;
+      if(DemoPause.paused)DemoPause.set(false,{exit:true});
+      if(instant)ovsDemo.resetTimeline?.kill();
       btn.disabled = true;
       ovsDemo.stage='resetting';ovsDemo.shot=null;setOVSCutaway(false);
       if(ovsDemo.fallTick){gsap.ticker.remove(ovsDemo.fallTick);ovsDemo.fallTick=null;}
@@ -996,16 +1000,17 @@ function updateManualCameraNear() {
       restoreOVSRopes();
       const caption=document.getElementById('ovs-stage');if(caption)caption.hidden=true;
       gsap.killTweensOf(camera.position);gsap.killTweensOf(controls.target);
-      _restoreCam(1.0); // 디바이스 클로즈업 중 즉시 복귀 눌러도 카메라 원위치
+      _restoreCam(instant ? 0 : 1.0); // 디바이스 클로즈업 중 즉시 복귀 눌러도 카메라 원위치
       updateStatus('v-dir', '조속기 복귀 중…', '#f0883e');
       // 파단 관찰/타격 도중에도 현재 기구 자세에서 같은 복귀 시퀀스로 정리한다.
       governorPhase='tripped';
-      governorReset(() => {
+      ovsDemo.resetTimeline = governorReset(() => {
         estop = false; overspeedActive = false;
         ovsDemo.stage='rest';
         btn.disabled = false; btn.textContent = 'OVS';
-        rescueToNearestFloor();
+        if(!instant)rescueToNearestFloor();
       });
+      if(instant)ovsDemo.resetTimeline?.progress(1);
     }
 
     // 구출 운전 — 최근접 층까지 서행 이동 후 도어 개방
@@ -1361,7 +1366,7 @@ function updateManualCameraNear() {
         mascotBtn.setAttribute('aria-pressed', String(on));
       });
       document.getElementById('c-background').addEventListener('click', () => {
-        setDetailedBackground(!outdoorPresentation.detailed);
+        setBranchLogoVisible(!outdoorPresentation.logoVisible);
       });
 
       // 승장 삼각키 단일 탭은 PartGlow(js/part-glow.js)가 「N층 승장문 비상키」 부품 탭으로 처리한다(HallManual.pick).
@@ -1374,7 +1379,7 @@ function updateManualCameraNear() {
       const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
       let lastTap = null;
       const cancelMotion = () => {
-        if (overspeedActive || !controls.enabled) return;
+        if (DemoPause.paused || overspeedActive || !controls.enabled) return;
         settleCabinEntry();
         gsap.killTweensOf(camera.position);
         gsap.killTweensOf(controls.target);
@@ -1393,7 +1398,8 @@ function updateManualCameraNear() {
       }, true);
       canvas.addEventListener('pointermove', e => {
         const p = pointers.get(e.pointerId);
-        if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 6) p.invalid = true;
+        const mobile = MobileHUD.isMobile();
+        if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) > (mobile ? 18 : 6)) p.invalid = true;
       }, true);
       const clear = () => { pointers.clear(); lastTap = null; };
       canvas.addEventListener('pointercancel', clear, true);
@@ -1402,7 +1408,7 @@ function updateManualCameraNear() {
         const p = pointers.get(e.pointerId);
         pointers.delete(e.pointerId);
         const now = e.timeStamp || performance.now();
-        if (!p || p.invalid || now - p.time > 450 || overspeedActive || !controls.enabled || CharacterWalk.active) {
+        if (!p || p.invalid || now - p.time > (MobileHUD.isMobile() ? 700 : 450) || DemoPause.paused || overspeedActive || !controls.enabled || CharacterWalk.active) {
           ignored.add(e); lastTap = null; return;
         }
         const rect = canvas.getBoundingClientRect();
@@ -1415,8 +1421,9 @@ function updateManualCameraNear() {
         if(!MobileHUD.isMobile()&&part?.entries.some(entry=>entry.direct)){lastTap=null;return;}
         const previous = lastTap;
         lastTap = { x: e.clientX, y: e.clientY, time: now, type: e.pointerType };
-        if (!previous || previous.type !== e.pointerType || now - previous.time > 350 ||
-            Math.hypot(previous.x - e.clientX, previous.y - e.clientY) > 24) return;
+        const mobile = MobileHUD.isMobile();
+        if (!previous || previous.type !== e.pointerType || now - previous.time > (mobile ? 700 : 350) ||
+            Math.hypot(previous.x - e.clientX, previous.y - e.clientY) > (mobile ? 64 : 24)) return;
         lastTap = null;
         const meshes = [];
         scene.traverseVisible(o => {

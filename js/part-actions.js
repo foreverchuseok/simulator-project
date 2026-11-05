@@ -31,7 +31,7 @@ const PartActions=(()=>{
   function sync(){
     const ovsReset=governor.textContent.trim()==='RST',ucmReset=source.textContent.trim()==='RST';
     icon(governor,ovsReset?'reset':'governor');icon(source,ucmReset?'reset':'play');icon(brake,ucmReset?'reset':'brake');
-    governor.setAttribute('aria-label',ovsReset?'조속기 복귀':'조속기 과속 시연');
+    governor.setAttribute('aria-label',ovsReset?'과속 조절기 복귀':'과속 조절기 시연');
     source.setAttribute('aria-label',ucmReset?'개문발차 복귀':'개문발차 시연');
     brake.setAttribute('aria-label',ucmReset?'로프브레이크 시연 복귀':'로프브레이크 시연 설정');
     brake.disabled=source.disabled;
@@ -45,7 +45,7 @@ const PartActions=(()=>{
     governor=document.getElementById('btn-overspeed');brake=document.getElementById('rope-brake-action');
     panel=document.getElementById('rope-brake-panel');source=document.getElementById('btn-ucm');
     icon(document.getElementById('pit-ladder-action'),'ladder');sync();
-    PartGlow.bind(governor,()=>govHandles()?.ready?govHandles().wheel.parent:null,'조속기');
+    PartGlow.bind(governor,()=>govHandles()?.ready?govHandles().wheel.parent:null,'과속 조절기');
     PartGlow.bind(brake,ropeBrakeNode,'로프브레이크',()=>UCMDemo.state.active?'개문발차 복귀':'개문발차 시연 설정');
     for(const b of [governor,source])new MutationObserver(sync).observe(b,{childList:true,characterData:true,subtree:true,attributes:true,attributeFilter:['disabled']});
     brake.addEventListener('click',()=>{

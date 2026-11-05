@@ -185,7 +185,7 @@ const ARDDemo = (() => {
     // 암전 대신 승강장에서 닫힌 카와 안전하게 나온 승강곰을 보여주며 종료한다.
     moving=false;currentState=ELEVATOR_STATE.IDLE;updateStatus('v-spd','0 m/min');
   }
-  function stopJobs(){epoch++;jobs.forEach(j=>j?.kill());jobs=[];clearTimeout(autoTimer);gsap.killTweensOf(carGrp.position);gsap.killTweensOf(camera.position);gsap.killTweensOf(controls.target);MACH.motorOff();MACH.brakeSet();
+  function stopJobs(){if(DemoPause.paused)DemoPause.set(false,{exit:true});epoch++;jobs.forEach(j=>j?.kill());jobs=[];clearTimeout(autoTimer);gsap.killTweensOf(carGrp.position);gsap.killTweensOf(camera.position);gsap.killTweensOf(controls.target);MACH.motorOff();MACH.brakeSet();
     if(activeAnnouncement){activeAnnouncement.pause();activeAnnouncement=null;}announcementRequest++;window.speechSynthesis?.cancel();MACH.duck(false);}
   function halt(){
     if(!state.active)return;stopJobs();CarDoor.pause();moving=false;currentState=ELEVATOR_STATE.ESTOP;alarm.hidden=true;if(outline)outline.visible=false;
@@ -211,11 +211,18 @@ const ARDDemo = (() => {
     const cabinLight=scene.getObjectByName('carLight');if(cabinLight)cabinLight.position.y=carGrp.position.y+S.CAR_H*.75;
     state.active=false;state.stage='idle';state.countdown=0;jobs=[];currentState=ELEVATOR_STATE.IDLE;updateStatus('v-dir','정상 자동운전 · 정지 대기','#3fb950');
   }
+  function cancel(){
+    if(!state.active)return;
+    stopJobs();CarDoor.state.timeline?.kill();
+    if(walk.active){Mascot.endInspection();walk.active=false;}
+    if(outline)outline.visible=false;
+    cleanup();
+  }
   function update(){
     if(!button)return;
-    if(state.active){button.hidden=true;poseMascot();if(['cabin','rescue','opening','open','closing'].includes(state.stage)){
+    if(state.active){button.hidden=true;if(!DemoPause.paused)poseMascot();if(['cabin','rescue','opening','open','closing'].includes(state.stage)){
       // 버튼 누름 클로즈업 이후에는 정면 눈높이 시점으로 카를 추종한다.
-      if(state.stage==='cabin'||state.stage==='rescue')cabinShot();
+      if(!DemoPause.paused&&(state.stage==='cabin'||state.stage==='rescue'))cabinShot();
     }return;}
     ard=MachineRoomPower.root?.getObjectByName('ARDInstallation');if(!ard)return;
     point.set(0,MR_POWER_SPEC.ard.stand+MR_POWER_SPEC.ard.h+.12,MR_POWER_SPEC.ard.d*.5);ard.localToWorld(point);
@@ -224,5 +231,5 @@ const ARDDemo = (() => {
     point.project(camera);show=show&&point.z>-1&&point.z<1&&Math.abs(point.x)<.96&&Math.abs(point.y)<.94;button.hidden=!show;
     if(show)PartActions.positionButton(button,(point.x+1)*innerWidth/2-22,(1-point.y)*innerHeight/2-22);
   }
-  return {build,update,start,halt,reset,get active(){return state.active;},get blocksCommands(){return state.active&&!internal;},get state(){return state;}};
+  return {build,update,start,halt,reset,cancel,get active(){return state.active;},get blocksCommands(){return state.active&&!internal;},get state(){return state;}};
 })();

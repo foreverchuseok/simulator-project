@@ -873,15 +873,25 @@
     #hall-message[hidden], #hall-drive-note[hidden] { display:none; }
     #hall-message.warning { padding:6px; border-left:2px solid #fbbf24; background:#f59e0b18; }
     #hall-panel .hold button { touch-action:none; user-select:none; }
+    #background-branch-logo { position:absolute; z-index:1; right:24px; top:28px; display:flex; align-items:center; gap:14px; pointer-events:none; user-select:none; mix-blend-mode:multiply; }
+    #background-branch-logo .branch-symbol { width:62px; aspect-ratio:1; background:url('assets/bg/branch_brand.png') 11.06% 41.3% / 853.333% auto no-repeat; opacity:.64; filter:saturate(.9); }
+    #background-branch-logo .branch-copy { border-left:1px solid #315a7742; padding-left:14px; white-space:nowrap; }
+    #background-branch-logo small { display:block; font-size:13px; letter-spacing:.08em; color:#24384b9e; }
+    #background-branch-logo b { display:block; font-size:25px; letter-spacing:.14em; font-weight:600; color:#14598bb3; }
+    #background-branch-logo[hidden] { display:none; }
+    @media (max-width:600px) and (orientation:portrait), (max-height:500px) and (orientation:landscape) {
+      #background-branch-logo { display:none; }
+    }
   </style>
-  <link rel="stylesheet" href="css/desktop-hud.css?v=20261004-1">
-  <link rel="stylesheet" href="css/mobile-hud.css?v=20261104-view-compact">
+  <link rel="stylesheet" href="css/desktop-hud.css?v=20261105-light-modern2">
+  <link rel="stylesheet" href="css/mobile-hud.css?v=20261106-exit-spacing">
 </head>
 
 <body>
 
   <!-- 3D 캔버스 영역 -->
   <div id="canvas-wrap">
+    <div id="background-branch-logo" aria-label="한국승강기안전공단 경기북부지사"><span class="branch-symbol" aria-hidden="true"></span><div class="branch-copy"><small>한국승강기안전공단</small><b>경기북부지사</b></div></div>
 
     <!-- HUD: 상태 카드 · 우상단 레일 · 시트 · 하단 운행바. 기능 연결은 id 로만 한다(js/ui.js). -->
     <div id="hud">
@@ -950,7 +960,7 @@
         <h4>보기</h4>
         <div class="toggles">
           <button class="toggle" id="tm-cutaway" aria-pressed="false" title="기어 케이스 절개 — 웜·휠 이물림과 오일 레벨"><span><b><span class="l-full">권상기 내부</span><span class="l-short">권상기</span></b><small>기어 케이스 절개 · 웜·휠 이물림</small></span></button>
-          <button class="toggle" id="c-background" aria-pressed="false" title="하늘 돔·구름과 주변 조명 전환"><span><b><span class="l-full">주변 풍경</span><span class="l-short">풍경</span></b><small>하늘·구름·조명</small></span></button>
+          <button class="toggle active" id="c-background" aria-pressed="true" title="기본 배경의 경기북부지사 로고 표시"><span><b><span class="l-full">배경 로고</span><span class="l-short">로고</span></b><small>경기북부지사</small></span></button>
           <button class="toggle active" id="part-glow-toggle" aria-pressed="true" title="기능이 있는 부품의 테두리 빛·반짝임. 꺼도 부품을 누르면 메뉴가 열립니다"><span><b><span class="l-full">부품 빛 효과</span><span class="l-short">부품 빛</span></b><small>기능 부품 테두리 발광</small></span></button>
           <button class="toggle active" id="c-mascot" aria-pressed="true" title="기계실 마스코트 표시/숨김"><span><b>캐릭터</b><small>기계실 마스코트 「승강곰」</small></span></button>
         </div>
@@ -1023,7 +1033,7 @@
       <p>평상시에는 간극을 두고 문과 함께 이동합니다. 마모·부식·화재 등으로 기존 가이드가 기능을 잃었을 때 문이 제 위치에서 이탈하지 않도록 붙잡는 보조 장치입니다.</p>
       <p class="guide-detail">참고 형식: SUS304 · 두께 2mm 절곡판. 현재 승장문에 맞춘 교육용 형상입니다.</p>
     </section>
-    <button id="btn-overspeed" class="part-action governor-icon" aria-label="조속기 과속 시연" title="조속기 과속 시연 · 시작 위치 자동 준비" hidden>OVS</button>
+    <button id="btn-overspeed" class="part-action governor-icon" aria-label="과속 조절기 시연" title="과속 조절기 시연 · 시작 위치 자동 준비" hidden>OVS</button>
     <button id="rope-brake-action" class="part-action brake-icon" aria-label="로프브레이크 시연 설정" aria-expanded="false" aria-controls="rope-brake-panel" hidden></button>
     <section id="rope-brake-panel" class="glass" aria-label="로프브레이크 시연" hidden>
       <div class="part-panel-head"><span>로프브레이크</span><button id="rope-brake-dismiss" aria-label="접기">×</button></div>
@@ -1063,10 +1073,10 @@
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
   <script src="js/config.js"></script>
-  <script src="js/part-glow.js?v=20261104-demo-menu"></script>
+  <script src="js/part-glow.js?v=20261106-pause-explore"></script>
   <script src="js/pit-tensioner.js"></script>
-  <script src="js/character-walk.js?v=20261105-touch-response2"></script>
-  <script src="js/environment.js?v=20261005-optimization-approach"></script>
+  <script src="js/character-walk.js?v=20261105-game-controls-2"></script>
+  <script src="js/environment.js?v=20261105-cabin-space-mid-tone"></script>
   <script src="js/machine-room-safety.js"></script>
   <script src="js/control-panel.js?v=20261002-rescue-focus"></script>
   <script src="js/machine-room-power.js?v=20261002-choreography"></script>
@@ -1089,32 +1099,33 @@
   <script src="js/hall-emergency-guide.js"></script>
   <script src="js/pit-ladder.js?v=20260930-glow-1"></script>
   <script src="js/ucm-effects.js?v=20260930-ascent-1"></script>
-  <script src="js/ucm-demo.js?v=20261003-pause-1"></script>
-  <script src="js/ascent-demo.js?v=20261003-pause-2"></script>
-  <script src="js/brake-demo.js?v=20261003-pause-1"></script>
-  <script src="js/buffer-demo.js?v=20261004-pit-spans-2"></script>
-  <script src="js/part-actions.js?v=20261003-drunk-kick"></script>
+  <script src="js/ucm-demo.js?v=20261106-pause-explore"></script>
+  <script src="js/ascent-demo.js?v=20261106-pause-explore"></script>
+  <script src="js/brake-demo.js?v=20261106-pause-explore"></script>
+  <script src="js/buffer-demo.js?v=20261106-pause-explore"></script>
+  <script src="js/part-actions.js?v=20261105-governor-label"></script>
   <script src="js/overspeed-effects.js?v=20260930-ovs-1"></script>
-  <script src="js/ui.js?v=20261104-demo-menu"></script>
+  <script src="js/ui.js?v=20261106-pause-explore"></script>
   <script src="js/desktop-hud.js?v=20261004-1"></script>
-  <script src="js/mobile-hud.js?v=20261104-view-compact"></script>
+  <script src="js/mobile-hud.js?v=20261106-pause-explore"></script>
   <script src="js/passenger-controls.js?v=20261002-passenger-buttons"></script>
   <script src="js/hall-inspector.js?v=20261002-manual-rescue"></script>
   <script src="js/hall-manual.js?v=20260930-glow-1"></script>
   <script src="js/inspection-stations.js?v=20260930-glow-1"></script>
   <script src="js/inspection-return.js"></script>
-  <script src="js/interlock-demo.js?v=20261003-retention-story"></script>
-  <script src="js/relay-rope-demo.js?v=20261003-pause-1"></script>
+  <script src="js/interlock-demo.js?v=20261106-pause-explore"></script>
+  <script src="js/relay-rope-demo.js?v=20261106-pause-explore"></script>
   <script src="js/drunk-bear.js?v=20261003-polar-1"></script>
-  <script src="js/retention-demo.js?v=20261003-front-cut"></script>
-  <script src="js/demo-pause.js?v=20261004-terminal"></script>
+  <script src="js/retention-demo.js?v=20261106-pause-explore"></script>
+  <script src="js/demo-pause.js?v=20261106-pause-explore"></script>
+  <script src="js/demo-exit.js?v=20261106-opposite-2"></script>
   <script src="js/finger-gap.js?v=20260930-glow-1"></script>
   <script src="js/emergency-lighting.js?v=20260930-glow-1"></script>
-  <script src="js/ard-demo.js?v=20261003-pause-1"></script>
-  <script src="js/manual-rescue-demo.js?v=20261003-pause-1"></script>
-  <script src="js/photo-eye-demo.js?v=20261004-2"></script>
-  <script src="js/rope-measure.js?v=20261005-1"></script>
-  <script src="js/terminal-demo.js?v=20261004-1"></script>
+  <script src="js/ard-demo.js?v=20261106-pause-explore"></script>
+  <script src="js/manual-rescue-demo.js?v=20261106-pause-explore"></script>
+  <script src="js/photo-eye-demo.js?v=20261106-pause-explore"></script>
+  <script src="js/rope-measure.js?v=20261106-pause-explore"></script>
+  <script src="js/terminal-demo.js?v=20261106-pause-explore"></script>
 
   <script>
     // 층수 및 층고 배열 (피트 1.76m, 1층 4.0m, 2층 3.65m, 3층 3.7m)
@@ -1441,8 +1452,8 @@
        ========================================================================== */
     function init() {
       scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x7ec8f0); // 시안 하늘 (buildBackground에서 그라데이션으로 교체)
-      scene.fog = new THREE.FogExp2(0xe8f4fc, 0.0045);
+      scene.background = new THREE.Color(STUDIO_BACKGROUND_COLOR);
+      scene.fog = new THREE.FogExp2(STUDIO_BACKGROUND_COLOR, 0.009);
 
       const wrap = document.getElementById('canvas-wrap');
       camera = new THREE.PerspectiveCamera(50, wrap.clientWidth / wrap.clientHeight, MANUAL_CAMERA.near, 200);
@@ -1599,6 +1610,7 @@
       updateBuffers();          // 동적 완충기
       BufferDemo.build();       // 카 완충기 충돌 시연 아이콘·먼지·균형추 여유거리 치수 (js/buffer-demo.js)
       DemoPause.build();        // 모든 시연 공통 일시정지 버튼 (js/demo-pause.js)
+      DemoExit.build();         // 모든 시연 공통 × 취소 · 전체 보기 복귀
       ARDDemo.build();
       ManualRescueDemo.build();
       PhotoEyeDemo.build();     // 카문 문닫힘 안전장치(멀티빔) 시연 — 승곰이 (js/photo-eye-demo.js)
@@ -1634,10 +1646,11 @@
       // 시브 자전은 여기서 시간 기반으로 흉내내지 않는다.
       // 카가 실제로 움직인 만큼만 ui.js spinSheaves(deltaY)가 4개 시브를 돌린다
       // (방향·속도가 로프와 물리적으로 일치하고, 카가 멈추면 시브도 즉시 멈춘다).
-      Mascot.update(performance.now() / 1000);
+      if (!DemoPause.paused) Mascot.update(performance.now() / 1000);
       UCMDemo.update(performance.now() / 1000);
       BufferDemo.update();
       DemoPause.update();
+      DemoExit.update();
       MobileHUD.update();
       ARDDemo.update();
       if (!CharacterWalk.active) controls.update();
@@ -1664,6 +1677,7 @@
       PassengerControls.update(performance.now() / 1000);
       EmergencyLighting.update();
       CharacterWalk.update(performance.now() / 1000);
+      syncBackgroundView();
       renderer.render(scene, camera);
       PartGlow.render();          // 기능 부품 발광·탭 메뉴 (js/part-glow.js) — 메인 깊이 버퍼 위에 덧그림
       AscentDemo.renderInset();

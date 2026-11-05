@@ -23,6 +23,8 @@ try{
  await ready();const after=await measure();
  assert.equal(await page.locator('#pc-dock').isVisible(),true);
  assert.equal(await page.locator('#pc-dock #fbtns').count(),1);
+ const dock=await page.locator('#pc-dock').boundingBox();assert.equal(dock.x,12);assert.equal(Math.round(850-dock.y-dock.height),12);
+ assert.equal(await page.locator('#m-demo-fab').isVisible(),true);
  for(const id of ['c-shaft','pc-settings-source']){await page.click('#'+id);await page.screenshot({path:`${out}/${id}.png`});await page.keyboard.press('Escape');}
  await page.click('#c-shaft');await page.click('#c-cabin');await page.click('#c-shaft');await page.click('#overview-home');
  await page.click('#btn-estop');assert.equal(await page.evaluate(()=>estop),true);await page.click('#btn-estop');

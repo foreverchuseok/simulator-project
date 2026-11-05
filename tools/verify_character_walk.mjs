@@ -28,16 +28,6 @@ const walk = async (x, z) => page.evaluate(([x, z]) => {
   }
   return { from: start.toArray(), to: a.root.position.toArray(), zone: a.zone };
 }, [x, z]);
-// 바닥만 보이는 시점을 만든 뒤 실제 캔버스 포인터 바인딩으로 목적지를 선택한다.
-const destination = async (x,y,z,view) => page.evaluate(([x,y,z,view])=>{
- const p=new THREE.Vector3(x,y,z);camera.position.set(...(view||[x,y+1,z+.2]));camera.lookAt(p);camera.updateMatrixWorld(true);
- const canvas=renderer.domElement,r=canvas.getBoundingClientRect(),args={pointerId:91,pointerType:'mouse',button:0,clientX:r.left+r.width/2,clientY:r.top+r.height/2,bubbles:true};
- const capture=canvas.setPointerCapture;canvas.setPointerCapture=()=>{};
- try {canvas.dispatchEvent(new PointerEvent('pointerdown',args));canvas.dispatchEvent(new PointerEvent('pointerup',args));}
- finally {canvas.setPointerCapture=capture;}
- return scene.getObjectByName('characterDestination').visible;
-},[x,y,z,view]);
-const finishRoute=()=>page.evaluate(()=>{let t=performance.now()/1000;CharacterWalk.update(t);for(let i=0;i<1200&&scene.getObjectByName('characterDestination').visible;i++)CharacterWalk.update(t+=.04);return !scene.getObjectByName('characterDestination').visible;});
 try {
   const cdp = await context.newCDPSession(page); await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
   await page.goto(process.env.SIMULATOR_URL || 'http://127.0.0.1:5500/index.html', { waitUntil: 'networkidle' });
@@ -45,74 +35,72 @@ try {
     CarDoor.state?.ready && hatchDoors.every(h => h.interlock?.ready) && document.getElementById('loading').classList.contains('hide'));
   // 모바일은 체험 시작·시작 위치·종료가 하단 바(js/mobile-hud.js)에 있다.
   const MOBILE_IDS = { '#walk-toggle': '#m-walk', '#walk-home': '#m-walk-home', '#walk-exit': '#m-walk-exit' };
-  const tap = async selector => mobile ? page.locator(MOBILE_IDS[selector] || selector).tap() : page.locator(selector).click();
+  const tap = async selector => {
+    if (mobile && (selector === '#walk-call' || selector.startsWith('#walk-floors')) &&
+        await page.locator('#walk-panel').evaluate(e=>e.classList.contains('minimized')))
+      await page.locator('#walk-panel-toggle').tap();
+    return mobile ? page.locator(MOBILE_IDS[selector] || selector).tap() : page.locator(selector).click();
+  };
   check('no walker allocated before entering', await page.evaluate(() => !scene.getObjectByName('SeunggomWalker')));
-  check('garden animals restored to static batch', await page.evaluate(() => !!scene.getObjectByName('meadowDecor') && !scene.getObjectByName('meadowAnimal_0')));
+  check('studio floor replaces garden scenery', await page.evaluate(() => !!scene.getObjectByName('studioGround') && !scene.getObjectByName('meadowDecor')));
   await page.evaluate(() => { window.roofHome={p:Mascot.root.position.toArray(),visible:Mascot.root.visible}; });
   await tap('#walk-toggle');
   check('one mascot starts at stair entrance', await page.evaluate(() => CharacterWalk.actors.length===1 &&
     CharacterWalk.active.label==='\uC2B9\uACF0\uC774' && CharacterWalk.active.root.position.x===0 &&
     Math.abs(CharacterWalk.active.root.position.z-(lobbyApproachLayout().lobbyFrontZ+APPROACH_STEP_COUNT*APPROACH_STEP_TREAD+1))<.001));
   check('roof mascot hidden during experience', await page.evaluate(() => !Mascot.root.visible));
+  if (mobile) {
+    check('mobile call and floor panel starts minimized', !await page.locator('#walk-panel-content').isVisible());
+    await tap('#walk-panel-toggle');
+    check('mobile panel expands', await page.locator('#walk-panel-toggle').getAttribute('aria-expanded') === 'true');
+    await tap('#walk-panel-toggle');
+    check('mobile panel hides without exiting', !await page.locator('#walk-panel-content').isVisible() && !!await page.evaluate(()=>CharacterWalk.active));
+  }
   await page.screenshot({path:`${out}/${width}-start.png`});
   const before = await state();
+  if (mobile) await page.touchscreen.tap(width/2, 430); else await page.mouse.click(width/2, 430);
+  await page.waitForTimeout(180);
+  check('ground click or tap does not move character', Math.hypot(...(await state()).p.map((v,i)=>v-before.p[i])) < .001);
+
   if (!mobile) {
-    const point=await page.evaluate(()=>{camera.updateMatrixWorld(true);const p=CharacterWalk.active.root.position.clone();p.x+=.45;p.z-=.3;p.y+=.005;p.project(camera);return{x:(p.x+1)*innerWidth/2,y:(1-p.y)*innerHeight/2};});
-    await page.mouse.click(point.x,point.y);await page.waitForFunction(()=>scene.getObjectByName('characterDestination').visible);
-    await page.waitForFunction(()=>!scene.getObjectByName('characterDestination').visible);
-    check('mouse ground click walks to destination',(await state()).p[0]>.35);await tap('#walk-home');
     await page.keyboard.down('d'); await page.waitForTimeout(650); await page.keyboard.up('d');
     check('WASD moves at walking speed', (await state()).p[0] > before.p[0] + .3);
+    await tap('#walk-home');
+    await page.keyboard.down('Shift'); await page.keyboard.down('a'); await page.waitForTimeout(650);
+    await page.keyboard.up('a'); await page.keyboard.up('Shift');
+    check('Shift dash doubles walking speed', (await state()).p[0] < before.p[0] - .9);
     await page.keyboard.down('w'); await page.evaluate(() => window.dispatchEvent(new Event('blur')));
     const stopped = await state(); await page.waitForTimeout(180);
     check('blur clears held input', Math.abs((await state()).p[2] - stopped.p[2]) < .001);
     await page.keyboard.up('w');
   } else {
-    check('mobile directional pad removed', await page.locator('#walk-stick').count() === 0);
-    const point=await page.evaluate(()=>{camera.updateMatrixWorld(true);const a=CharacterWalk.active,p=a.root.position.clone();p.x+=.45;p.z-=.3;p.y+=.005;p.project(camera);return{x:(p.x+1)*innerWidth/2,y:(1-p.y)*innerHeight/2};});
-    await page.touchscreen.tap(point.x,point.y);
-    await page.waitForFunction(()=>scene.getObjectByName('characterDestination').visible);
-    await page.waitForFunction(()=>!scene.getObjectByName('characterDestination').visible);
-    check('ground tap walks to destination', (await state()).p[0]>before.p[0]+.35);
-    const jitterPoint=await page.evaluate(()=>{camera.updateMatrixWorld(true);const p=CharacterWalk.active.root.position.clone();p.x+=.35;p.z-=.25;p.y+=.005;p.project(camera);return{x:(p.x+1)*innerWidth/2,y:(1-p.y)*innerHeight/2};});
-    await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:jitterPoint.x-4,y:jitterPoint.y,id:1}]});
-    await page.waitForTimeout(620);
-    await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:jitterPoint.x+4,y:jitterPoint.y,id:1}]});
-    await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
-    await page.waitForFunction(()=>scene.getObjectByName('characterDestination').visible);
-    await page.waitForFunction(()=>!scene.getObjectByName('characterDestination').visible);
-    check('slow finger tap with 8px drift still walks',true);
-    const stopped = await state();
+    const pad = await page.locator('#walk-stick').boundingBox(); check('mobile joystick visible', pad?.width > 80);
+    const x = pad.x + pad.width / 2, y = pad.y + pad.height / 2;
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x - 30, y, id: 1 }] });
+    await page.waitForTimeout(500);
+    const advance = () => page.evaluate(() => {const a=CharacterWalk.active;let t=performance.now()/1000;CharacterWalk.update(t);const x=a.root.position.x;for(let i=0;i<10;i++)CharacterWalk.update(t+=.02);return a.root.position.x-x;});
+    const normalStep = await advance();
+    const dash = await page.locator('#walk-dash').boundingBox(); check('mobile dash visible', dash?.width >= 64);
+    const dashPoint = { x: dash.x + dash.width/2, y: dash.y + dash.height/2, id: 3 };
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x:x-30,y,id:1 },dashPoint] });
+    await page.waitForTimeout(500);
+    const dashStep=await advance();
+    check('joystick plus held dash doubles speed', Math.abs(dashStep/normalStep-2) < .01);
+    check('dash shows held state', await page.locator('#walk-dash').evaluate(e=>e.classList.contains('pressed')));
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [dashPoint] });
+    check('releasing dash clears held state', !await page.locator('#walk-dash').evaluate(e=>e.classList.contains('pressed')));
     const c0 = await page.evaluate(() => camera.position.toArray());
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: width/2, y: 330, id: 1 }] });
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: width/2-50, y: 360, id: 1 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x - 30, y, id: 1 }, { x: width - 45, y: 430, id: 2 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x - 30, y, id: 1 }, { x: width - 95, y: 460, id: 2 }] });
     await page.waitForTimeout(200);
-    check('drag rotates view without walking', Math.abs((await state()).p[0]-stopped.p[0])<.001 &&
+    check('joystick plus camera multi-touch', (await state()).p[0] < before.p[0] - .25 &&
       await page.evaluate(c => Math.abs(camera.position.z - c[2]) > .1, c0));
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchCancel', touchPoints: [] });
-    await page.waitForTimeout(150);
-    check('touch cancel creates no destination', !await page.evaluate(()=>scene.getObjectByName('characterDestination').visible));
+    const stopped = await state(); await page.waitForTimeout(150);
+    check('touch cancel clears dash', !await page.locator('#walk-dash').evaluate(e=>e.classList.contains('pressed')));
+    check('touch cancel stops movement', Math.abs((await state()).p[0] - stopped.p[0]) < .001);
   }
   // Reset yaw and location through the user-facing home action.
-  await tap('#walk-home');
-  const riser=await page.evaluate(()=>{const l=lobbyApproachLayout(),i=APPROACH_STEP_COUNT-2,z=l.lobbyFrontZ+i*APPROACH_STEP_TREAD,high=l.slabY-(i-1)*l.deltaH/APPROACH_STEP_COUNT;return{x:.4,y:high-l.deltaH/APPROACH_STEP_COUNT/2,z,view:[.4,high-.04,z+.7]};});
-  check('tap on vertical stair front selects tread',await destination(riser.x,riser.y,riser.z,riser.view));await finishRoute();
-  check('stair-front tap walks onto stairs',(await state()).zone==='stairs');await tap('#walk-home');
-  const landingY=await page.evaluate(()=>FLOOR_Y[0]);
-  check('tap routes from garden up stairs', await destination(0,landingY,2.5));await finishRoute();
-  check('tap arrives on landing without teleport', (await state()).zone==='landing'&&Math.abs((await state()).p[2]-2.5)<.04);
-  const floorY=await page.evaluate(()=>carGrp.position.y+carGrp.getObjectByName('carPanelAssembly').userData.floorY);
-  check('closed door rejects tap into car', !await destination(0,floorY,.15));
-  await tap('#walk-call');
-  await page.waitForFunction(()=>currentState===ELEVATOR_STATE.DOOR_OPEN&&!CarDoor.state.busy);
-  check('open doorway accepts tap into car',await destination(0,floorY,.15));await finishRoute();
-  check('tap walks through open doorway', (await state()).zone==='car');
-  await tap('#walk-home');await page.evaluate(()=>closeDoors());await page.waitForFunction(()=>currentState===ELEVATOR_STATE.IDLE);
-  const rampX=await page.evaluate(()=>{const l=lobbyApproachLayout();return(l.rampX0+l.rampX1)/2;});
-  check('tap plans route through ramp',await destination(rampX,landingY,2.5));await finishRoute();check('tap ramp route arrives on landing',(await state()).zone==='landing');
-  await tap('#walk-home');
-  check('tap plans route around pond',await destination(-14,.055,17));await finishRoute();
-  check('tap route avoids pond and reaches far side',Math.hypot((await state()).p[0]+14,(await state()).p[2]-17)<.05);
   await tap('#walk-home');
   await page.screenshot({ path: `${out}/${width}-garden.png` });
   await walk(0, 2.5);
@@ -127,6 +115,7 @@ try {
   check('door cannot close on character', (await state()).door === 'DOOR_OPEN' && !await page.evaluate(() => moving));
   await walk(0, .15);
   check('boards cabin', (await state()).zone === 'car' && !(await state()).occupied);
+  await page.waitForFunction(() => outdoorPresentation.inCabin && scene.background.isTexture);
   await page.screenshot({ path: `${out}/${width}-cabin.png` });
   await page.evaluate(() => closeDoors()); await page.waitForFunction(() => currentState === ELEVATOR_STATE.IDLE);
   await walk(0, 2.5); check('closed cabin door blocks exit', (await state()).zone === 'car' && (await state()).p[2] < .8);
@@ -141,6 +130,7 @@ try {
       (carGrp.position.y + carGrp.getObjectByName('carPanelAssembly').userData.floorY)) < .03));
     await page.waitForFunction(f => curFloor === f && currentState === ELEVATOR_STATE.DOOR_OPEN, f);
     await walk(0, 2.5); check(`exits at floor ${f + 1}`, (await state()).zone === 'landing' && (await state()).floor === f);
+    await page.waitForFunction(() => !outdoorPresentation.inCabin && scene.background.isColor);
     await walk(9, 10);
     const edge = await state();
     check(`floor ${f + 1} prevents side/front fall`, edge.p[0] < 1.7 && edge.p[2] < 3.3 && Math.abs(edge.p[1] - await page.evaluate(f => FLOOR_Y[f], f)) < .01);
@@ -156,7 +146,7 @@ try {
   await walk(0, 2.5); await walk(0, 10); check('stairs descend to ground', (await state()).zone === 'ground');
   await walk(0, 40); check('garden boundary prevents escape', (await state()).p[2] < 23);
   await tap('#walk-home'); await walk(-15, 5.2); await walk(-15, 13);
-  check('pond blocks entry', (await state()).p[2] < 9.7);
+  check('removed pond leaves walkable ground', (await state()).p[2] > 12.8);
   await tap('#walk-exit');
   check('roof returns and walker hides on exit', await page.evaluate(() => Mascot.root.visible===roofHome.visible && !CharacterWalk.actors[0].root.visible && JSON.stringify(Mascot.root.position.toArray())===JSON.stringify(roofHome.p)));
   check('exit restores orbit controls', await page.evaluate(() => !CharacterWalk.active && controls.enableRotate && controls.enableZoom && controls.enablePan));

@@ -1845,32 +1845,100 @@
       parent.add(streamGrp);
     }
 
+    const STUDIO_BACKGROUND_COLOR = 0x949faa;
     let outdoorPresentation = null;
-    function setDetailedBackground(enabled) {
+    function setBranchLogoVisible(enabled) {
       if (!outdoorPresentation) return;
       const p = outdoorPresentation;
-      p.detailed = Boolean(enabled);
-      // 잔디 섬과 조경은 공통 배경이며 토글은 하늘·조명만 전환한다.
-      if (p.landscape) p.landscape.visible = false;
-      if (p.buildings) p.buildings.visible = false;
-      // 하늘 돔은 두 모드 공통(toneMapped:false) — 화면 고정 텍스처는 ACES 에 구름이 잿빛으로 바랜다. 바다·잔디가 수평선 아래를 덮는다.
-      p.sky.visible = true;
-      scene.background = p.detailed ? p.background : p.simpleBackground;
-      scene.fog = p.detailed ? p.fog : p.simpleFog;
-      renderer.toneMappingExposure = p.detailed ? p.exposure : p.simpleExposure;
-      p.lighting.forEach(entry => { entry.light.intensity = p.detailed ? entry.original : entry.studio; });
+      p.logoVisible = Boolean(enabled);
+      p.logo.hidden = p.inCabin || !p.logoVisible;
       const button = document.getElementById('c-background');
       if (button) {
-        button.setAttribute('aria-pressed', String(p.detailed));
-        button.classList.toggle('active', p.detailed);
+        button.setAttribute('aria-pressed', String(p.logoVisible));
+        button.classList.toggle('active', p.logoVisible);
       }
+    }
+
+    // 카 시점 추종 중에도 화면을 카 밖으로 확대하면 우주를 끈다.
+    // 체험은 실제 탑승 구역과 카메라 위치를 함께 확인한다. FSM·광원·반사맵은 바꾸지 않는다.
+    function syncBackgroundView() {
+      const p = outdoorPresentation;
+      if (!p || !carGrp) return;
+      const inCabin = Boolean(cabinFollow || CharacterWalk.active?.zone === 'car') &&
+        Math.abs(camera.position.x) < S.CAR_W / 2 &&
+        Math.abs(camera.position.y - carGrp.position.y) < S.CAR_H / 2 &&
+        Math.abs(camera.position.z - CAR_CTR_Z) < S.CAR_D / 2;
+      if (inCabin === p.inCabin) return;
+      p.inCabin = inCabin;
+      if (inCabin && !p.spaceBackground) p.spaceBackground = buildCabinSpace();
+      scene.background = inCabin ? p.spaceBackground : p.studioBackground;
+      scene.fog = inCabin ? null : p.studioFog;
+      p.floor.visible = !inCabin;
+      p.logo.hidden = inCabin || !p.logoVisible;
+    }
+
+    // 한 번 그린 전천 파노라마를 재사용한다. 매 프레임 별·재질·광원을 생성하지 않는다.
+    function buildCabinSpace() {
+      const canvas = document.createElement('canvas'); canvas.width = 2048; canvas.height = 1024;
+      const ctx = canvas.getContext('2d'), w = canvas.width, h = canvas.height;
+      let seed = 731;
+      const random = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
+      ctx.fillStyle = '#020510'; ctx.fillRect(0, 0, w, h);
+      // 구면의 경도 양끝에서도 이어지는 은하수. 고정 별무리라 시야를 돌려도 반짝임이 튀지 않는다.
+      const bandY = x => h * (.48 + .16 * Math.sin((x / w - .25) * Math.PI * 2));
+      ctx.globalCompositeOperation = 'screen';
+      for (let i = 0; i < 4600; i++) {
+        const x = random() * w, spread = (random() + random() + random() - 1.5);
+        const y = bandY(x) + spread * 95, r = 8 + random() * 38;
+        const glow = ctx.createRadialGradient(x, y, 0, x, y, r);
+        glow.addColorStop(0, i % 3 ? 'rgba(104,140,218,.12)' : 'rgba(167,100,203,.13)');
+        glow.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = glow;
+        ctx.fillRect(x-r, y-r, r*2, r*2);
+      }
+      for (let i = 0; i < 15000; i++) {
+        const x = random() * w;
+        const y = i < 9000 ? bandY(x) + (random()+random()+random()-1.5)*78 : random()*h;
+        const r = i % 71 === 0 ? 1.9 : .4 + random()*.7;
+        ctx.globalAlpha = .4 + random()*.6;
+        ctx.fillStyle = i % 5 ? '#e0eaff' : '#ffdfa9';
+        ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+      }
+      ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+      // 후면(-Z)·우측 전망창 방향의 달과 태양. 카가 올라가도 먼 천체로 남는다.
+      const moon = { x: w*.27, y: h*.46, r: 46 };
+      const lunar = ctx.createRadialGradient(moon.x-18,moon.y-20,2,moon.x+15,moon.y+8,65);
+      lunar.addColorStop(0,'#eff1f5'); lunar.addColorStop(.65,'#a8b0c4'); lunar.addColorStop(1,'#20293f');
+      ctx.save(); ctx.beginPath(); ctx.arc(moon.x,moon.y,moon.r,0,Math.PI*2); ctx.clip();
+      ctx.fillStyle=lunar; ctx.fillRect(moon.x-moon.r,moon.y-moon.r,moon.r*2,moon.r*2);
+      for(let i=0;i<20;i++) {
+        const x=moon.x+(random()*2-1)*moon.r,y=moon.y+(random()*2-1)*moon.r,r=5+random()*14;
+        const mare=ctx.createRadialGradient(x,y,0,x,y,r);
+        mare.addColorStop(0,'rgba(42,51,70,.28)');mare.addColorStop(1,'rgba(42,51,70,0)');
+        ctx.fillStyle=mare;ctx.fillRect(x-r,y-r,r*2,r*2);
+      }
+      for(let i=0;i<190;i++) {
+        const x=moon.x+(random()*2-1)*moon.r,y=moon.y+(random()*2-1)*moon.r,r=.4+random()*2.2;
+        ctx.fillStyle='rgba(36,46,67,.16)';ctx.beginPath();ctx.ellipse(x,y,r,r*.8,0,0,Math.PI*2);ctx.fill();
+        ctx.strokeStyle='rgba(238,242,255,.13)';ctx.lineWidth=.4;ctx.stroke();
+      }
+      ctx.restore();
+      const sun = { x: w*.17, y: h*.40, r: 19 };
+      const corona = ctx.createRadialGradient(sun.x,sun.y,8,sun.x,sun.y,94);
+      corona.addColorStop(0,'rgba(255,242,194,1)');corona.addColorStop(.22,'rgba(255,182,66,.9)');
+      corona.addColorStop(.45,'rgba(255,123,38,.18)');corona.addColorStop(1,'rgba(255,90,10,0)');
+      ctx.fillStyle=corona;ctx.fillRect(sun.x-94,sun.y-94,188,188);
+      ctx.fillStyle='#fff2c4';ctx.beginPath();ctx.arc(sun.x,sun.y,sun.r,0,Math.PI*2);ctx.fill();
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.encoding = THREE.sRGBEncoding;
+      texture.mapping = THREE.EquirectangularReflectionMapping;
+      return texture;
     }
 
     /* ── 공중 지반(네모난 땅덩어리) ──────────────────────────────────
        넓은 지면 대신 승강로 + 보도블록 광장 footprint 만 남긴 사각 지반을 세운다.
        상면은 기존 외부 지면과 같은 Y0-0.03 레벨이라 보도블록·계단·램프 높이는 그대로다.
        옆면은 수직 절벽으로 곧게 내려가다 아래쪽에서 안개에 녹는다. */
-    const BUILD_GROUND_SCENERY = false; // 옛 실사풍 풀밭·개울·도심 배경(코드 보존). 현재 배경은 buildMeadowIsland.
+    const BUILD_GROUND_SCENERY = false; // 옛 풀밭·개울·도심 생성 코드 보존. 현재는 장식 없는 스튜디오 바닥.
     const PLINTH_MARGIN = 4.0;          // 보도블록·승강로 바깥으로 남는 흙·잔디 테두리 폭
     const PLAZA_BACK_MARGIN = 2.5;      // 승강로 뒤편으로 깔리는 보도블록 폭
     const PLAZA_FRONT_MARGIN = 3.0;     // 경사로 발치 앞 보도블록 여유
@@ -2262,49 +2330,31 @@
       plaza.receiveShadow = true;
       g.add(plaza);
 
-      // 동물의숲풍 잔디 섬. 피트 기초·계단·램프의 기존 높이를 유지한다.
-      buildMeadowIsland(g, { x0: -paverW / 2, x1: paverW / 2, z0: paverZ0, z1: paverZ1 });
+      // 장식 없는 중성 바닥. 보행 영역과 광장·피트·계단·램프의 높이는 유지한다.
+      const floor = new THREE.Mesh(new THREE.CircleGeometry(MEADOW_R, 64), M.conc(0x2d3b4b));
+      floor.name = 'studioGround'; floor.rotation.x = -Math.PI / 2; floor.position.y = Y0 - .03;
+      floor.receiveShadow = true; g.add(floor);
+      CharacterWalk.setPlaza({ x0: -paverW / 2, x1: paverW / 2, z0: paverZ0, z1: paverZ1 });
 
       parent.add(g);
     }
 
     function buildBackground() {
-      applyStylizedSky();
-
-      if (typeof USE_PHOTO_BG_PREVIEW !== 'undefined' && USE_PHOTO_BG_PREVIEW) {
-        scene.background = new THREE.Color(BG_SKY);
-        scene.fog = new THREE.FogExp2(BG_SKY, 0.005);
-      }
-
       buildOutdoorGround(scene);
-
       const bgGrp = new THREE.Group();
       bgGrp.name = 'outdoorBackground';
-
-      const bg3dGrp = new THREE.Group();
-      bg3dGrp.name = 'bg3d';
-      if (BUILD_GROUND_SCENERY) {
-        if (!(typeof USE_PHOTO_BG_PREVIEW !== 'undefined' && USE_PHOTO_BG_PREVIEW)) buildMountainRange(bg3dGrp);
-        buildKoelsaTowerCampus(bg3dGrp);
-        buildKoelsaHQ(bg3dGrp);
-      }
-      bgGrp.add(bg3dGrp);
-
-      if (typeof USE_PHOTO_BG_PREVIEW !== 'undefined' && USE_PHOTO_BG_PREVIEW) {
-        buildSplitPhotoBackdrop(bgGrp, bg3dGrp);
-      }
-
       scene.add(bgGrp);
-      const floor = scene.getObjectByName('meadowGround'); // 피트 바닥보다 30mm 아래
-      const studioHorizon = '#d4f1fb';
+      const studioHorizon = STUDIO_BACKGROUND_COLOR;
+      scene.background = new THREE.Color(studioHorizon);
+      scene.fog = new THREE.FogExp2(studioHorizon, .009);
+      renderer.toneMappingExposure = .95;
+      environmentLighting.forEach((light, i) => { light.intensity = [.7, 1.8, .65, .45][i]; });
       outdoorPresentation = {
-        detailed: false, buildings: bgGrp, landscape: scene.getObjectByName('outdoorLandscape'),
-        sky: scene.getObjectByName('skyDome'), floor, background: scene.background, fog: scene.fog,
-        simpleBackground: new THREE.Color(studioHorizon), simpleFog: new THREE.FogExp2(studioHorizon, 0.009),
-        exposure: renderer.toneMappingExposure, simpleExposure: 0.95,
-        lighting: environmentLighting.map((light, i) => ({ light, original: light.intensity, studio: [0.7, 1.8, 0.65, 0.45][i] }))
+        inCabin: false, logoVisible: true, logo: document.getElementById('background-branch-logo'),
+        studioBackground: scene.background, studioFog: scene.fog, spaceBackground: null,
+        floor: scene.getObjectByName('studioGround')
       };
-      setDetailedBackground(false);
+      setBranchLogoVisible(true);
     }
 
     // 점형블록 — 실사 텍스처 (6×6 돌기 패턴)

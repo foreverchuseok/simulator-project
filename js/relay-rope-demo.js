@@ -128,6 +128,7 @@ const RelayRopeDemo=(()=>{
     }catch(e){fail(e);return false;}
   }
   function finish(completed=false){
+    if(DemoPause.paused)DemoPause.set(false,{exit:true});
     timeline?.kill();timeline=null;shake?.cancel();shake=null;
     if(s.floor>=0){const h=hatchDoors[s.floor],q=CarDoor.state;
       h.right.position.x=h.right.userData.cx;h.left.position.x=h.left.userData.cx;h.hook.rotation.z=0;h.manualActive=h.manualCoupled=false;h.manualOpen=0;
@@ -162,7 +163,7 @@ const RelayRopeDemo=(()=>{
     `;document.head.appendChild(style);
     panel=document.createElement('section');panel.id='relay-demo-panel';panel.hidden=true;panel.setAttribute('aria-label','연동로프 파단 자동 시연');panel.innerHTML='<strong></strong><button type="button" id="relay-demo-exit" aria-label="시연 종료 및 복귀">×</button><p role="status"></p>';document.body.appendChild(panel);title=panel.querySelector('strong');caption=panel.querySelector('p');panel.querySelector('button').onclick=()=>finish();
     tag=document.createElement('div');tag.id='relay-story-tag';tag.hidden=true;document.body.appendChild(tag);otherTag=document.createElement('div');otherTag.id='relay-story-other';otherTag.hidden=true;otherTag.textContent='로프에 이끌리는 반대 문';document.body.appendChild(otherTag);bubble=document.createElement('div');bubble.id='relay-story-bubble';bubble.hidden=true;document.body.appendChild(bubble);
-    document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!panel.hidden)finish();});window.addEventListener('resize',()=>{if(s.floor>=0)shot(s.view);});
+    document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!panel.hidden)finish();});window.addEventListener('resize',()=>{if(s.floor>=0&&!DemoPause.paused)shot(s.view);});
     for(const type of ['click','pointerdown','change','dblclick'])document.addEventListener(type,e=>{if(s.floor<0||e.target.closest?.('#relay-demo-exit,#btn-estop,#fault-reset,#demo-pause')||(DemoPause.paused&&e.target.closest?.('canvas')))return;if(e.target.closest?.('button,input,select,canvas')){e.preventDefault();e.stopImmediatePropagation();}},true);
     for(let f=0;f<FLOORS;f++){const b=document.createElement('button');b.type='button';b.id=`relay-rope-action-${f}`;b.className='part-action';b.hidden=true;b.textContent='↔';b.setAttribute('aria-label',`${f+1}층 연동로프 파단 시연`);b.onclick=()=>start(f);document.getElementById('part-actions').appendChild(b);buttons.push(b);PartGlow.bind(b,()=>hatchDoors[f]?.link?.seg.upL.parent,`${f+1}층 연동로프`,null,{direct:true});}
   }

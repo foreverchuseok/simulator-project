@@ -216,6 +216,7 @@ const PartGlow = (() => {
   // 시연은 오른쪽 「시연」 목록으로, 부품은 두 번 탭 확대로 본다. 승곰이 체험 중 카 안 버튼은 예외.
   const touchLocked = () => typeof MobileHUD !== 'undefined' && MobileHUD.isMobile() && !(typeof CharacterWalk !== 'undefined' && CharacterWalk.active);
   function suppressed(e) {
+    if (typeof DemoPause !== 'undefined' && DemoPause.paused) return true;
     if (e.direct && e.button.id.startsWith('ec-action-')) return false;
     if (typeof overspeedActive !== 'undefined' && overspeedActive) return true;
     if (bodyHas('ucm-active') || bodyHas('ard-active') || bodyHas('manual-rescue-active') || bodyHas('photo-eye-active') || bodyHas('rope-measure-active') || bodyHas('terminal-demo-active') || bodyHas('portrait-tools-hidden')) return true;
@@ -342,6 +343,10 @@ const PartGlow = (() => {
 
   /* ── 메뉴 ── */
   const labelOf = e => e.label?.(e.button) || e.button.getAttribute('aria-label') || e.button.title || e.name;
+  // 실제 누름 버튼·스위치·문/사다리 조작은 즉시 반응하고, 교육 시연은 메뉴에서 선택한다.
+  // direct는 작은 부품의 피킹 계약이므로 시연 실행 여부의 기준으로 쓰지 않는다.
+  const operatingButtons = new Set(['control-panel-action', 'distribution-box-action', 'emergency-light-action', 'pit-ladder-action']);
+  const isOperatingControl = e => operatingButtons.has(e.button.id) || /^(passenger-|ec-action-|light-switch-|inspection-action-|hall-action-)/.test(e.button.id);
   function activate(part) {
     const live = liveEntries(part);
     if (!live.length) return;
@@ -349,9 +354,7 @@ const PartGlow = (() => {
     // 두 번 탭(카메라 확대)의 두 번째 탭은 방금 연 메뉴를 다시 닫지 않는다.
     if (lastOpen.part === part && now - lastOpen.time < 450) return;
     lastOpen = { part, time: now };
-    // 고를 것이 하나뿐이면 메뉴 없이 바로 실행한다(2026-10-03 사용자 지시 — 완충기·조속기·ARD 등 "한 번 더 클릭" 제거).
-    // 자체 설정 패널이 있는 부품(aria-controls)은 그 패널이 곧 선택 화면이다. 비활성 단일 항목만 메뉴로 사유를 보인다.
-    if (live.length === 1 && !live[0].button.disabled) {
+    if (live.length === 1 && isOperatingControl(live[0]) && !live[0].button.disabled) {
       closeMenu(); live[0].button.click(); return;
     }
     openMenu(part, live);

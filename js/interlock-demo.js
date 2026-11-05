@@ -62,7 +62,7 @@ const InterlockDemo=(()=>{
       m.copy.emissive.setHex(closed?0x197843:0xa8430b);m.copy.emissiveIntensity=.65;}
   }
   function aim(){
-    if(floor<0)return;const h=hatchDoors[floor],travel=CarDoor.dimensions().stroke*poseState.opening;
+    if(floor<0||DemoPause.paused)return;const h=hatchDoors[floor],travel=CarDoor.dimensions().stroke*poseState.opening;
     h.interlock.fixed.getWorldPosition(target);target.x+=.035;target.y+=.008;target.z-=.023;
     // Close on the contacts first; widen only while the two leaves separate.
     const width=.47+2*travel,dist=width/(2*Math.tan(THREE.MathUtils.degToRad(camera.fov/2))*camera.aspect)*1.12;
@@ -87,6 +87,7 @@ const InterlockDemo=(()=>{
   }
   function safePose(){try{pose();}catch(error){failed(error);}}
   function finish(){
+    if(DemoPause.paused)DemoPause.set(false,{exit:true});
     if(typeof RetentionDemo!=='undefined'&&RetentionDemo.active)RetentionDemo.cancel();
     if(typeof RelayRopeDemo!=='undefined'&&RelayRopeDemo.active)RelayRopeDemo.cancel();
     if(floor<0){if(panel)panel.hidden=true;return;}timeline?.kill();timeline=null;

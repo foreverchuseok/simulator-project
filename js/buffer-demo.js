@@ -603,28 +603,18 @@ const BufferDemo = (() => {
   const pausable = () => U.active && !['done', 'halted', 'resetting', 'rest'].includes(U.stage);
   function togglePause(force) {
     const want = force ?? !U.paused;
-    if (want === !!U.paused || (want && !pausable())) return;
-    if (want) {
-      U.paused = true;
-      U.pauseCam = { p: camera.position.clone(), t: controls.target.clone(), fov: camera.fov };
-      gsap.globalTimeline.pause();
-      MACH.setDrive(0);
-      controls.enabled = true;
-    } else {
-      U.paused = false;
-      controls.enabled = false;
-      const s = U.pauseCam; U.pauseCam = null;
-      gsap.globalTimeline.resume();
-      if (s && !gsap.isTweening(camera.position)) {
-        gsap.to(camera.position, { x: s.p.x, y: s.p.y, z: s.p.z, duration: .6, ease: 'power2.inOut' });
-        gsap.to(controls.target, { x: s.t.x, y: s.t.y, z: s.t.z, duration: .6, ease: 'power2.inOut' });
-      }
-      if (U.stage === 'approach') MACH.setDrive(U.v / U.vRated * .8);
-    }
+    if (want && !pausable()) return;
+    DemoPause.set(want);
+  }
+  // 공통 일시정지의 카메라 저장·복원을 사용하고 기존 운동/효과 정지 플래그는 유지한다.
+  function setPaused(on) {
+    U.paused = !!on;
+    if (!on && U.stage === 'approach') MACH.setDrive(U.v / U.vRated * .8);
     pauseBtn.textContent = U.paused ? '▶ 재생' : '❚❚ 일시정지';
+    pauseBtn.setAttribute('aria-pressed', String(U.paused));
   }
   function halt() {
-    togglePause(false);
+    if (DemoPause.paused) DemoPause.set(false, { exit: true });
     U.calls.forEach(c => c.kill()); U.calls = [];
     gsap.ticker.remove(tick); U.tick = null;
     U.v = 0; U.stage = 'halted'; U.ts = 1;
@@ -636,13 +626,14 @@ const BufferDemo = (() => {
 
   /* ── 시연 흐름 ─────────────────────────────────────────── */
   function start(key = 'car') {
-    if (U.active) return;
+    if (U.active || U.pending) return;
     const m = MODES[key] || MODES.car;
     const why = blocked(m);
     if (why) { updateStatus('v-dir', why, '#f0883e'); return; }
     if (doorOpen || gsap.isTweening(carDoorL.position)) {
+      U.pending = true;
       clearTimeout(autoTimer); updateStatus('v-dir', '완충기 시연 · 문 닫는 중', '#58a6ff');
-      closeDoors(() => { if (!U.active && !moving) start(m.key); });
+      closeDoors(() => { if (!U.pending) return; U.pending = false; if (!U.active && !moving) start(m.key); });
       return;
     }
     if (!CarDoor.secured() || !DoorBypass.hallSecured()) { updateStatus('v-door', '카문·승장문 닫힘 및 잠금 확인 대기', '#f0883e'); return; }
@@ -685,6 +676,7 @@ const BufferDemo = (() => {
   }
   function reset() {
     if (!U.active || (U.stage !== 'done' && U.stage !== 'halted')) return;
+    if (DemoPause.paused) DemoPause.set(false, { exit: true });
     U.stage = 'resetting'; btns[mode.key].disabled = true;
     U.calls.forEach(c => c.kill()); U.calls = [];
     if (U.tick) { gsap.ticker.remove(U.tick); U.tick = null; }
@@ -695,7 +687,7 @@ const BufferDemo = (() => {
     _restoreCam(1.2);
     const target = FLOOR_Y[home] + S.CAR_H / 2, p = { y: carGrp.position.y };
     MACH.resume(); MACH.motorOn(); MACH.brakeRelease();
-    gsap.to(p, { y: target, duration: Math.max(Math.abs(target - p.y) / .3, 1), delay: .5, ease: 'power1.inOut',
+    U.resetTween = gsap.to(p, { y: target, duration: Math.max(Math.abs(target - p.y) / .3, 1), delay: .5, ease: 'power1.inOut',
       onUpdate: () => { U.v = .3; MACH.setDrive(.3); setCarY(p.y); },
       onComplete: () => {
         U.v = 0; setCarY(target); compress(0); MACH.motorOff(); MACH.brakeSet();
@@ -707,6 +699,23 @@ const BufferDemo = (() => {
         U.active = false; U.stage = 'rest'; caption('');
         setIcon(false); btns[mode.key].disabled = false;
       } });
+  }
+
+  // × 종료는 교육용 서행 복귀를 재생하지 않는다. 위치·문은 공통 종료에서 정상 착상 상태로 복원한다.
+  function cancel() {
+    if (!U.active && !U.pending) return;
+    U.pending = false;
+    U.calls.forEach(c => c.kill()); U.calls = [];
+    U.resetTween?.kill(); gsap.ticker.remove(tick); U.tick = null;
+    if (DemoPause.paused) DemoPause.set(false, { exit: true });
+    gsap.killTweensOf(camera); gsap.killTweensOf(camera.position); gsap.killTweensOf(controls.target);
+    if (U.active) { compress(0); camera.fov = U.fov0; camera.updateProjectionMatrix(); }
+    U.active = false; U.stage = 'rest'; U.paused = false; U.v = 0; U.ts = 1; U.anchors = {};
+    clearGrp.visible = overheadGrp.visible = false; dust.visible = ring.visible = false; dustT = ringT = -1;
+    Object.values(labels).forEach(el => el.hidden = true); pauseBtn.hidden = true;
+    document.body.classList.remove('buffer-demo-active'); caption('');
+    setIcon(false); Object.values(btns).forEach(b => b.disabled = false);
+    MACH.motorOff(); MACH.brakeSet();
   }
 
   // 렌더 루프 — 효과 진행, 아이콘·치수 라벨 위치만 갱신(형상 생성 없음)
@@ -768,5 +777,5 @@ const BufferDemo = (() => {
     }
   }
 
-  return { build, update, start, reset, halt, get active() { return U.active; }, get mode() { return U.mode; }, get state() { return U; }, timing: T };
+  return { build, update, start, reset, halt, cancel, setPaused, get active() { return U.active; }, get pending() { return !!U.pending; }, get mode() { return U.mode; }, get state() { return U; }, timing: T };
 })();

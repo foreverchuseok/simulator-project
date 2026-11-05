@@ -272,6 +272,7 @@ const RetentionDemo=(()=>{
     }catch(e){failed(e);return false;}
   }
   function finish(completed=false){
+    if(DemoPause.paused)DemoPause.set(false,{exit:true});
     timeline?.kill();timeline=null;shake?.cancel();shake=null;
     if(s.floor>=0){
       if(visual){scene.remove(visual.root);visual.resources.forEach(r=>r.dispose());visual=null;}
@@ -285,6 +286,7 @@ const RetentionDemo=(()=>{
     hicBubble.hidden=screamBubble.hidden=bangBurst.hidden=true;flashLayer.style.opacity='0';
     if(completed){title.textContent='문 이탈방지 시연 끝';caption.textContent='상부 비상가이드와 하부 보강슈는 추가 안전 여유입니다. 큰 충격에서의 이탈까지 보장하지 않습니다. 손상된 문은 사용을 중지하고 점검을 요청하세요.';chapter.textContent='정상 장면으로 복귀했습니다';progress.style.transform='scaleX(1)';}
   }
+  function setPaused(on){paused=!!on;pauseButton.setAttribute('aria-pressed',String(paused));update();}
   function update(){if(s.floor>=0&&timeline){const stop=paused||estop;if(timeline.paused()!==stop)timeline.paused(stop);pauseButton.textContent=estop?'비상정지 중':paused?'계속 재생':'일시정지';}}
   function bind(){
     const style=document.createElement('style');style.textContent=`
@@ -307,7 +309,7 @@ const RetentionDemo=(()=>{
     `;document.head.appendChild(style);
     panel=document.createElement('section');panel.id='retention-demo-panel';panel.hidden=true;panel.setAttribute('aria-label','승장문 이탈방지(상부 비상가이드·하부 보강슈) 자동 시연');
     panel.innerHTML='<small id="retention-demo-chapter"></small><button id="retention-demo-exit" aria-label="시연 종료 및 정상 복귀">×</button><strong></strong><p role="status"></p><footer><small>교육 연출 · 강도 시험 / 충격 허용치 아님</small><button id="retention-demo-pause">일시정지</button></footer><div class="retention-track"><div id="retention-demo-progress"></div></div>';
-    document.body.appendChild(panel);title=panel.querySelector('strong');caption=panel.querySelector('p');chapter=panel.querySelector('#retention-demo-chapter');progress=panel.querySelector('#retention-demo-progress');pauseButton=panel.querySelector('#retention-demo-pause');pauseButton.onclick=()=>{paused=!paused;update();};panel.querySelector('#retention-demo-exit').onclick=()=>finish();
+    document.body.appendChild(panel);title=panel.querySelector('strong');caption=panel.querySelector('p');chapter=panel.querySelector('#retention-demo-chapter');progress=panel.querySelector('#retention-demo-progress');pauseButton=panel.querySelector('#retention-demo-pause');pauseButton.onclick=()=>DemoPause.toggle();panel.querySelector('#retention-demo-exit').onclick=()=>finish();
     badge=document.createElement('div');badge.id='retention-demo-badge';badge.hidden=true;document.body.appendChild(badge);
     shoeLabel=document.createElement('div');retentionLabel=document.createElement('div');guideLabel=document.createElement('div');
     for(const label of [shoeLabel,retentionLabel,guideLabel]){label.className='retention-part-label';label.hidden=true;document.body.appendChild(label);}
@@ -316,9 +318,9 @@ const RetentionDemo=(()=>{
     hicBubble=fx('retention-hic','retention-bubble','딸꾹!');screamBubble=fx('retention-scream','retention-bubble','으악!');bangBurst=fx('retention-bang','','<b>쾅!</b>');
     flashLayer=document.createElement('div');flashLayer.id='retention-flash';document.body.appendChild(flashLayer);
     document.addEventListener('keydown',e=>{if(s.floor>=0){if(e.key==='Escape')finish();else if(e.target.closest?.('#retention-demo-panel'))return;else{e.preventDefault();e.stopImmediatePropagation();}}},true);
-    for(const type of ['click','pointerdown','dblclick','change','wheel'])document.addEventListener(type,e=>{if(s.floor<0||e.target.closest?.('#retention-demo-panel,#btn-estop,#fault-reset'))return;if(e.target.closest?.('button,input,select,canvas')){e.preventDefault();e.stopImmediatePropagation();}},{capture:true,passive:false});
+    for(const type of ['click','pointerdown','dblclick','change','wheel'])document.addEventListener(type,e=>{if(s.floor<0||e.target.closest?.('#retention-demo-panel,#btn-estop,#fault-reset')||(DemoPause.paused&&e.target.closest?.('canvas')))return;if(e.target.closest?.('button,input,select,canvas')){e.preventDefault();e.stopImmediatePropagation();}},{capture:true,passive:false});
     // The main resize listener updates camera.aspect later in this event turn.
-    window.addEventListener('resize',()=>requestAnimationFrame(()=>{if(s.floor>=0)aim(visual.view);}));
+    window.addEventListener('resize',()=>requestAnimationFrame(()=>{if(s.floor>=0&&!DemoPause.paused)aim(visual.view);}));
   }
-  return {bind,start,update,cancel:()=>finish(),get active(){return s.floor>=0;},get state(){return s;}};
+  return {bind,start,update,setPaused,cancel:()=>finish(),get active(){return s.floor>=0;},get state(){return s;}};
 })();

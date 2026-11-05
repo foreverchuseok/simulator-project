@@ -23,7 +23,7 @@ try{
   active:document.getElementById('c-cabin').classList.contains('active'),follow:!!cabinFollow,opb:CarFloorDisplay.last,cur:curFloor,moving}));
 
  assert.equal((await rel()).opb,'1|','OPB starts at 1F');
- await page.click('#c-cabin');
+ await page.click('#c-shaft'); await page.click('#c-cabin');
  await page.waitForFunction(()=>cabinFollow&&!cabinFollow.entering);
  const a=await rel();assert.ok(a.active&&a.follow);
  await page.screenshot({path:path.join(out,'1-enter-1F.png')});
@@ -37,7 +37,7 @@ try{
  const b=await rel();
  await page.screenshot({path:path.join(out,'2-arrived-3F.png')});
  assert.ok(Math.abs(b.cam-a.cam)<1e-4&&Math.abs(b.tgt-a.tgt)<1e-4,`camera rides the car ${JSON.stringify({a,b})}`);
- assert.ok(Math.abs(mid.cam-a.cam)<0.05,'camera stays in the car while moving');
+ assert.ok(Math.abs(mid.cam-a.cam)<0.05,`camera stays in the car while moving ${JSON.stringify({a,mid,b})}`);
  assert.equal(b.opb,'3|');
 
  // 드래그로 둘러봐도 추종은 유지된다.
@@ -45,7 +45,7 @@ try{
  assert.ok((await rel()).follow,'orbit drag keeps cabin follow');
 
  // 다시 누르면 해제 — 이후 운행에서 카메라는 제자리.
- await page.click('#c-cabin');
+ await page.click('#c-shaft'); await page.click('#c-cabin');
  const c=await page.evaluate(()=>({y:camera.position.y,follow:!!cabinFollow,active:document.getElementById('c-cabin').classList.contains('active')}));
  assert.ok(!c.follow&&!c.active);
  await page.waitForFunction(()=>!gsap.isTweening(carDoorL.position)&&!moving);

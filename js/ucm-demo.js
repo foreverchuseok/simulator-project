@@ -202,7 +202,7 @@ const UCMDemo = (() => {
 
   // 렌더 루프에서 호출 — 걷기 흔들림과 별 회전만 (형상 생성 없음)
   function update(t) {
-    if (!char || !char.visible) return;
+    if (!char || !char.visible || DemoPause.paused) return;
     if (U.walk > 0) {
       const w = Math.sin(t * 9) * .5 * U.walk;
       parts.legs[0].rotation.x = w; parts.legs[1].rotation.x = -w;
@@ -485,9 +485,11 @@ const UCMDemo = (() => {
     if (btn) { btn.disabled = false; btn.textContent = 'RST'; }
   }
 
-  function reset(button) {
+  function reset(button, { instant = false } = {}) {
     btn = button || btn;
-    if (!U.active || U.stage === 'resetting') return;
+    if (!U.active || (U.stage === 'resetting' && !instant)) return;
+    if (instant) gsap.killTweensOf(U);
+    if (DemoPause.paused) DemoPause.set(false, { exit: true });
     U.stage = 'resetting'; if (btn) btn.disabled = true;
     U.tl?.kill(); U.calls.forEach(c => c.kill()); U.calls = [];
     U.tweens.forEach(t => t.kill()); U.tweens = []; U.closing = false;
@@ -501,27 +503,28 @@ const UCMDemo = (() => {
     caption('복귀 · 로프브레이크 수동 해제 → 카 착상 → 도어 닫힘 → 운행 가능');
     updateStatus('v-dir', '개문발차 복귀 중…', '#f0883e');
     const j = jaws();
-    if (j) { gsap.to(j.up.position, { y: j.up0, duration: .5 }); gsap.to(j.lo.position, { y: j.lo0, duration: .5 }); }
+    if (j) { gsap.killTweensOf(j.up.position); gsap.killTweensOf(j.lo.position); gsap.to(j.up.position, { y: j.up0, duration: instant ? 0 : .5 }); gsap.to(j.lo.position, { y: j.lo0, duration: instant ? 0 : .5 }); }
     const inst = brakeInstall(); if (inst) inst.visible = true;
-    if (U.hasCamera) { gsap.killTweensOf(camera.position); gsap.killTweensOf(controls.target); _restoreCam(1.2); U.hasCamera = false; }
+    if (U.hasCamera) { gsap.killTweensOf(camera.position); gsap.killTweensOf(controls.target); _restoreCam(instant ? 0 : 1.2); U.hasCamera = false; }
     MACH.resume(); MACH.motorOn(); MACH.setDrive(.25);
     const from = U.rise, dur = Math.max(from / .25, .8);
-    gsap.to(U, { rise: 0, duration: dur, delay: .5, ease: 'power1.inOut',
+    gsap.to(U, { rise: 0, duration: instant ? 0 : dur, delay: instant ? 0 : .5, ease: 'power1.inOut',
       onUpdate: () => { U.v = .25; setRise(U.rise); },
       onComplete: () => {
         U.v = 0; setRise(0); MACH.motorOff(); MACH.brakeSet();
         updateStatus('v-spd', '0 m/min', '#f0883e');
         estop = false;
-        closeDoors(() => {
+        const finish = () => {
           moving = false; currentState = ELEVATOR_STATE.IDLE; U.active = false; U.stage = 'rest';
           document.body.classList.remove('ucm-active');
           updateStatus('v-dir', '정지 대기', '#8b949e');
           const el = document.getElementById('ucm-stage'); if (el) el.hidden = true;
           if (btn) { btn.disabled = false; btn.textContent = 'UCM'; }
-        });
+        };
+        if (instant) finish(); else closeDoors(finish);
       } });
   }
   function toggle(button) { if (U.active) reset(button); else start(button); }
 
-  return { build, update, start, reset, toggle, neutral, get passengerParts() { return parts; }, get state() { return U; }, get character() { return char; }, motion: MOTION, jawTravel: RB, lean: LEAN, leanFor };
+  return { build, update, start, reset, cancel: () => reset(btn, { instant: true }), toggle, neutral, get passengerParts() { return parts; }, get state() { return U; }, get character() { return char; }, motion: MOTION, jawTravel: RB, lean: LEAN, leanFor };
 })();

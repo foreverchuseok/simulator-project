@@ -157,8 +157,9 @@ const BrakeDemo = (() => {
       later(.8,()=>{state.stage='holding';say(state.mode==='single'?'싱글 · 공통 스프링 하나가 양쪽 슈를 제동':'더블 · 독립된 두 스프링과 슈가 함께 제동');later(2.5,fail);});
     }}));
   }
-  function reset(){
-    if(!state.active||state.stage==='resetting')return;
+  function reset({instant=false}={}){
+    if(!state.active||(state.stage==='resetting'&&!instant))return;
+    if(DemoPause.paused)DemoPause.set(false,{exit:true});
     state.stage='resetting';state.view='resetting';jobs.forEach(t=>t.kill());jobs=[];UCMEffects.clear();state.v=0;
     warningStop?.();warningStop=null;shake?.cancel();ending.hidden=true;ending.style.opacity='1';
     saved.guard.position.copy(saved.guardPosition);saved.guard.visible=saved.guardVisible;
@@ -167,12 +168,12 @@ const BrakeDemo = (() => {
     saved.parts.forEach(({o,p,q,visible})=>{gsap.killTweensOf(o.rotation);o.position.copy(p);o.quaternion.copy(q);o.visible=visible;});
     const wire=scene.getObjectByName('DualBrakeSupply');if(wire)wire.visible=saved.wire;
     setTractionBrake(saved.brake,true);setTractionCutaway(saved.cut,true);say('주브레이크 비교 종료 · 정상 복귀');
-    const q={y:carGrp.position.y};own(gsap.to(q,{y:saved.y,duration:.8,ease:'power2.inOut',onUpdate:()=>setCar(q.y),onComplete:()=>{
+    const q={y:carGrp.position.y};own(gsap.to(q,{y:saved.y,duration:instant?0:.8,ease:'power2.inOut',onUpdate:()=>setCar(q.y),onComplete:()=>{
       carGrp.position.y=saved.y;cwtGrp.position.y=saved.cwt;mainSheaveGrp.rotation.z=saved.sheave;deflectorSheaveGrp.rotation.z=saved.deflector;traction().worm.rotation.z=saved.worm;govHandles().wheel.rotation.z=saved.wheel;tensionSheaveGrp.rotation.x=saved.tension;
       refreshRopes();refreshGovernorRope();Mascot.root.visible=saved.bearVisible;
-      _restoreCam(.4);
-      own(gsap.delayedCall(.45,()=>{curFloor=saved.floor;moving=false;estop=false;overspeedActive=false;currentState=ELEVATOR_STATE.IDLE;state.active=false;state.stage='rest';state.rise=0;caption.hidden=true;const b=panel.querySelector('#btn-brake-compare');b.textContent='고장 비교 시작';b.disabled=false;document.body.classList.remove('ucm-active');syncAllIndicators(curFloor+1,'');updateStatus('v-spd','0 m/min');updateStatus('v-dir','정지 대기','#8b949e');}));
+      _restoreCam(instant?0:.4);
+      own(gsap.delayedCall(instant?0:.45,()=>{curFloor=saved.floor;moving=false;estop=false;overspeedActive=false;currentState=ELEVATOR_STATE.IDLE;state.active=false;state.stage='rest';state.rise=0;caption.hidden=true;const b=panel.querySelector('#btn-brake-compare');b.textContent='고장 비교 시작';b.disabled=false;document.body.classList.remove('ucm-active');syncAllIndicators(curFloor+1,'');updateStatus('v-spd','0 m/min');updateStatus('v-dir','정지 대기','#8b949e');}));
     }}));
   }
-  return {build,update,close,start,reset,state,motion,get active(){return state.active;}};
+  return {build,update,close,start,reset,cancel:()=>reset({instant:true}),state,motion,get active(){return state.active;}};
 })();
