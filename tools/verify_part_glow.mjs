@@ -31,73 +31,151 @@ try{
 
   // 1) 떠 있는 원형 아이콘은 화면에 없다.
   await machineRoom();
-  await page.waitForFunction(ns=>ns.every(n=>PartGlow.parts.some(p=>p.name===n&&p.active&&p.root.visible)),(mobile?['조속기','로프브레이크']:['조속기','제어반','로프브레이크','권상기 주브레이크']),{timeout:45000}).catch(()=>{});
+  await page.waitForFunction((isMob)=>isMob?PartGlow.parts.some(p=>p.name==='과속 조절기'&&p.active):['과속 조절기','제어반','로프브레이크','권상기 주브레이크'].every(n=>PartGlow.parts.some(p=>p.name===n&&p.active&&p.root.visible)),mobile,{timeout:45000}).catch(()=>{});
   const floating=await page.evaluate(()=>[...document.querySelectorAll('#part-actions > .part-action,#pit-ladder-action')].filter(b=>!b.hidden&&getComputedStyle(b).visibility!=='hidden').map(b=>b.id));
   assert.deepEqual(floating,[],'떠 있는 아이콘이 보인다');
-  // 2) 기계실 부품이 빛난다.
+  // 2) PC는 기계실 부품 상시 발광, 모바일 Phase 2는 대기 발광 없음(선택 부품 1개만 강조).
   const lit=await page.evaluate(()=>PartGlow.parts.filter(p=>p.active&&p.root.visible).map(p=>p.name));
-  for(const n of mobile?['조속기','로프브레이크']:['조속기','제어반','로프브레이크','권상기 주브레이크'])assert.ok(lit.includes(n),`${n} 발광 없음: ${lit} / 오류: ${errors.slice(0,3).join(" | ")}`);
+  if(mobile){
+   assert.deepEqual(lit,[],'모바일 기본 화면은 대기 발광 없음');
+  }else{
+   for(const n of ['과속 조절기','제어반','로프브레이크','권상기 주브레이크'])assert.ok(lit.includes(n),`${n} 발광 없음: ${lit} / 오류: ${errors.slice(0,3).join(" | ")}`);
+  }
   await page.screenshot({path:`${out}/${tag}-machine-room.png`});
 
-  // 3) 제어반 탭 → (항목이 하나뿐이라 메뉴 없이) 바로 문 열기(기존 ControlPanel.toggle 경로).
-  // 제어반 정면(로컬 +Z 가 문) 시점.
+  // 3) 제어반 탭: PC는 바로 문 열기, 모바일은 소형 팝업 확인 후 문 열기(선택 부품 1개만 금색 강조).
   await page.evaluate(()=>{const r=ControlPanel.root;__cam(r.localToWorld(new THREE.Vector3(.3,1.1,2.2)),r.localToWorld(new THREE.Vector3(0,.7,0)));});
-  await page.waitForFunction(()=>PartGlow.parts.some(p=>p.name==='제어반'&&p.active&&p.root.visible),{},{timeout:45000});
+  await page.waitForFunction((isMob)=>PartGlow.parts.some(p=>p.name==='제어반'&&p.active&&(isMob||p.root.visible)),mobile,{timeout:45000});
   let c=await center('제어반');assert.ok(c,'제어반 중심');
-  await tap(c.x,c.y);await frames(4);
-  await page.waitForFunction(()=>ControlPanel.open&&!ControlPanel.busy,{},{timeout:10000});
-  assert.equal(await menuText(),null,'선택지가 하나면 메뉴 없이 바로 실행');
-  await page.screenshot({path:`${out}/${tag}-control-direct.png`});
-  // 제어반 안의 점검운전 스위치(부품 속 부품)는 바깥 제어반보다 우선 선택된다.
-  await page.waitForFunction(()=>PartGlow.parts.some(p=>p.name==='제어반 점검운전 스위치'&&p.active),{},{timeout:45000});
-  const sw=await center('제어반 점검운전 스위치');
-  assert.equal(await page.evaluate(([x,y])=>PartGlow.pickAt(x,y)?.name,[sw.x,sw.y]),'제어반 점검운전 스위치');
-  await frames(6);c=await center('제어반');await tap(c.x,c.y);await frames(4);
-  await page.waitForFunction(()=>!ControlPanel.open&&!ControlPanel.busy,{},{timeout:10000});
-  assert.equal(await menuText(),null);
+  if(mobile){
+   // 20px 드래그는 탭으로 처리하지 않는다(14px 초과 취소).
+   const cd=await page.context().newCDPSession(page);
+   await cd.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:c.x,y:c.y,id:1}]});
+   await cd.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:c.x+24,y:c.y,id:1}]});
+   await cd.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+   await frames(4);
+   assert.equal(await menuText(),null,'14px 초과 드래그는 팝업을 열지 않는다');
+   // 두 손가락 터치(핀치)는 탭 취소.
+   await cd.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:c.x,y:c.y,id:1}]});
+   await cd.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:c.x,y:c.y,id:1},{x:c.x+40,y:c.y+20,id:2}]});
+   await cd.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[{x:c.x,y:c.y,id:1}]});
+   await cd.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+   await frames(4);
+   assert.equal(await menuText(),null,'두 손가락 터치는 팝업을 열지 않는다');
+   // 1탭 → 소형 팝업만 열리고 문은 즉시 열리지 않는다.
+   await tap(c.x,c.y);await frames(10);
+   assert.equal(await page.evaluate(()=>ControlPanel.open),false,'모바일 설비 조작은 1탭에 즉시 실행 금지');
+   assert.match(await menuText()||'',/제어반/);
+   const mobLit=await page.evaluate(()=>PartGlow.parts.filter(p=>p.root.visible).map(p=>p.name));
+   assert.deepEqual(mobLit,['제어반'],'선택한 부품 1개만 강조');
+   const box=await page.locator('#part-menu').boundingBox();
+   assert.ok(box&&box.x>=0&&box.y>=0&&box.x+box.width<=390.5&&box.y+box.height<=844.5,'모바일 팝업 화면 경계 유지');
+   await page.screenshot({path:`${out}/${tag}-control-popup.png`});
+   // 천천히(>700ms) 같은 자리 재탭 → 팝업만 닫힘.
+   await page.waitForTimeout(780);await tap(c.x,c.y);await frames(4);
+   assert.equal(await menuText(),null,'천천히 재탭하면 팝업만 닫힘');
+   assert.equal(await page.evaluate(()=>ControlPanel.open),false);
+   // 다시 1탭 → 확인 버튼 탭으로 제어반 문 열기.
+   await tap(c.x,c.y);await frames(6);
+   await page.locator('#part-menu .part-menu-item').first().tap();
+   await page.waitForFunction(()=>ControlPanel.open&&!ControlPanel.busy,{},{timeout:10000});
+   await page.screenshot({path:`${out}/${tag}-control-opened.png`});
+   // 열린 제어반 안 점검운전 스위치가 제어반보다 우선 선택된다.
+   await page.waitForFunction(()=>PartGlow.parts.some(p=>p.name==='제어반 점검운전 스위치'&&p.active),{},{timeout:45000});
+   const sw=await center('제어반 점검운전 스위치');
+   assert.equal(await page.evaluate(([x,y])=>PartGlow.pickAt(x,y)?.name,[sw.x,sw.y]),'제어반 점검운전 스위치');
+   // 제어반 문 닫기(2단계).
+   await frames(6);c=await center('제어반');await tap(c.x,c.y);await frames(6);
+   await page.locator('#part-menu .part-menu-item').first().tap();
+   await page.waitForFunction(()=>!ControlPanel.open&&!ControlPanel.busy,{},{timeout:10000});
+   // 벽 너머 부품은 occluded로 선택 차단(제어반 뒤 벽 바깥에서 제어반 중심을 찍어도 잡히지 않아야 함).
+   const behindWall=await page.evaluate(()=>{const r=ControlPanel.root,p=r.localToWorld(new THREE.Vector3(0,.7,0));__cam(r.localToWorld(new THREE.Vector3(-1.4,1.1,-1.6)),p);return true;});
+   assert.ok(behindWall);await frames(6);
+   const occludedHit=await page.evaluate(()=>{const p=PartGlow.parts.find(x=>x.name==='제어반');if(!p)return null;const c=PartGlow.partCenter(p);if(!c)return null;c.project(camera);return PartGlow.pickAt((c.x+1)*innerWidth/2,(1-c.y)*innerHeight/2)?.name||null;});
+   assert.notEqual(occludedHit,'제어반','벽 너머 부품은 선택되지 않아야 한다');
+  }else{
+   await tap(c.x,c.y);await frames(4);
+   await page.waitForFunction(()=>ControlPanel.open&&!ControlPanel.busy,{},{timeout:10000});
+   assert.equal(await menuText(),null,'선택지가 하나면 메뉴 없이 바로 실행');
+   await page.screenshot({path:`${out}/${tag}-control-direct.png`});
+   // 제어반 안의 점검운전 스위치(부품 속 부품)는 바깥 제어반보다 우선 선택된다.
+   await page.waitForFunction(()=>PartGlow.parts.some(p=>p.name==='제어반 점검운전 스위치'&&p.active),{},{timeout:45000});
+   const sw=await center('제어반 점검운전 스위치');
+   assert.equal(await page.evaluate(([x,y])=>PartGlow.pickAt(x,y)?.name,[sw.x,sw.y]),'제어반 점검운전 스위치');
+   await frames(6);c=await center('제어반');await tap(c.x,c.y);await frames(4);
+   await page.waitForFunction(()=>!ControlPanel.open&&!ControlPanel.busy,{},{timeout:10000});
+   assert.equal(await menuText(),null);
+  }
 
-  // 4) 로프브레이크: 두 행동(개문발차·상승과속)이 한 메뉴로 묶인다 → 개문발차 설정 패널.
+  // 4) 로프브레이크: PC는 두 행동 메뉴 → 설정 패널, 모바일은 팝업 안 탭·조건·재생으로 2단계 통일.
   await page.evaluate(()=>{const b=new THREE.Box3().setFromObject(scene.getObjectByName('RopeBrake'));const p=b.getCenter(new THREE.Vector3());__cam(p.clone().add(new THREE.Vector3(2,1.2,2)),p);});
-  await page.waitForFunction(()=>PartGlow.parts.some(p=>p.name==='로프브레이크'&&p.active),{},{timeout:45000});c=await center('로프브레이크');await tap(c.x,c.y);await frames(4);
+  await page.waitForFunction(()=>PartGlow.parts.some(p=>p.name==='로프브레이크'&&p.active),{},{timeout:45000});c=await center('로프브레이크');await tap(c.x,c.y);await frames(6);
   const rb=await menuText();assert.match(rb||'',/개문발차/);assert.match(rb||'',/상승과속/);
-  await page.locator('#part-menu .part-menu-item',{hasText:'개문발차'})[mobile?'tap':'click']();
-  await page.waitForFunction(()=>!document.getElementById('rope-brake-panel').hidden);
-  await page.screenshot({path:`${out}/${tag}-rope-brake-panel.png`});
-  await page.keyboard.press('Escape');await page.waitForFunction(()=>document.getElementById('rope-brake-panel').hidden);
+  if(mobile){
+   assert.equal(await page.locator('#part-menu .pm-modes button').count(),2,'비교 조건 2개 표시');
+   await page.locator('#part-menu [data-part-tab="up"]').tap();await frames(3);
+   await page.locator('#part-menu [data-part-mode="none"]').tap();await frames(3);
+   assert.equal(await page.evaluate(()=>DemoExit.active),false,'조건 선택만으로 시연 미시작');
+   await page.screenshot({path:`${out}/${tag}-rope-brake-popup.png`});
+   await page.locator('#part-menu .pm-play').tap();
+   await page.waitForFunction(()=>AscentDemo.active&&AscentDemo.state.mode==='none',{},{timeout:15000});
+   assert.equal(await page.locator('#ascent-panel').isVisible(),false,'별도 PC 설정창 없이 바로 시작');
+   await page.locator('#demo-exit').tap();
+   await page.waitForFunction(()=>!DemoExit.active&&!DemoExit.busy&&CarDoor.secured(),{},{timeout:30000});
+  }else{
+   await page.locator('#part-menu .part-menu-item',{hasText:'개문발차'}).click();
+   await page.waitForFunction(()=>!document.getElementById('rope-brake-panel').hidden);
+   await page.screenshot({path:`${out}/${tag}-rope-brake-panel.png`});
+   await page.keyboard.press('Escape');await page.waitForFunction(()=>document.getElementById('rope-brake-panel').hidden);
+  }
 
   // 5) 데스크톱 호버: 툴팁·포인터 커서·강조.
   if(!mobile){
-   c=await center('조속기');await page.mouse.move(c.x,c.y);await frames(12);
+   c=await center('과속 조절기');await page.mouse.move(c.x,c.y);await frames(12);
    const h=await page.evaluate(()=>({tip:document.getElementById('part-tip').hidden?null:document.getElementById('part-tip').textContent,cursor:renderer.domElement.style.cursor}));
-   assert.match(h.tip||'',/조속기/);assert.equal(h.cursor,'pointer');
+   assert.match(h.tip||'',/과속 조절기/);assert.equal(h.cursor,'pointer');
    await page.screenshot({path:`${out}/${tag}-governor-hover.png`});
    await page.mouse.move(4,400);await frames(4);
   }
 
-  // 6) 승장 비상키: 자체 패널(aria-controls)은 메뉴 없이 바로 연다.
+  // 6) 승장 비상키: PC는 패널 직행, 모바일은 소형 팝업 확인 후 패널 열기 + 작은 부품 22px 여유 탭 확인.
   await page.evaluate(()=>{const y=FLOOR_Y[1];__cam(new THREE.Vector3(.4,y+1.8,FRONT_WALL_INNER_Z+2.2),new THREE.Vector3(0,y+1.6,FRONT_WALL_INNER_Z));});
-  await page.waitForFunction(()=>PartGlow.parts.some(p=>p.name==='2층 승장문 비상키'&&p.active),{},{timeout:45000}).catch(()=>{});c=await center('2층 승장문 비상키');assert.ok(c,'2층 비상키 발광 없음');
-  await tap(c.x,c.y);await page.waitForFunction(()=>!document.getElementById('hall-panel').hidden,{},{timeout:5000});
-  assert.equal(await menuText(),null);
-  await page.screenshot({path:`${out}/${tag}-hall-key.png`});
-  await page.evaluate(()=>closeAllMenus());
+  await page.waitForFunction(()=>PartGlow.parts.some(p=>p.name==='2층 승장문 비상키'&&p.active),{},{timeout:45000}).catch(()=>{});c=await center('2층 승장문 비상키');assert.ok(c,'2층 비상키 활성 없음');
+  if(mobile){
+   // 부품 중심에서 18px 떨어진 지점도 22px 여유로 선택되어야 한다.
+   assert.equal(await page.evaluate(([x,y])=>PartGlow.pickAt(x+18,y)?.name,[c.x,c.y]),'2층 승장문 비상키','모바일 소형 부품 22px 여유 탭');
+   await tap(c.x+18,c.y);await frames(6);
+   assert.equal(await page.evaluate(()=>document.getElementById('hall-panel').hidden),true,'모바일 1탭에 승장문 점검 패널 즉시 오픈 금지');
+   assert.match(await menuText()||'',/2층 승장문 비상키/);
+   await page.locator('#part-menu .part-menu-item').first().tap();
+   await page.waitForFunction(()=>!document.getElementById('hall-panel').hidden,{},{timeout:5000});
+   await page.screenshot({path:`${out}/${tag}-hall-key.png`});
+   await page.evaluate(()=>closeAllMenus());
+  }else{
+   await tap(c.x,c.y);await page.waitForFunction(()=>!document.getElementById('hall-panel').hidden,{},{timeout:5000});
+   assert.equal(await menuText(),null);
+   await page.screenshot({path:`${out}/${tag}-hall-key.png`});
+   await page.evaluate(()=>closeAllMenus());
+  }
 
   // 7) 설정 「부품 빛 효과」 끄기 → 빛 없음, 탭 메뉴는 유지 → 새로고침 후에도 유지 → 다시 켜기.
-  await machineRoom();await frames(10);
-  await clickSel('[data-menu="dd-view"]');await clickSel('#part-glow-toggle');
-  assert.equal(await page.evaluate(()=>PartGlow.enabled),false);
-  assert.equal(await page.locator('#part-glow-toggle').getAttribute('aria-pressed'),'false');
-  await page.evaluate(()=>closeAllMenus());await page.waitForFunction(()=>PartGlow.parts.every(p=>!p.root.visible),{},{timeout:30000}).catch(()=>{});
-  assert.deepEqual(await page.evaluate(()=>PartGlow.parts.filter(p=>p.root.visible).map(p=>p.name)),[],'끄기 후에도 빛난다');
-  await page.screenshot({path:`${out}/${tag}-glow-off.png`});
-  // 빛을 꺼도 탭은 그대로 동작한다(로프브레이크: 두 항목 메뉴).
-  await page.evaluate(()=>{const b=new THREE.Box3().setFromObject(scene.getObjectByName('RopeBrake'));const p=b.getCenter(new THREE.Vector3());__cam(p.clone().add(new THREE.Vector3(2,1.2,2)),p);});await frames(10);
-  c=await center('로프브레이크');await tap(c.x,c.y);await frames(4);
-  assert.match(await menuText()||'',/개문발차/,'빛을 꺼도 탭 메뉴는 열려야 한다');
-  await page.evaluate(()=>PartGlow.closeMenu());
-  await page.reload({waitUntil:'networkidle'});await ready();
-  assert.equal(await page.evaluate(()=>PartGlow.enabled),false,'새로고침 후 설정 유지');
-  await page.evaluate(()=>PartGlow.setEnabled(true));
+  if(!mobile){
+   await machineRoom();await frames(10);
+   await clickSel('[data-menu="dd-view"]');await clickSel('#part-glow-toggle');
+   assert.equal(await page.evaluate(()=>PartGlow.enabled),false);
+   assert.equal(await page.locator('#part-glow-toggle').getAttribute('aria-pressed'),'false');
+   await page.evaluate(()=>closeAllMenus());await page.waitForFunction(()=>PartGlow.parts.every(p=>!p.root.visible),{},{timeout:30000}).catch(()=>{});
+   assert.deepEqual(await page.evaluate(()=>PartGlow.parts.filter(p=>p.root.visible).map(p=>p.name)),[],'끄기 후에도 빛난다');
+   await page.screenshot({path:`${out}/${tag}-glow-off.png`});
+   // 빛을 꺼도 탭은 그대로 동작한다(로프브레이크: 두 항목 메뉴).
+   await page.evaluate(()=>{const b=new THREE.Box3().setFromObject(scene.getObjectByName('RopeBrake'));const p=b.getCenter(new THREE.Vector3());__cam(p.clone().add(new THREE.Vector3(2,1.2,2)),p);});await frames(10);
+   c=await center('로프브레이크');await tap(c.x,c.y);await frames(4);
+   assert.match(await menuText()||'',/개문발차/,'빛을 꺼도 탭 메뉴는 열려야 한다');
+   await page.evaluate(()=>PartGlow.closeMenu());
+   await page.reload({waitUntil:'networkidle'});await ready();
+   assert.equal(await page.evaluate(()=>PartGlow.enabled),false,'새로고침 후 설정 유지');
+   await page.evaluate(()=>PartGlow.setEnabled(true));
+  }
   await context.close();
  }
 }finally{await browser.close();}

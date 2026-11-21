@@ -1390,6 +1390,7 @@ function updateManualCameraNear() {
       canvas.addEventListener('pointerdown', e => {
         if (CharacterWalk.active) { lastTap = null; return; }
         if (e.button !== 0) { lastTap = null; return; }
+        if (MobileHUD.isMobile() && PartGlow.hudWasDismissed?.()) { lastTap = null; return; }
         pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, time: e.timeStamp || performance.now(), invalid: false });
         if (pointers.size > 1) {
           pointers.forEach(p => p.invalid = true);
@@ -1399,11 +1400,12 @@ function updateManualCameraNear() {
       canvas.addEventListener('pointermove', e => {
         const p = pointers.get(e.pointerId);
         const mobile = MobileHUD.isMobile();
-        if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) > (mobile ? 18 : 6)) p.invalid = true;
+        if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) > (mobile ? 14 : 6)) p.invalid = true;
       }, true);
       const clear = () => { pointers.clear(); lastTap = null; };
       canvas.addEventListener('pointercancel', clear, true);
       window.addEventListener('blur', clear);
+      PartGlow.onSlowClose?.(() => { lastTap = null; });
       canvas.addEventListener('pointerup', e => {
         const p = pointers.get(e.pointerId);
         pointers.delete(e.pointerId);
@@ -1437,18 +1439,25 @@ function updateManualCameraNear() {
           const material = Array.isArray(h.object.material) ? h.object.material[h.face.materialIndex] : h.object.material;
           return material?.visible && material.opacity > 0 && camera.layers.test(h.object.layers);
         });
-        if (!hit) return;
+        let focusPoint = hit?.point || null, focusDistance = hit?.distance || 0;
+        // 모바일 22px 여유 반경으로 잡힌 소형 부품은 뒤쪽 벽 대신 부품 중심으로 확대한다.
+        if (mobile && part && (!hit || !part.meshes.includes(hit.object))) {
+          const center = PartGlow.partCenter?.(part);
+          if (center) { focusPoint = center; focusDistance = camera.position.distanceTo(center); }
+        }
+        if (!focusPoint) return;
+        if (mobile) PartGlow.markZoomTap?.(e);
         ignored.add(e);
         cancelMotion();
         leaveCabinView();   // 부품으로 날아가는 확대는 탑승 시점을 푼다
-        const distance = THREE.MathUtils.clamp(hit.distance * 0.3, 0.12, 2);
-        const position = camera.position.clone().sub(hit.point).normalize().multiplyScalar(distance).add(hit.point);
+        const distance = THREE.MathUtils.clamp(focusDistance * 0.3, 0.12, 2);
+        const position = camera.position.clone().sub(focusPoint).normalize().multiplyScalar(distance).add(focusPoint);
         position.y = Math.max(Y0 + 0.35, position.y);
         controls.minDistance = MANUAL_CAMERA.minDistance;
         camera.near = MANUAL_CAMERA.near;
         camera.updateProjectionMatrix();
         gsap.to(camera.position, { x: position.x, y: position.y, z: position.z, duration: 0.75, ease: 'power2.inOut' });
-        gsap.to(controls.target, { x: hit.point.x, y: hit.point.y, z: hit.point.z, duration: 0.75, ease: 'power2.inOut', onUpdate: () => controls.update() });
+        gsap.to(controls.target, { x: focusPoint.x, y: focusPoint.y, z: focusPoint.z, duration: 0.75, ease: 'power2.inOut', onUpdate: () => controls.update() });
       }, true);
       return e => ignored.has(e);
     }

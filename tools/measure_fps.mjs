@@ -23,9 +23,11 @@ const server=http.createServer((req,res)=>{
   res.setHeader('Content-Type',mime[path.extname(file)]||'application/octet-stream');res.setHeader('Cache-Control','no-store');
   fs.createReadStream(file).pipe(res);
 });
-await new Promise((r,j)=>server.once('error',j).listen(phone?5500:0,'127.0.0.1',r));
+let ownServer=true;
+await new Promise((r,j)=>{server.once('error',e=>{if(phone&&e.code==='EADDRINUSE'){ownServer=false;r();}else j(e);}).listen(phone?5500:0,'127.0.0.1',r);});
 const extra=arg('extra','');   // 예: --extra=idle=0 (정지 절약 끄고 비교)
-const url=`http://127.0.0.1:${server.address().port}/index.html?fps&quality=${quality}${extra?'&'+extra:''}`;
+const port=ownServer?server.address().port:5500;
+const url=`http://127.0.0.1:${port}/index.html?fps&quality=${quality}${extra?'&'+extra:''}`;
 let browser;const report={label,phone,quality,seconds,url,runs:[],errors:[]};
 const file=path.join(out,`${label}-${phone?'phone':'headless'}-q${quality}.json`);
 try{
@@ -87,5 +89,5 @@ try{
   if(report.errors.length)console.log('오류:',report.errors.slice(0,5));
   console.log('저장:',path.relative(root,file));
   if(phone){try{await browser?.close();}catch{}}else await browser?.close();
-  server.closeAllConnections?.();await new Promise(r=>server.close(r));
+  if(ownServer){server.closeAllConnections?.();await new Promise(r=>server.close(r));}
 }

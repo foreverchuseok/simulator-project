@@ -567,5 +567,5 @@ const MobileHUD = (() => {
     sync();
   }
 
-  return { init, update, setRun, get mode() { return mode; }, get runOpen() { return runOpen; }, isMobile: () => media.matches };
+  return { init, update, setRun, get mode() { return mode; }, get runOpen() { return runOpen; }, isMobile: () => media.matches, demoChoices: DEMO_CHOICES, demoSummary: DEMO_SUMMARY };
 })();

@@ -22,27 +22,33 @@ try{
  const fab=await page.evaluate(()=>{const b=document.getElementById('m-demo-fab').getBoundingClientRect(),s=document.getElementById('statusbar').getBoundingClientRect();return{w:b.width,h:b.height,right:innerWidth-b.right,top:b.top,statusBottom:s.bottom};});
  report.fab=fab;assert.ok(fab.w<=50&&fab.h<=56&&fab.top>=fab.statusBottom,'fab small and below status '+JSON.stringify(fab));
  await shot('1-base');
- // 2) 단일 탭 무작동
+ // 2) 모바일 1탭 → 소형 팝업 즉시 표시(시연 미시작) · 천천히 재탭 → 팝업만 닫힘
  await lookAtGovernor();await page.waitForTimeout(800);
  const part=await findPart();report.part=part;assert.ok(part,'a pickable part is on screen');
  const camBefore=await page.evaluate(()=>camera.position.toArray());
- await page.touchscreen.tap(part.x,part.y);await page.waitForTimeout(700);
- assert.equal(await vis('#part-menu'),false,'single tap: no part menu');
+ await page.touchscreen.tap(part.x,part.y);await page.waitForTimeout(200);
+ assert.equal(await vis('#part-menu'),true,'single tap: compact part popup opens immediately');
  assert.equal(await demoOn(),false,'single tap: no demo started');
  const camSingle=await page.evaluate(()=>camera.position.toArray());
  assert.ok(Math.hypot(...camSingle.map((v,i)=>v-camBefore[i]))<1e-3,'single tap: camera unchanged');
- report.singleTap='no menu, no demo, no camera move';
- // 3) 두 번 탭 확대
- await page.touchscreen.tap(part.x,part.y);await page.waitForTimeout(120);await page.touchscreen.tap(part.x,part.y);
+ await page.waitForTimeout(650);
+ await page.touchscreen.tap(part.x,part.y);await page.waitForTimeout(200);
+ assert.equal(await vis('#part-menu'),false,'slow re-tap (>700ms): closes popup only');
+ assert.equal(await demoOn(),false,'slow re-tap: no demo started');
+ const camSlow=await page.evaluate(()=>camera.position.toArray());
+ assert.ok(Math.hypot(...camSlow.map((v,i)=>v-camBefore[i]))<1e-3,'slow re-tap: camera unchanged');
+ report.singleTap='popup opens without starting demo; slow re-tap closes popup';
+ // 3) 700ms 안 같은 자리 두 번 탭 → 팝업 닫고 부품으로 확대
+ await page.touchscreen.tap(part.x,part.y);await page.waitForTimeout(150);await page.touchscreen.tap(part.x,part.y);
  await page.waitForTimeout(1300);
  const camDouble=await page.evaluate(()=>camera.position.toArray()),moved=Math.hypot(...camBefore.map((v,i)=>v-camDouble[i]));
  const dist=await page.evaluate(()=>camera.position.distanceTo(controls.target));
- assert.ok(moved>.1,'double tap moves camera '+moved);assert.equal(await vis('#part-menu'),false,'double tap: still no menu');assert.equal(await demoOn(),false,'double tap: no demo');
+ assert.ok(moved>.1,'double tap moves camera '+moved);assert.equal(await vis('#part-menu'),false,'double tap: popup closed after zoom');assert.equal(await demoOn(),false,'double tap: no demo');
  report.doubleTap={moved:+moved.toFixed(3),distance:+dist.toFixed(3)};await shot('2-double-tap');
  await page.evaluate(()=>document.getElementById('overview-home').click());await page.waitForTimeout(1200);
  // 4) 메뉴 열기 · 목록 · 바깥 탭 닫힘 · 시연 시작
  await page.tap('#m-demo-fab');assert.equal(await vis('#m-demo-list'),true,'list open');
- const items=await page.$$eval('#m-demo-list button',bs=>bs.map(b=>b.textContent.trim()));report.items=items;assert.ok(items.length>=12&&items.every(t=>t.length>=2),'readable names');
+ const items=await page.$$eval('#m-demo-list .demo-skill',bs=>bs.map(b=>b.textContent.trim()));report.items=items;assert.ok(items.length>=12&&items.every(t=>t.length>=2),'readable names');
  const box=await page.evaluate(()=>{const b=document.getElementById('m-demo-list').getBoundingClientRect(),m=document.getElementById('m-bar').getBoundingClientRect();return{top:b.top,bottom:b.bottom,barTop:m.top,right:b.right,w:innerWidth};});
  assert.ok(box.bottom<=box.barTop+.5&&box.right<=box.w+.5,'list fits above bar '+JSON.stringify(box));await shot('3-list');
  await page.touchscreen.tap(60,300);await page.waitForTimeout(200);assert.equal(await vis('#m-demo-list'),false,'outside tap closes list');

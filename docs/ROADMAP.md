@@ -22,6 +22,28 @@
 
 ## 현재 단계 — 모바일 사용 경험 개편
 
+### 2026-11-22 모바일 3D 부품 직접 탭 · 소형 팝업 · 2단계 실행 (Phase 2 완료 · 여기서 멈춤)
+
+- [MOBILE-PART-INTERACTION-ANALYSIS.md](MOBILE-PART-INTERACTION-ANALYSIS.md)의 확정 사항(1~5)을 반영하고 **Phase 2(팝업·터치·선택 1부품 강조)** 범위만 구현했다. 반짝임 비콘(Phase 1)·일시정지 통일(Phase 3)·비-시연 설비 일괄 원상복구(2차)는 아직 구현하지 않았으며, 조속기·인터록·세이프티기어 GLB 노드·피벗과 PC 동작·오른쪽 시연 메뉴(`#m-demo`)·하단 자막은 유지했다.
+- `js/mobile-hud.js`: `MobileHUD.demoChoices`와 `MobileHUD.demoSummary`를 노출해 조건 선택 데이터·실행 함수를 중복 하드코딩 없이 공유했다.
+- `js/part-glow.js` · `css/mobile-hud.css` · `js/ui.js`:
+  - 모바일 일반 화면(승곰이 체험 제외)에서 1탭 → 금색 단일 톤 소형 팝업(`#part-menu[data-mobile="true"]`, 민트·푸른빛 없음) 즉시 표시 → 팝업 안 버튼 탭으로 실행하는 2단계로 통일했다. 설비 조작(`isOperatingControl`: 제어반·분전함·사다리·조명·비상키·비상통화·점검운전반 등)도 모바일에서는 즉시 실행하지 않고 팝업 확인을 거친다.
+  - 비교 시연(로프브레이크 개문발차/상승과속, 권상기 주브레이크, 카/균형추 완충기)은 소형 팝업 안에 탭·조건 선택(`MobileHUD.demoChoices`)·`▶ 재생`을 통합해 별도 PC 설정창 없이 2단계로 실행한다.
+  - 강조는 선택한 부품 1개(`menuPart`)에만 기존 금색 `PartGlow`를 켜고, 대기 화면 발광은 꺼 두어 기본 화면 드로우콜 증가를 0으로 유지했다.
+  - 터치 판정: 모바일 드래그 취소 허용치 `14px`(700ms), 두 손가락 터치(핀치) 시 탭 취소, HUD 메뉴 닫기 탭 오발 방지, 소형 부품 `22px` 여유 반경(매립형 부품인 승장 비상키가 문판에 오차단되지 않도록 `box.clampPoint(camera.position, v)` 기준 `occluded` 적용, 벽 너머 부품 차단 유지).
+  - 제3안 확대/닫기: 팝업은 탭 좌표를 가리지 않도록 화면 안전 경계 안에 배치하며, `700ms` 이내 같은 자리 재탭 시 팝업을 닫고 해당 부품으로 확대(22px 여유 소형 부품은 `PartGlow.partCenter` 기준 확대), `700ms` 이후 천천히 재탭 시 팝업만 닫는다.
+- 검증 도구 갱신 및 통과:
+  - 새 모바일 2단계 계약에 맞춰 `tools/verify_mobile_demo_menu.mjs`와 `tools/verify_part_glow.mjs`(PC·모바일, 14px 드래그·핀치·벽 가림·22px 여유·로프브레이크 2단계·제어반/비상키 2단계 포함)를 갱신해 모두 통과했다.
+  - `tools/verify_demo_presentation.mjs --layout-only`, `tools/verify_demo_choices.mjs`(PC·모바일), `tools/verify_demo_exit.mjs --mobile`(31건), `tools/verify_demo_pause.mjs`(PC 14종, 모바일 10종 — `retention`의 원본 패널 숨김은 Phase 3 범위), `tools/verify_perf_quality.mjs` 모두 통과했다.
+  - `tools/measure_fps.mjs`에 기존 5500 포트(Live Server) 점유 시 재사용 폴백을 추가했다.
+- **S22+(`SM-S906N` / Chrome / `384×701` / DPR 2 / `quality=0` / `idle=0`) 전후 비교**:
+  - 변경 전(`temporary/fps/after-noidle-phone-q0.json`): 기본 화면 호출 **2,361/2,361**, 삼각형 **1,341,836**, 발광 **0.3ms**, CPU 중앙값 58.7ms(35.2→35.4℃).
+  - 변경 후(`temporary/fps/phase2-after-phone-q0.json`): 기본 화면 호출 **2,361/2,361(+0회)**, 삼각형 **1,341,836(+0)**, 발광 **0.3ms(+0.0ms)**, CPU 중앙값 48.7ms(32.8→33.5℃, 온도 차가 있으므로 개선이 아닌 동등·회귀 없음으로 해석). 목표 기준(호출 +5회 이내, CPU +1ms 이내) 통과.
+- **S22+ 실제 터치(`adb shell input tap/swipe`, `http://127.0.0.1:5500/index.html`, 오류 0건)**:
+  - 대기 발광 없음, 36px 드래그 오터치 차단, 제어반 1탭 팝업(선택 1부품 금색 강조·경계 내부)·천천히 재탭 닫힘·확인 버튼 문 열기, 로프브레이크 2단계 비교 시연 시작·× 종료, 과속 조절기 700ms 내 2연타 확대(1.714m 이동·팝업 닫힘·시연 미시작), 2층 비상키 +16px 여유 탭 팝업, 오른쪽 `#m-demo` 메뉴 정상 동작 및 캡처(`temporary/phase2-phone/`)를 확인했다.
+- (Claude Code 후속 확인) S22+ 세로 384×701에서 `adb shell input`(pointerType `touch`)으로 20항목 — 140px 드래그 무반응, 과속 조절기 1탭 팝업·시연 미시작·1부품 강조, 천천히 재탭 닫힘(카메라 이동 0), 빠른 2연타 확대(33→2m), 제어반 팝업 버튼 열기/닫기, 로프브레이크 「미설치」 선택만으로 미시작→재생→× 복귀, 오른쪽 시연 메뉴 — 통과·오류 0건. 가로 757×298은 삼성 플로우 스마트 뷰 가림 화면을 건드리지 않도록 CDP 터치로 같은 항목과 팝업 화면 경계까지 21항목 통과(회전 설정은 원래 값으로 복구). 휴대폰 `127.0.0.1:5500` 도 `ERR_NETWORK_CHANGED` 가 잦아 검사 때는 요청을 CDP 로 가로채 로컬 파일을 넘겼다. `verify_demo_pause --mobile` 실패(문 이탈방지 단계)는 커밋 `79954e4` 코드에서도 같은 위치에서 실패해 이번 변경과 무관하다.
+- 남은 작업: Phase 1(대표 부품·경계상자 윗면+카메라 방향 오프셋 금색 비콘)과 Phase 3(14종 일시정지 A안 통일) 구현. 요청 없이 커밋·푸시·배포하지 않았다.
+
 ### 2026-11-21 토론 합의 최적화 1~5단계 (Claude Code)
 
 - 사용자 지시로 `temporary/debate/20261121-2150/06-정리.md`의 합의 순서만 구현했다. 기준 기기는 갤럭시탭 액티브5가 아니라 **갤럭시 S22 이상 폰**이다. GLB 압축·PWA·미사용 PNG 정리는 하지 않았고, 조속기·인터록·세이프티기어 GLB의 노드·피벗은 건드리지 않았다.

@@ -15,6 +15,8 @@ const PartGlow = (() => {
   const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), v = new THREE.Vector3(), box = new THREE.Box3();
   const shellCache = new WeakMap();
   let lastNow = 0, enabled = true, frame = 0, hover = null, menuPart = null, menu, tip, pointer = null, lastOpen = { part: null, time: 0 };
+  let tapPt = null, hudDismissed = false, zoomedEvent = null, slowCloseHook = null, wasMobileMode = false;
+  const activePointers = new Map();
   try { enabled = localStorage.getItem(STORE) !== '0'; } catch (e) { /* 저장소 없음 */ }
 
   /* ── 셰이더 ── */
@@ -212,9 +214,10 @@ const PartGlow = (() => {
 
   /* ── 상태 ── */
   const bodyHas = c => document.body.classList.contains(c);
-  // 모바일(세로·가로 폰 HUD)은 3D 부품 단일 탭으로 메뉴·시연을 열지 않는다(오터치 방지, 2026-11-04).
-  // 시연은 오른쪽 「시연」 목록으로, 부품은 두 번 탭 확대로 본다. 승곰이 체험 중 카 안 버튼은 예외.
-  const touchLocked = () => typeof MobileHUD !== 'undefined' && MobileHUD.isMobile() && !(typeof CharacterWalk !== 'undefined' && CharacterWalk.active);
+  // 모바일(세로·가로 폰 HUD) 일반 화면: 1탭 → 소형 팝업 → 버튼 실행(2026-11-22 Phase 2).
+  // 승곰이 체험 중 카 안 버튼은 기존 즉시 동작을 유지한다.
+  const isMobileGeneral = () => typeof MobileHUD !== 'undefined' && MobileHUD.isMobile() && !(typeof CharacterWalk !== 'undefined' && CharacterWalk.active);
+  const mobileDemoRunning = () => isMobileGeneral() && typeof MobileHUD !== 'undefined' && MobileHUD.mode === 'demo';
   function suppressed(e) {
     if (typeof DemoPause !== 'undefined' && DemoPause.paused) return true;
     if (e.direct && e.button.id.startsWith('ec-action-')) return false;
@@ -242,9 +245,11 @@ const PartGlow = (() => {
   }
 
   function syncPart(part, now, ease) {
+    const mobileGeneral = isMobileGeneral();
     const lit = hover === part || menuPart === part;
     const live = liveEntries(part), dim = live.every(e => e.button.disabled);
-    const target = !part.active || touchLocked() ? 0 : lit ? 1 : enabled ? .72 : 0;
+    // 모바일 일반 화면은 선택한 부품 1개만 금색 강조(Phase 2). 기본 화면 드로우콜 증가 없음.
+    const target = !part.active || mobileDemoRunning() ? 0 : mobileGeneral ? (menuPart === part ? 1 : 0) : lit ? 1 : enabled ? .72 : 0;
     part.glow += (target - part.glow) * ease;   // 시간 기준(프레임 속도와 무관하게 약 0.2초)
     if (part.glow < .01) { part.root.visible = false; return; }
     part.root.visible = true;
@@ -270,6 +275,7 @@ const PartGlow = (() => {
 
   /* ── 선택 ── */
   function pickAt(x, y) {
+    const mobile = isMobileGeneral(), pad = mobile ? 22 : 16;
     const rect = renderer.domElement.getBoundingClientRect();
     ndc.set((x - rect.left) / rect.width * 2 - 1, -(y - rect.top) / rect.height * 2 + 1);
     ray.setFromCamera(ndc, camera);
@@ -289,25 +295,33 @@ const PartGlow = (() => {
     }
     if (best && occluded(best)) best = null;
     if (best) return best.part;
-    // 작은 부품은 화면 경계상자 근처(16px) 탭도 받는다.
+    // 작은 부품은 화면 경계상자 근처(PC 16px, 모바일 22px) 탭도 받는다. 벽 너머 부품은 occluded로 차단한다.
     let near = null, distance = Infinity;
     for (const part of parts) {
       if (!part.active) continue;
       const r = screenRect(part);
       if (!r || r.w > 90 || r.h > 90) continue;
-      if (x < r.x - 16 || x > r.x + r.w + 16 || y < r.y - 16 || y > r.y + r.h + 16) continue;
-      const d = Math.hypot(x-r.x-r.w/2,y-r.y-r.h/2);
+      if (x < r.x - pad || x > r.x + r.w + pad || y < r.y - pad || y > r.y + r.h + pad) continue;
+      const d = Math.hypot(x - r.x - r.w / 2, y - r.y - r.h / 2);
       if (d >= distance) continue;
-      if (part.entries.some(e=>e.direct)) {
-        box.makeEmpty();part.meshes.forEach(m=>{if(worldVisible(m))box.expandByObject(m);});
-        box.getCenter(v);
-        const worldDistance=camera.position.distanceTo(v);v.project(camera);
-        ray.setFromCamera(ndc.set(v.x,v.y),camera);
-        if (occluded({part,distance:worldDistance})) continue;
+      if (mobile || part.entries.some(e => e.direct)) {
+        box.makeEmpty(); part.meshes.forEach(m => { if (worldVisible(m)) box.expandByObject(m); });
+        if (box.isEmpty()) continue;
+        // 문·벽에 매립된 소형 부품(비상키 등)은 중심이 판 내부일 수 있으므로 카메라 쪽 최근접면으로 가림을 판정한다.
+        box.clampPoint(camera.position, v);
+        const worldDistance = camera.position.distanceTo(v); v.project(camera);
+        ray.setFromCamera(ndc.set(v.x, v.y), camera);
+        if (occluded({ part, distance: worldDistance })) continue;
       }
-      distance=d;near=part;
+      distance = d; near = part;
     }
     return near;
+  }
+  function partCenter(part) {
+    if (!part) return null;
+    box.makeEmpty();
+    for (const m of part.meshes) if (worldVisible(m)) box.expandByObject(m);
+    return box.isEmpty() ? null : box.getCenter(new THREE.Vector3());
   }
   // 벽 너머 부품이 탭되지 않도록 앞을 가리는 불투명 메시를 확인한다.
   let blockers = [], blockersAt = -1e9;
@@ -343,27 +357,120 @@ const PartGlow = (() => {
 
   /* ── 메뉴 ── */
   const labelOf = e => e.label?.(e.button) || e.button.getAttribute('aria-label') || e.button.title || e.name;
-  // 실제 누름 버튼·스위치·문/사다리 조작은 즉시 반응하고, 교육 시연은 메뉴에서 선택한다.
-  // direct는 작은 부품의 피킹 계약이므로 시연 실행 여부의 기준으로 쓰지 않는다.
+  // 실제 누름 버튼·스위치·문/사다리 조작은 PC에서 즉시 반응하고, 모바일 일반 화면에서는 팝업 확인을 거친다.
   const operatingButtons = new Set(['control-panel-action', 'distribution-box-action', 'emergency-light-action', 'pit-ladder-action']);
   const isOperatingControl = e => operatingButtons.has(e.button.id) || /^(passenger-|ec-action-|light-switch-|inspection-action-|hall-action-)/.test(e.button.id);
-  function activate(part) {
+  // MobileHUD.demoChoices / demoSummary 키 연결(조건 목록·실행 함수는 MobileHUD 원본만 공유).
+  const ENTRY_DEMO_KEY = {
+    'btn-overspeed': 'gov', 'rope-brake-action': 'door', 'ascent-action': 'up',
+    'brake-compare-action': 'brake', 'ard-action': 'power', 'manual-rescue-action': 'hand',
+    'photo-eye-action': 'eye', 'photo-eye-menu-action': 'eye', 'rope-measure-roof': 'rope',
+    'buffer-demo-action': 'buffer', 'cwt-buffer-demo-action': 'buffer'
+  };
+  const PLAY_SVG = '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>';
+  function entryDemoKey(e) {
+    const id = e.button.id || '';
+    if (ENTRY_DEMO_KEY[id]) return ENTRY_DEMO_KEY[id];
+    if (id.startsWith('terminal-demo-')) return 'limit';
+    if (id.startsWith('interlock-action-')) return 'lock';
+    if (id.startsWith('relay-rope-action-')) return 'link';
+    if (id.startsWith('guide-action-') || id.startsWith('retention-action-')) return 'shield';
+    return null;
+  }
+  function isDemoResettingOrActive(key) {
+    if (key === 'door') return typeof UCMDemo !== 'undefined' && UCMDemo.state.active;
+    if (key === 'up') return typeof AscentDemo !== 'undefined' && AscentDemo.active;
+    if (key === 'brake') return typeof BrakeDemo !== 'undefined' && BrakeDemo.active;
+    if (key === 'buffer') return typeof BufferDemo !== 'undefined' && BufferDemo.active;
+    return false;
+  }
+  function activate(part, point) {
     const live = liveEntries(part);
     if (!live.length) return;
-    const now = performance.now();
-    // 두 번 탭(카메라 확대)의 두 번째 탭은 방금 연 메뉴를 다시 닫지 않는다.
-    if (lastOpen.part === part && now - lastOpen.time < 450) return;
-    lastOpen = { part, time: now };
-    if (live.length === 1 && isOperatingControl(live[0]) && !live[0].button.disabled) {
-      closeMenu(); live[0].button.click(); return;
+    const mobile = isMobileGeneral();
+    if (!mobile) {
+      const now = performance.now();
+      // PC 두 번 탭(카메라 확대)의 두 번째 탭은 방금 연 메뉴를 다시 닫지 않는다.
+      if (lastOpen.part === part && now - lastOpen.time < 450) return;
+      lastOpen = { part, time: now };
+      if (live.length === 1 && isOperatingControl(live[0]) && !live[0].button.disabled) {
+        closeMenu(); live[0].button.click(); return;
+      }
     }
-    openMenu(part, live);
+    openMenu(part, live, mobile ? point : null);
   }
-  function openMenu(part, live) {
-    if (typeof closeAllMenus === 'function') closeAllMenus();
-    menuPart = part;
-    menu.querySelector('strong').textContent = part.name;
-    const items = menu.querySelector('.part-menu-items');
+  function openMobileItems(part, live, items) {
+    const choicesMap = typeof MobileHUD !== 'undefined' ? MobileHUD.demoChoices : null;
+    const summaryMap = typeof MobileHUD !== 'undefined' ? MobileHUD.demoSummary : null;
+    const choiceEntries = choicesMap ? live.map(e => ({ e, key: entryDemoKey(e) })).filter(x => x.key && choicesMap[x.key] && !isDemoResettingOrActive(x.key)) : [];
+    const nodes = [];
+    if (choiceEntries.length && choiceEntries.length === live.length) {
+      let activeIdx = 0, startFn = null;
+      const desc = document.createElement('p'); desc.className = 'pm-desc';
+      const modes = document.createElement('div'); modes.className = 'pm-modes'; modes.setAttribute('aria-label', '시연 조건');
+      const play = document.createElement('button'); play.type = 'button'; play.className = 'part-menu-item pm-play';
+      play.innerHTML = PLAY_SVG + '<span>재생</span>';
+      const selectDemo = idx => {
+        activeIdx = idx;
+        const { e, key } = choiceEntries[idx];
+        const options = choicesMap[key].options;
+        const defIdx = key === 'buffer' && e.button.id === 'cwt-buffer-demo-action' ? Math.max(0, options.findIndex(([m]) => m === 'cwt')) : 0;
+        const summary = summaryMap?.[key] || '';
+        desc.textContent = summary; desc.hidden = !summary;
+        modes.replaceChildren();
+        startFn = options[defIdx][2];
+        play.disabled = e.button.disabled;
+        const updatePlayLabel = modeLabel => play.setAttribute('aria-label', part.name + ' · ' + modeLabel + ' 시연 재생');
+        updatePlayLabel(options[defIdx][1]);
+        options.forEach(([mode, label, fn], i) => {
+          const btn = document.createElement('button'); btn.type = 'button'; btn.dataset.partMode = mode;
+          btn.textContent = label; btn.setAttribute('aria-pressed', String(i === defIdx));
+          btn.addEventListener('click', () => {
+            startFn = fn; updatePlayLabel(label);
+            modes.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === btn)));
+          });
+          modes.append(btn);
+        });
+      };
+      if (choiceEntries.length > 1) {
+        const tabs = document.createElement('div'); tabs.className = 'pm-tabs'; tabs.setAttribute('aria-label', '시연 선택');
+        choiceEntries.forEach(({ e, key }, i) => {
+          const tab = document.createElement('button'); tab.type = 'button'; tab.dataset.partTab = key;
+          tab.textContent = labelOf(e).replace(/\s*시연\s*설정$/, '');
+          tab.setAttribute('aria-pressed', String(i === 0));
+          tab.addEventListener('click', () => {
+            selectDemo(i);
+            tabs.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === tab)));
+            placeMenu();
+          });
+          tabs.append(tab);
+        });
+        nodes.push(tabs);
+      }
+      play.addEventListener('click', () => { const fn = startFn; closeMenu(); if (fn) fn(); });
+      selectDemo(0);
+      nodes.push(desc, modes, play);
+      items.replaceChildren(...nodes);
+      return;
+    }
+    const singleKey = live.length === 1 ? entryDemoKey(live[0]) : null;
+    if (singleKey) {
+      const e = live[0], summary = summaryMap?.[singleKey] || '';
+      if (summary) {
+        const desc = document.createElement('p'); desc.className = 'pm-desc'; desc.textContent = summary;
+        nodes.push(desc);
+      }
+      const play = document.createElement('button'); play.type = 'button'; play.className = 'part-menu-item pm-play';
+      play.disabled = e.button.disabled;
+      const lbl = labelOf(e);
+      const isReset = /복귀/.test(lbl);
+      play.innerHTML = isReset ? `<span>${lbl}</span>` : PLAY_SVG + '<span>재생</span>';
+      play.setAttribute('aria-label', isReset ? lbl : `${part.name} 시연 재생`);
+      play.addEventListener('click', () => { closeMenu(); e.button.click(); });
+      nodes.push(play);
+      items.replaceChildren(...nodes);
+      return;
+    }
     items.replaceChildren(...live.map(e => {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'part-menu-item'; b.disabled = e.button.disabled;
@@ -373,21 +480,83 @@ const PartGlow = (() => {
       b.addEventListener('click', () => { closeMenu(); e.button.click(); });
       return b;
     }));
+  }
+  function openMenu(part, live, point) {
+    if (typeof closeAllMenus === 'function') closeAllMenus();
+    menuPart = part;
+    tapPt = point ? { x: point.x, y: point.y } : null;
+    const mobile = isMobileGeneral();
+    if (mobile) menu.dataset.mobile = 'true'; else delete menu.dataset.mobile;
+    menu.querySelector('strong').textContent = part.name;
+    const items = menu.querySelector('.part-menu-items');
+    if (mobile) {
+      openMobileItems(part, live, items);
+    } else {
+      items.replaceChildren(...live.map(e => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'part-menu-item'; b.disabled = e.button.disabled;
+        b.style.setProperty('--part-icon', getComputedStyle(e.button).getPropertyValue('--part-icon') || e.button.style.getPropertyValue('--part-icon'));
+        b.textContent = labelOf(e);
+        if (e.button.classList.contains('active') || e.button.getAttribute('aria-pressed') === 'true') b.classList.add('on');
+        b.addEventListener('click', () => { closeMenu(); e.button.click(); });
+        return b;
+      }));
+    }
     menu.hidden = false;
     placeMenu();
-    menu.querySelector('.part-menu-item:not(:disabled)')?.focus({ preventScroll: true });
+    if (!mobile) menu.querySelector('.part-menu-item:not(:disabled)')?.focus({ preventScroll: true });
   }
-  function closeMenu() { if (menu) menu.hidden = true; menuPart = null; }
+  function closeMenu() { if (menu) menu.hidden = true; menuPart = null; tapPt = null; }
   function placeMenu() {
     if (!menuPart) return;
     box.makeEmpty();
     for (const m of menuPart.meshes) if (worldVisible(m)) box.expandByObject(m);
     if (box.isEmpty()) { closeMenu(); return; }
-    box.getCenter(v); v.y = box.max.y; v.project(camera);
-    if (v.z < -1 || v.z > 1) { closeMenu(); return; }
-    const x = (v.x + 1) * innerWidth / 2, y = (1 - v.y) * innerHeight / 2;
-    menu.style.left = Math.max(8, Math.min(innerWidth - menu.offsetWidth - 8, x - menu.offsetWidth / 2)) + 'px';
-    menu.style.top = Math.max(8, Math.min(innerHeight - menu.offsetHeight - 8, y - menu.offsetHeight - 14)) + 'px';
+    const mobile = isMobileGeneral();
+    if (!mobile) {
+      box.getCenter(v); v.y = box.max.y; v.project(camera);
+      if (v.z < -1 || v.z > 1) { closeMenu(); return; }
+      const x = (v.x + 1) * innerWidth / 2, y = (1 - v.y) * innerHeight / 2;
+      menu.style.left = Math.max(8, Math.min(innerWidth - menu.offsetWidth - 8, x - menu.offsetWidth / 2)) + 'px';
+      menu.style.top = Math.max(8, Math.min(innerHeight - menu.offsetHeight - 8, y - menu.offsetHeight - 14)) + 'px';
+      return;
+    }
+    const r = screenRect(menuPart);
+    if (!r) {
+      box.getCenter(v); v.project(camera);
+      if (v.z < -1 || v.z > 1) { closeMenu(); return; }
+    }
+    const w = menu.offsetWidth || 180, h = menu.offsetHeight || 110;
+    const statusRect = document.getElementById('statusbar')?.getBoundingClientRect();
+    const barRect = document.getElementById('m-bar')?.getBoundingClientRect();
+    const portrait = barRect && barRect.width > barRect.height;
+    const minX = 8, maxX = Math.max(minX, (portrait || !barRect || !barRect.width ? innerWidth : barRect.left) - w - 8);
+    const statusBottom = statusRect && statusRect.height ? statusRect.bottom + 8 : 8;
+    const minY = portrait ? statusBottom : 8;
+    const maxY = Math.max(minY, (portrait && barRect ? barRect.top : innerHeight) - h - 8);
+    const clamp = (lx, ly) => {
+      lx = Math.max(minX, Math.min(maxX, lx));
+      ly = Math.max(minY, Math.min(maxY, ly));
+      if (!portrait && statusRect && statusRect.width && lx < statusRect.right + 6 && ly < statusRect.bottom + 6) {
+        ly = Math.min(maxY, statusRect.bottom + 8);
+      }
+      lx = Math.max(8, Math.min(innerWidth - w - 8, lx));
+      ly = Math.max(8, Math.min(innerHeight - h - 8, ly));
+      return { x: Math.round(lx), y: Math.round(ly) };
+    };
+    const hitsTap = c => tapPt && tapPt.x >= c.x - 10 && tapPt.x <= c.x + w + 10 && tapPt.y >= c.y - 10 && tapPt.y <= c.y + h + 10;
+    const cx = r ? r.x + r.w / 2 : (v.x + 1) * innerWidth / 2;
+    const cy = r ? r.y + r.h / 2 : (1 - v.y) * innerHeight / 2;
+    const candidates = [
+      clamp(cx - w / 2, (r ? r.y : cy) - h - 12),
+      clamp(cx - w / 2, (r ? r.y + r.h : cy) + 12),
+      clamp((r ? r.x : cx) - w - 12, cy - h / 2),
+      clamp((r ? r.x + r.w : cx) + 12, cy - h / 2),
+      clamp((tapPt ? tapPt.x : cx) > innerWidth / 2 ? minX : maxX, (tapPt ? tapPt.y : cy) > innerHeight / 2 ? minY : maxY)
+    ];
+    const chosen = candidates.find(c => !hitsTap(c)) || candidates[0];
+    menu.style.left = chosen.x + 'px';
+    menu.style.top = chosen.y + 'px';
   }
 
   function setEnabled(value) {
@@ -424,27 +593,46 @@ const PartGlow = (() => {
     tip = document.createElement('div');
     tip.id = 'part-tip'; tip.hidden = true;
     document.body.appendChild(tip);
+
+    const canvas = renderer.domElement;
+    let down = null, wasMenuPart = null;
+    // window 캡처에서 HUD 메뉴 닫힘 여부와 열려 있던 부품 메뉴를 먼저 기록한다.
+    window.addEventListener('pointerdown', e => {
+      if (e.button === 0 || e.pointerType !== 'mouse') activePointers.set(e.pointerId, true);
+      if (activePointers.size > 1) { down = null; }
+      hudDismissed = isMobileGeneral() && !!(document.querySelector('#m-demo.open, .sheet.open') || bodyHas('m-run-open'));
+      wasMenuPart = !menu.hidden && !menu.contains(e.target) ? menuPart : null;
+    }, true);
+    const dropPointer = e => { activePointers.delete(e.pointerId); };
+    window.addEventListener('pointerup', dropPointer, true);
+    window.addEventListener('pointercancel', dropPointer, true);
+    window.addEventListener('blur', () => { activePointers.clear(); down = null; });
     document.addEventListener('pointerdown', e => { if (!menu.hidden && !menu.contains(e.target)) closeMenu(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
 
-    const canvas = renderer.domElement;
-    let down = null;
     canvas.addEventListener('pointerdown', e => {
-      down = e.button === 0 && e.isPrimary ? { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now(), n: 1 } : null;
+      if (activePointers.size > 1 || e.isPrimary === false || hudDismissed) { down = null; return; }
+      down = e.button === 0 && e.isPrimary ? { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now(), wasMenuPart } : null;
     });
     canvas.addEventListener('pointermove', e => {
       if (e.pointerType === 'mouse') pointer = { x: e.clientX, y: e.clientY, moved: true };
-      if (down && (e.pointerId !== down.id || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6)) down = null;
+      const slop = isMobileGeneral() ? 14 : 6;
+      if (down && (e.pointerId !== down.id || Math.hypot(e.clientX - down.x, e.clientY - down.y) > slop)) down = null;
     });
     canvas.addEventListener('pointerleave', () => { pointer = null; });
     canvas.addEventListener('pointercancel', () => { down = null; });
     canvas.addEventListener('pointerup', e => {
       const d = down; down = null;
-      if (!d || e.pointerId !== d.id || performance.now() - d.t > 450) return;
+      if (e === zoomedEvent) { zoomedEvent = null; return; }
+      const mobile = isMobileGeneral();
+      if (!d || e.pointerId !== d.id || performance.now() - d.t > (mobile ? 700 : 450)) return;
       if (typeof controls !== 'undefined' && !controls.enabled) return;
-      if (touchLocked()) return;
+      if (mobileDemoRunning()) return;
       const part = pickAt(e.clientX, e.clientY);
-      if (part) activate(part);
+      if (!part) return;
+      // 천천히 같은 부품을 재탭하면 팝업만 닫고(pointerdown에서 이미 닫힘) 재오픈하지 않는다.
+      if (mobile && d.wasMenuPart === part) { slowCloseHook?.(); return; }
+      activate(part, { x: e.clientX, y: e.clientY });
     });
     const toggle = document.getElementById('part-glow-toggle');
     if (toggle) toggle.addEventListener('click', () => setEnabled(!enabled));
@@ -475,8 +663,10 @@ const PartGlow = (() => {
   function render() {
     if (!menu) return;
     frame++;
+    const mobile = isMobileGeneral();
+    if (mobile !== wasMobileMode) { wasMobileMode = mobile; closeMenu(); }
     refresh();
-    if (menuPart && (!menuPart.active || !liveEntries(menuPart).length)) closeMenu();
+    if (menuPart && (!menuPart.active || !liveEntries(menuPart).length || mobileDemoRunning())) closeMenu();
     updateHover();
     placeMenu();
     const now = performance.now() / 1000, ease = 1 - Math.exp(-Math.min(.25, now - (lastNow || now)) * 12);
@@ -495,5 +685,8 @@ const PartGlow = (() => {
   }
 
   return { bind, init, render, closeMenu, setEnabled, get enabled() { return enabled; }, palette: { IDLE, HOT },
-    get parts() { return parts; }, get menuPart() { return menuPart; }, pickAt, activate };
+    get parts() { return parts; }, get menuPart() { return menuPart; }, pickAt, activate, partCenter,
+    markZoomTap(e) { zoomedEvent = e; closeMenu(); },
+    hudWasDismissed() { return hudDismissed; },
+    onSlowClose(fn) { slowCloseHook = fn; } };
 })();
