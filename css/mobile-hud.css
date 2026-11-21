@@ -605,6 +605,7 @@ body.m-hud #dd-view .sheet-head h3 { font-size: 13px; }
 body.m-hud #dd-view .sheet-close { width: 36px; height: 36px; }
 body.m-hud #dd-view > h4, body.m-hud #dd-view > .seg[data-for="speed-select"] { display: none; }
 body.m-hud #dd-view .toggles { gap: 4px; }
+body.m-hud #dd-view #brief-mode-toggle { grid-column: 1 / -1; }
 body.m-hud #dd-view .toggle { min-height: 38px; padding: 4px 6px; font-size: 11px; border-radius: 8px; }
 body.m-hud #dd-view .toggle small { display: none; }
 body.m-hud #dd-view .m-screen { margin: 0 0 6px; }

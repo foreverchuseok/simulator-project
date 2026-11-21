@@ -11,9 +11,10 @@ const AdaptiveQuality = (() => {
     { dpr: 1.25, shadow: 1024 }
   ];
   const WINDOW_MS = 3000, LOW_FPS = 38, HIGH_FPS = 55, GPU_WAIT = 1.15, SETTLE_MS = 2500, RELAPSE_MS = 15000, LOCK_MS = 60000;
+  const brief = typeof BriefMode !== 'undefined' && BriefMode.active;
   const param = new URLSearchParams(location.search).get('quality'), fixed = /^[0-2]$/.test(param);
-  let mode = fixed || (navigator.webdriver && param !== 'auto') ? 'fixed' : 'auto';
-  let level = fixed ? +param : 0;
+  let mode = brief ? 'brief' : fixed || (navigator.webdriver && param !== 'auto') ? 'fixed' : 'auto';
+  let level = brief ? 0 : fixed ? +param : 0;
   // 올렸다가 곧 다시 내려간 단계 위로는 60초 동안 다시 올리지 않는다(왕복 방지).
   // 세션 내내 잠그면 GPU 무거운 시연 뒤 CPU 병목인 기본 화면까지 낮은 화질에 머문다(S22+ 실측).
   let ceiling = 0, ceilingUntil = 0;
@@ -23,6 +24,7 @@ const AdaptiveQuality = (() => {
   const median = a => a.sort((x, y) => x - y)[a.length >> 1];
 
   function apply(next, reason) {
+    if (brief) return;
     level = next;
     const L = LEVELS[level], dpr = Math.min(window.devicePixelRatio || 1, L.dpr);
     if (renderer.getPixelRatio() !== dpr) renderer.setPixelRatio(dpr);   // 내부에서 setSize 로 캔버스도 갱신
@@ -62,15 +64,19 @@ const AdaptiveQuality = (() => {
   }
 
   function init() {
+    if (brief) return;
     if (level) apply(level, '?quality');
     PerfMonitor.listen(sample);
   }
   function set(value) {
+    if (brief) return;
     if (value === 'auto') { mode = 'auto'; ceiling = 0; settleUntil = performance.now() + SETTLE_MS; return; }
     mode = 'fixed'; apply(Math.max(0, Math.min(LEVELS.length - 1, value | 0)), '수동');
   }
-  const cycle = () => set(mode === 'auto' ? 0 : level === LEVELS.length - 1 ? 'auto' : level + 1);
-  const describe = () => ({ mode, level, dpr: renderer.getPixelRatio(), shadow: LEVELS[level].shadow, ceiling, history: history.slice(-8) });
+  const cycle = () => { if (!brief) set(mode === 'auto' ? 0 : level === LEVELS.length - 1 ? 'auto' : level + 1); };
+  const describe = () => brief
+    ? { mode: 'brief', level: 0, dpr: renderer.getPixelRatio(), shadow: 0, ceiling: 0, history: [] }
+    : ({ mode, level, dpr: renderer.getPixelRatio(), shadow: LEVELS[level].shadow, ceiling, history: history.slice(-8) });
 
   return { init, set, cycle, describe, LEVELS, feed: sample, get level() { return level; }, get mode() { return mode; } };
 })();

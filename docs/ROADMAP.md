@@ -22,6 +22,29 @@
 
 ## 현재 단계 — 모바일 사용 경험 개편
 
+### 2026-11-22 저사양 태블릿용 「브리핑 모드」 추가 (`js/brief-mode.js`)
+
+- 갤럭시탭 S7 FE(`SM-T735N`, 2560×1600, DPR 1.875) 등 저사양 태블릿용 선택 옵션 **「브리핑 모드(가벼운 화면)」**를 추가했다. 기본은 꺼짐이며 다른 기기(S22+·PC)의 화질과 동작은 바꾸지 않는다.
+- 켜는 방법·저장(`js/brief-mode.js`, `BriefMode`):
+  - `?brief=1` 켜고 `localStorage('briefModeEnabled')` 저장, `?brief=0` 끄고 저장, 그 외에는 `localStorage` 기억값(`try/catch`, 실패 시 꺼짐).
+  - PC·모바일 공통 설정 시트(`#dd-view`) 기타 설정에 `#brief-mode-toggle`(「브리핑 모드(가벼운 화면)」)을 추가했고(`css/mobile-hud.css`에서 모바일 2열 전체 폭 배치), 토글 시 기억값을 저장한 뒤 페이지를 새로고침해 셰이더 재컴파일 멈춤 없이 적용한다.
+  - 켜져 있을 때 화면 한쪽(PC·태블릿 우하단, 모바일 좌하단 바 위)에 작은 `브리핑 ×` 배지(`#brief-badge`)를 두고, 누르면 끄고 새로고침한다.
+- 장면 생성 전 적용 규칙(`index.html`, `js/brief-mode.js`, `js/adaptive-quality.js`, `js/idle-throttle.js`):
+  - `three.min.js` 직후·`js/config.js` 앞에서 `THREE.MeshStandardMaterial`·`THREE.MeshPhysicalMaterial`을 `THREE.MeshLambertMaterial` 하위 클래스로 교체해 처음부터 가벼운 재질로 생성한다(후처리 재질 바꿔치기 금지). Standard/Physical 전용 속성과 PBR 맵(`normalMap`·`roughnessMap`·`metalnessMap`·`envMap` 등)은 경고 없이 무시해 `WebGLPrograms` 셰이더 분기와 PMREM 검은 렌더를 막고, 유리(`transmission > 0`)는 반투명 Lambert로 보정했다. `index.html`의 조속기 로프 노멀맵 바인딩(`m.normalMap.needsUpdate`)에는 null 가드를 두고, 브리핑 모드에서는 미사용 `setupStudioEnv()` PMREM 생성을 생략했다.
+  - 렌더러 생성 직후 `renderer.setPixelRatio(0.75)` 고정·`renderer.shadowMap.enabled = false`를 적용하고, `AdaptiveQuality`는 브리핑 모드에서 자동 조절하지 않는다(`mode: 'brief'`).
+  - `IdleThrottle`의 활동 중 최소 간격을 `33ms`(30fps 상한, 60Hz 1프레임 튐 방지 여유 4ms)로 제한하고, 기존 정지 절약(30→12fps)은 유지했다. 형상·FSM·시연·`PartGlow`·`ScreenCull`·GLB 노드/피벗은 변경하지 않았다.
+- 계측 도구(`tools/measure_fps.mjs`): 다중 기기용 `--serial`/`ANDROID_SERIAL`, `PHONE_CDP_URL`(기본 9223), `--phone` 로컬 파일·벤더 CDN 4종 `page.route` 가로채기(`ERR_NETWORK_CHANGED` 우회), `mr`/`mr-active`/`idle-active` 시나리오를 추가했다.
+- **갤럭시탭 S7 FE(`SM-T735N` / Adreno 619 / Chrome / `1365×685` / 네이티브 DPR `1.875` / 27.6℃ / 15초 연속, 동일 조건 전후 실측)**:
+  - 꺼짐(`?brief=0`, DPR `1.875`, 그림자 켬, `temporary/fps/tablet-brief-off-final-phone-q0.json`): 기본 화면(`idle-active`) **10.1fps**(간격 99.5/130.4ms, CPU 64.7ms, 호출 2,592, 삼각형 1,555,032), 기계실(`mr-active`) **5.1fps**(간격 200.2/382.4ms, CPU 41.1ms, 호출 1,127, 삼각형 867,263).
+  - 켜짐(`?brief=1`, DPR `0.75`, 그림자 끔, 30fps 상한 켬, `temporary/fps/tablet-brief-on-final-phone-q0.json`): 기본 화면(`idle-active`) **26.1fps**(간격 37.7/42.5ms, CPU 35.7ms, 호출 1,748, 삼각형 1,289,937 — 단독 정지 진단 `28.1fps`, `idle=0` 15초 26.1~26.8fps; 태블릿 `1365×685`에서 데스크톱 HUD의 `PartGlow` 대기 발광 141호출·약 2.2ms가 포함돼 목표 27fps 경계), 기계실(`mr-active`) **28.3fps**(간격 중앙값 **33.3ms** / p95 39.0ms로 30fps 상한 유지, 상한 해제 `?brief=1&idle=0` 시 29.9~34.8fps, CPU 26.8ms, 호출 1,085, 삼각형 863,119). 오류 0건.
+- **기능·화면·회귀 검증**:
+  - 태블릿 실기기 기능·캡처(`temporary/brief-tablet/tablet-{overview,mr,governor,mr-light-on,demo-ard,demo-ovs-cutaway}.png`, 오류·Lambert 경고 각 0건): `MeshLambertMaterial` 782종(`Standard`/`Physical`/`envMap` 0), 기계실·승강로 조명 스위치 동일 재질 참조 점등/소등, ARD 정전·비상등, 과속 절개(`MeshLambertMaterial` opacity 0.26 + 세이프티기어 강조), 조속기 밝기 정상(검지 않음), 로프브레이크 팝업·금색 `PartGlow`, `브리핑 ×` 배지 끄기·설정 토글 다시 켜기 및 `localStorage` 유지 확인(최종 3줄 미세 정리 뒤 FPS 3종 재측정·로컬 회귀 완료, 태블릿 기능 스크립트 재확인은 사용자 기기 연결 해제 요청으로 중단).
+  - `?brief=1` 14종 시연 진입·종료: `SIMULATOR_URL=http://127.0.0.1:5500/index.html?brief=1 node tools/verify_demo_presentation.mjs` 통과(`ALL PASS mobile 18`).
+  - 기본(브리핑 모드 꺼짐) 회귀: `tools/verify_perf_quality.mjs` 통과(`callsWithoutCull: 3769`, `callsWithCull: 2361`, `dpr: 2`, 오류 0건), `tools/verify_part_glow.mjs` 통과, `tools/verify_demo_choices.mjs`(PC·모바일) 모두 통과. 요청 없이 커밋·푸시하지 않았다.
+- (Claude Code 후속 확인, S7 FE CDP 터치) 가로 1365×685: 켜짐·기억, 「시연」 버튼→인터록 시연→× 복귀, 부품 메뉴, 배지·버튼 겹침 없음, 기본 화면 28.4fps·기계실 34.3fps(`idle=0`), 오류 0건 — 전부 통과. 세로 853×1197: 켜짐·기억·배지 끄기(저장값 0)·부품 메뉴 통과, 기본 화면 23.7fps·기계실 38fps.
+- **남은 문제 1 — 세로 태블릿에 「시연」 버튼 없음(기존 문제, 브리핑 모드와 무관)**: 화면 구성이 휴대폰형(세로 폭 ≤600px)·PC형(폭 ≥901px·높이 ≥560px)으로만 나뉘어, 폭 601~900px(세로 태블릿)은 옛 기본 화면으로 떠서 `#m-demo` 시연 목록이 없다(`MobileHUD.demoMenuAvailable`, `js/desktop-hud.js` 의 `(min-width: 901px)`). 부품 탭 메뉴로는 시연 진입 가능. 세로 브리핑이 주 용도이므로 다음 작업으로 고친다.
+- **남은 문제 2 — 태블릿에서 페이지를 연달아 다시 불러오면 GPU 프로세스가 무너진다**: logcat `The GPU process has crashed` 3회(02:16·02:25·02:38), 모두 새로고침·일반 화질 전환 직후. 여유 메모리 1.4~1.6GB로 시스템 메모리 부족은 아니다(브리핑 모드 1회 로드 시 Chrome 합계 약 800MB). 한 번 열어 쓰는 동안에는 문제없었다. 후보 대책: `pagehide` 때 `WEBGL_lose_context` 로 GPU 자원을 먼저 반납, 브리핑 모드 토글 시 새로고침 대신 안내.
+
 ### 2026-11-22 모바일 3D 부품 직접 탭 · 소형 팝업 · 2단계 실행 (Phase 2 완료 · 여기서 멈춤)
 
 - [MOBILE-PART-INTERACTION-ANALYSIS.md](MOBILE-PART-INTERACTION-ANALYSIS.md)의 확정 사항(1~5)을 반영하고 **Phase 2(팝업·터치·선택 1부품 강조)** 범위만 구현했다. 반짝임 비콘(Phase 1)·일시정지 통일(Phase 3)·비-시연 설비 일괄 원상복구(2차)는 아직 구현하지 않았으며, 조속기·인터록·세이프티기어 GLB 노드·피벗과 PC 동작·오른쪽 시연 메뉴(`#m-demo`)·하단 자막은 유지했다.

@@ -964,6 +964,7 @@
           <button class="toggle active" id="c-background" aria-pressed="true" title="기본 배경의 경기북부지사 로고 표시"><span><b><span class="l-full">배경 로고</span><span class="l-short">로고</span></b><small>경기북부지사</small></span></button>
           <button class="toggle active" id="part-glow-toggle" aria-pressed="true" title="기능이 있는 부품의 테두리 빛·반짝임. 꺼도 부품을 누르면 메뉴가 열립니다"><span><b><span class="l-full">부품 빛 효과</span><span class="l-short">부품 빛</span></b><small>기능 부품 테두리 발광</small></span></button>
           <button class="toggle active" id="c-mascot" aria-pressed="true" title="기계실 마스코트 표시/숨김"><span><b>캐릭터</b><small>기계실 마스코트 「승강곰」</small></span></button>
+          <button class="toggle" id="brief-mode-toggle" aria-pressed="false" title="저사양 태블릿용 가벼운 화면(재질·그림자·해상도 75%·30fps). 변경 시 새로고침됩니다"><span><b><span class="l-full">브리핑 모드(가벼운 화면)</span><span class="l-short">브리핑 모드</span></b><small>저사양 태블릿용 · 새로고침 적용</small></span></button>
         </div>
         <h4 class="help-title">조작 방법</h4>
         <dl class="help">
@@ -1070,6 +1071,7 @@
     <button id="inspection-return" aria-label="점검 리셋 후 자동 복귀" disabled>↻ 리셋</button>
   </section>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="js/brief-mode.js?v=20261122-brief"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
@@ -1408,7 +1410,7 @@
         if (_govRopeNrm) {
           m.normalMap = _govRopeNrm.clone();
           m.normalScale.set(1.35, 1.35);
-          m.normalMap.needsUpdate = true;
+          if (m.normalMap) m.normalMap.needsUpdate = true;
         }
         const len = m.userData.ropeLen;
         if (len) {
@@ -1467,9 +1469,14 @@
       camera.position.set(18, Y0 + TOTAL_H * 0.4, 21);
 
       renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gl'), antialias: true });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      renderer.shadowMap.enabled = true;
-      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      if (typeof BriefMode !== 'undefined' && BriefMode.active) {
+        renderer.setPixelRatio(BriefMode.DPR);
+        renderer.shadowMap.enabled = false;
+      } else {
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      }
       renderer.physicallyCorrectLights = false;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.2;
@@ -1477,7 +1484,8 @@
 
       // ── 환경맵 (금속 반사) — 절차적 스튜디오 그라데이션 → PMREM.
       //    scene.environment 미설정 시 metalness 높은 재질(크롬 조속기 등)이 검게 렌더됨.
-      (function setupStudioEnv() {
+      //    브리핑 모드는 Lambert 재질만 쓰므로 PMREM 셰이더 컴파일과 큐브맵 생성을 생략한다.
+      if (!(typeof BriefMode !== 'undefined' && BriefMode.active)) (function setupStudioEnv() {
         const c = document.createElement('canvas'); c.width = 16; c.height = 128;
         const g = c.getContext('2d');
         const grad = g.createLinearGradient(0, 0, 0, 128);
@@ -1636,6 +1644,7 @@
       DesktopHUD.init();
       MobileHUD.init();         // 모바일 하단 바 (js/mobile-hud.js) — PC 화면과 서로 겹치지 않는다
       MobileDemoGuide.build();  // 모바일 시연 하단 자막 · 큰 설명창 숨김
+      BriefMode.initUI();       // 브리핑 모드 설정 토글 · 표시 배지 (js/brief-mode.js)
 
       installShadowCache(scene, camera, renderer);
       PerfMonitor.install(scene, renderer);   // ?fps 연속 계측 (js/perf-monitor.js)

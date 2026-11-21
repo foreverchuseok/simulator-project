@@ -321,7 +321,8 @@ ESTOP
 | 기능 부품 발광·탭 메뉴 | `js/part-glow.js` | `PartGlow.bind()`(각 모듈 버튼 생성부), 색·폭 `syncPart()`, 설정 `#part-glow-toggle` |
 | 성능 계측(`?fps`) | `js/perf-monitor.js` | `renderLoop()`의 `frameStart/updateDone/drawDone/frameEnd`, `PerfMonitor.record(초)` |
 | 저FPS 자동 화질 | `js/adaptive-quality.js` | `LEVELS`(DPR·그림자 맵), GPU 대기일 때만 낮춤 |
-| 정지 화면 프레임 절약 | `js/idle-throttle.js` | `busy()` 활동 조건, 30→12fps |
+| 저사양 태블릿 브리핑 모드(`?brief=1`) | `js/brief-mode.js` | Lambert 재질 생성 교체·그림자 끔·DPR 0.75·30fps 상한, `#brief-mode-toggle`·`#brief-badge` |
+| 정지 화면 프레임 절약 | `js/idle-throttle.js` | `busy()` 활동 조건, 30→12fps (브리핑 모드 활동 상한 33ms) |
 | 원거리 소형 부품 컬링 | `js/screen-cull.js` | `MIN_PX`(2장치픽셀), 지름 1cm 미만 그림자 끔 |
 | 카 실내·프레임·에이프런 | `js/elevator.js` 스텁, 원본 `js/archive/car.js` | `buildCarCabin()` |
 | 카 재공사 안내 | `docs/CAR-REBUILD.md` | 부품별 복원 규칙 |
@@ -403,7 +404,8 @@ Python의 `LEV_TILT`, 휠 중심, 피벗과 JavaScript의 래퍼·pose 값도 �
 
 ### 성능 확인 (기준 기기 Galaxy S22 이상 / Chrome)
 
-- 실제 기기: USB 디버깅 연결 후 `node tools/measure_fps.mjs --phone` — 기본 화면·운행·시연 3종을 장면당 60초 연속 기록한다(`temporary/fps/`). `--quality=0~2|auto`, `--extra=idle=0`, `--scenarios=` 로 조건을 바꾼다. 같은 조건·같은 장면끼리만 비교한다.
+- 실제 기기: USB 디버깅 연결 후 `node tools/measure_fps.mjs --phone` — 기본 화면·운행·시연 3종을 장면당 60초 연속 기록한다(`temporary/fps/`). `--quality=0~2|auto`, `--extra=idle=0`(또는 `brief=1`), `--scenarios=`, `--serial=`/`ANDROID_SERIAL`, `PHONE_CDP_URL` 로 조건·기기를 바꾼다. 같은 조건·같은 장면끼리만 비교한다.
+- 성능·품질 쿼리: `?fps`(실시간 계측·60초 기록), `?quality=0~2|auto`(자동 화질 단계), `?idle=0`(정지 절약 끔), `?cull=0`(소형 부품 컬링 끔), `?brief=1`/`?brief=0`(저사양 태블릿용 브리핑 모드 켜기/끄기·기억).
 - 어디에 시간을 쓰는지: `node tools/profile_phone.mjs` (휴대폰 탭의 JS 함수별 CPU 시간), `node tools/inspect_draw_calls.mjs` (조립체별 그리기 호출).
 - 기능 회귀: `node tools/verify_perf_quality.mjs` (`--deep` 은 20초 깊은 정지까지).
 

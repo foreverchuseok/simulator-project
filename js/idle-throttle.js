@@ -4,7 +4,8 @@
 // 시연 중에는 항상 원래 속도다(프레임 수 기반 연출이 느려지지 않도록). ?idle=0 이면 끈다(전후 측정용).
 const IdleThrottle = (() => {
   const off = /[?&]idle=0(&|$)/.test(location.search);
-  const IDLE_AFTER = 1500, DEEP_AFTER = 20000, GAP = [0, 1000 / 30, 1000 / 12];
+  const briefCap = typeof BriefMode !== 'undefined' && BriefMode.active ? BriefMode.CAP_MS : 0;
+  const IDLE_AFTER = 1500, DEEP_AFTER = 20000, GAP = [briefCap, 1000 / 30, 1000 / 12];
   let lastActive = performance.now(), lastRender = 0, mode = 0, prevMode = 0, pointers = 0;
   let pulseClock = 0, pulseReal = 0;
   const cam = new Float64Array(19);
@@ -27,7 +28,8 @@ const IdleThrottle = (() => {
     try { active = busy(); } catch (e) { /* 판단 불가면 원래 속도 */ }
     if (active) lastActive = now;
     const quiet = now - lastActive, next = quiet < IDLE_AFTER ? 0 : quiet < DEEP_AFTER ? 1 : 2;
-    if (next && now - lastRender < GAP[next] - 2) return false;
+    const gap = GAP[next];
+    if (gap && now - lastRender < gap - (next === 0 ? 4 : 2)) return false;
     prevMode = mode; mode = next; lastRender = now;
     return true;
   }

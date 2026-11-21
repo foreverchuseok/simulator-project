@@ -11,10 +11,13 @@ import {chromium} from 'playwright';
 const arg=(k,d)=>{const a=process.argv.find(x=>x.startsWith(`--${k}=`));return a?a.slice(k.length+3):d;};
 const phone=process.argv.includes('--phone'),quality=arg('quality','0'),seconds=+arg('seconds','60'),label=arg('label','current');
 const scenarios=arg('scenarios','idle,travel,gov,brake,limit').split(',');
+const serial=arg('serial',process.env.ANDROID_SERIAL||'');
+const cdpUrl=process.env.PHONE_CDP_URL||'http://127.0.0.1:9223';
+const cdpPort=new URL(cdpUrl).port||'9223';
 if(!/^[a-z0-9-]+$/i.test(label))throw new Error('label: 영문·숫자·- 만');
 const root=process.cwd(),out=path.join(root,'temporary/fps');fs.mkdirSync(out,{recursive:true});
 const ADB=process.env.ADB||path.join(root,'temporary/android-tools/platform-tools/adb.exe');
-const adb=(...a)=>execFileSync(ADB,a,{encoding:'utf8'});
+const adb=(...a)=>execFileSync(ADB,serial?['-s',serial,...a]:a,{encoding:'utf8'});
 const temperature=()=>{if(!phone)return null;const m=adb('shell','dumpsys','battery').match(/temperature:\s*(\d+)/);return m?+m[1]/10:null;};
 const mime={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json','.glb':'model/gltf-binary','.png':'image/png','.jpg':'image/jpeg','.webp':'image/webp','.svg':'image/svg+xml','.mp3':'audio/mpeg','.wav':'audio/wav'};
 const server=http.createServer((req,res)=>{
@@ -28,14 +31,13 @@ await new Promise((r,j)=>{server.once('error',e=>{if(phone&&e.code==='EADDRINUSE
 const extra=arg('extra','');   // 예: --extra=idle=0 (정지 절약 끄고 비교)
 const port=ownServer?server.address().port:5500;
 const url=`http://127.0.0.1:${port}/index.html?fps&quality=${quality}${extra?'&'+extra:''}`;
-let browser;const report={label,phone,quality,seconds,url,runs:[],errors:[]};
+let browser,page;const report={label,phone,quality,seconds,url,runs:[],errors:[]};
 const file=path.join(out,`${label}-${phone?'phone':'headless'}-q${quality}.json`);
 try{
-  let page;
   if(phone){
-    adb('reverse','tcp:5500','tcp:5500');adb('forward','tcp:9223','localabstract:chrome_devtools_remote');
+    adb('reverse','tcp:5500','tcp:5500');adb('forward',`tcp:${cdpPort}`,'localabstract:chrome_devtools_remote');
     report.device=adb('shell','getprop','ro.product.model').trim();
-    browser=await chromium.connectOverCDP('http://127.0.0.1:9223');
+    browser=await chromium.connectOverCDP(cdpUrl);
     page=browser.contexts().flatMap(c=>c.pages()).find(p=>p.url().includes(':5500'))||browser.contexts()[0].pages()[0];
   }else{
     browser=await chromium.launch({args:['--enable-gpu']});
@@ -45,6 +47,17 @@ try{
   page.on('pageerror',e=>report.errors.push(e.message));
   page.on('console',m=>{if(m.type()==='error')report.errors.push(m.text());});
   const cdp=await page.context().newCDPSession(page);await cdp.send('Network.enable');await cdp.send('Network.setCacheDisabled',{cacheDisabled:true});
+  if(phone){
+    await page.route('http://127.0.0.1:5500/**',r=>{
+      const f=path.resolve(root,'.'+decodeURIComponent(new URL(r.request().url()).pathname));
+      return f.startsWith(root+path.sep)&&fs.existsSync(f)&&fs.statSync(f).isFile()
+        ?r.fulfill({body:fs.readFileSync(f),contentType:mime[path.extname(f)]||'application/octet-stream'}):r.continue();
+    });
+    for(const name of ['three.min.js','gsap.min.js','OrbitControls.js','GLTFLoader.js']){
+      const vf=path.join(root,'temporary/background-phone/vendor',name);
+      if(fs.existsSync(vf))await page.route('https://**/'+name,r=>r.fulfill({body:fs.readFileSync(vf),contentType:'text/javascript'}));
+    }
+  }
   await page.goto(url,{waitUntil:'load',timeout:120000});
   await page.waitForFunction(()=>typeof govHandles==='function'&&govHandles()?.ready&&ControlPanel.ready&&carGrp.userData.safetyGear?.wedges.length===4&&hatchDoors.every(h=>h.interlock?.ready)&&document.getElementById('loading').classList.contains('hide'),null,{timeout:120000});
   if(phone)await page.evaluate(()=>navigator.wakeLock?.request('screen').then(l=>{window.__wake=l;},()=>{}));
@@ -70,6 +83,11 @@ try{
           if(currentState===ELEVATOR_STATE.IDLE&&!doorOpen){const f=seq[k++%seq.length];if(f!==curFloor)PassengerControls.request(f);}
         },250);
         stop=()=>clearInterval(id);
+      }else if(name==='mr'||name==='mr-active'){
+        camera.position.set(2.8,Y0+TOTAL_H+2.6,3.0);controls.target.set(0,Y0+TOTAL_H+.55,-.3);controls.update();
+        if(name==='mr-active'){dispatchEvent(new PointerEvent('pointermove'));const id=setInterval(()=>dispatchEvent(new PointerEvent('pointermove')),500);stop=()=>clearInterval(id);}
+      }else if(name==='idle-active'){
+        dispatchEvent(new PointerEvent('pointermove'));const id=setInterval(()=>dispatchEvent(new PointerEvent('pointermove')),500);stop=()=>clearInterval(id);
       }else if(name!=='idle'){
         // 모바일 시연 목록 → 안내창 → 재생 (사용자와 같은 경로)
         document.getElementById('m-demo-fab').click();
@@ -88,6 +106,6 @@ try{
   fs.writeFileSync(file,JSON.stringify(report,null,1));
   if(report.errors.length)console.log('오류:',report.errors.slice(0,5));
   console.log('저장:',path.relative(root,file));
-  if(phone){try{await browser?.close();}catch{}}else await browser?.close();
+  if(phone){try{await page?.unrouteAll();}catch{}try{await browser?.close();}catch{}}else await browser?.close();
   if(ownServer){server.closeAllConnections?.();await new Promise(r=>server.close(r));}
 }
