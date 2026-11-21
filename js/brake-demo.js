@@ -49,6 +49,7 @@ const BrakeDemo = (() => {
   function close(){if(panel)panel.hidden=true;if(button)button.setAttribute('aria-expanded','false');}
   function update(){
     if(!button)return;
+    if(state.active)BrakeGripFX.update(state);
     const t=traction();button.hidden=true;
     if(!t?.ready||!PartActions.iconsVisible||overspeedActive||moving||ARDDemo.active)return;
     point.set(t.contract.wheelX,t.contract.brakeCompare.iconY,t.contract.drumZ);t.model.localToWorld(point);
@@ -140,6 +141,7 @@ const BrakeDemo = (() => {
     if(state.active)return;
     if(overspeedActive||moving||estop||insMode||DoorBypass.mode!=='off'||!PitLadder.secured||InterlockDemo.active||ARDDemo.active||BufferDemo.active||UCMDemo.state.active||HallManual.active||InspectionReturn.busy||doorOpen||!CarDoor.secured()||!DoorBypass.hallSecured()||Mascot.inspecting){updateStatus('v-dir','정지·폐문·고장 복귀 후 주브레이크 비교','#f0883e');return;}
     const t=traction();if(!t?.compare||!govHandles()?.ready)return;
+    BrakeGripFX.prepare(t);
     closeAllMenus();clearTimeout(autoTimer);leaveCabinView();
     saved={y:carGrp.position.y,cwt:cwtGrp.position.y,floor:curFloor,cut:t.cutaway,brake:t.brakeOpen,
       worm:t.worm.rotation.z,sheave:mainSheaveGrp.rotation.z,deflector:deflectorSheaveGrp.rotation.z,wheel:govHandles().wheel.rotation.z,tension:tensionSheaveGrp.rotation.x,
@@ -161,6 +163,7 @@ const BrakeDemo = (() => {
     if(!state.active||(state.stage==='resetting'&&!instant))return;
     if(DemoPause.paused)DemoPause.set(false,{exit:true});
     state.stage='resetting';state.view='resetting';jobs.forEach(t=>t.kill());jobs=[];UCMEffects.clear();state.v=0;
+    BrakeGripFX.clear();
     warningStop?.();warningStop=null;shake?.cancel();ending.hidden=true;ending.style.opacity='1';
     saved.guard.position.copy(saved.guardPosition);saved.guard.visible=saved.guardVisible;
     panel.querySelector('#btn-brake-compare').disabled=true;

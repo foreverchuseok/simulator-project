@@ -37,7 +37,8 @@ try{
   const a=new Uint8Array(sun.shadow.map.width*sun.shadow.map.height*4),b=new Uint8Array(a.length);
   const cases=[];
   function compare(name,change,restore){
-   const start=updates;change();draw();const changedUpdates=updates-start;
+   // 2026-11-21: 오래 조용하면 한 프레임 건너 검사하므로 바뀐 뒤 두 번 그리는 안에 정확히 한 번 갱신해야 한다.
+   const start=updates;change();draw();draw();const changedUpdates=updates-start;
    renderer.readRenderTargetPixels(sun.shadow.map,0,0,sun.shadow.map.width,sun.shadow.map.height,a);
    renderer.shadowMap.needsUpdate=true;draw();
    renderer.readRenderTargetPixels(sun.shadow.map,0,0,sun.shadow.map.width,sun.shadow.map.height,b);

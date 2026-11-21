@@ -160,5 +160,16 @@ const HallInterlock = (() => {
       c.auxGap=Math.max(c.auxGap,gap);c.auxClosed&&=gap<-.001;
     }
   }
-  return { attach, update, updateAll: hs => hs.forEach(update) };
+  // 문짝·훅·비상키 자세가 지난 프레임과 같으면 링크·접점 계산을 건너뛴다(정지 화면 절약).
+  // 직접 호출하는 update(h)는 항상 계산한다.
+  function posed(h) {
+    const t = h.right.userData.triKey, last = h.interlock.pose ??= new Float64Array(60);
+    let i = 0, changed = false;
+    for (const o of [h.right, h.left, h.hook, t.camPivot, t.group, t.drivePin]) {
+      const p = o.position, q = o.quaternion, s = o.scale;
+      for (const v of [p.x, p.y, p.z, q.x, q.y, q.z, q.w, s.x, s.y, s.z]) { if (last[i] !== v) { last[i] = v; changed = true; } i++; }
+    }
+    return changed;
+  }
+  return { attach, update, updateAll: hs => hs.forEach(h => { if (h.interlock?.ready && posed(h)) update(h); }) };
 })();

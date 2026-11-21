@@ -65,7 +65,7 @@ const MobileHUD = (() => {
 
   function setRun(open) {
     runOpen = !!open && mode === 'base';
-    if (runOpen && demoWrap) demoWrap.classList.remove('open'), demoFab.setAttribute('aria-expanded', 'false'), demoList.hidden = true;
+    if (runOpen && demoWrap) setDemoMenu(false);
     document.body.classList.toggle('m-run-open', runOpen);
     runBtn.classList.toggle('active', runOpen);
     runBtn.setAttribute('aria-expanded', String(runOpen));
@@ -286,7 +286,7 @@ const MobileHUD = (() => {
 
   /* ── PC·모바일 공용 시연 메뉴 ───────────────────────────────────────
      모바일에서는 3D 부품을 한 번 탭해 시연을 여는 방식이 없다(오터치 방지, PartGlow 가 모바일 탭을 무시한다).
-     오른쪽의 「시연」 아이콘을 눌러 읽을 수 있는 이름의 목록에서 고르고, 고르면 목록은 바로 닫혀 3D 장면을 가리지 않는다.
+     오른쪽의 「시연」 아이콘에서 고른다. 모바일은 이름·설명을 먼저 보고 별도 재생 버튼으로 시작한다.
      각 시연은 PC 부품 클릭이 부르는 것과 같은 시작 함수를 부른다(출발 조건·안내는 각 시연이 판단). 시작 후에는 하단 바가
      시연 모드로 바뀌어 일시정지 · 시연 종료만 남긴다. 한 시연의 단계는 자동 진행되며 시연끼리 이어 붙이지 않는다. */
   const DEMO_ICON = {
@@ -296,9 +296,9 @@ const MobileHUD = (() => {
     brake: '<path d="M10 3v18m4-18v18M7 7H4v10h3m10-10h3v10h-3M4 12h4m8 0h4"/>',
     power: '<path d="M13 3 5 14h6l-1 7 8-11h-6z"/>',
     hand: '<path d="M8 13V6a1.5 1.5 0 0 1 3 0v5m0-1V5a1.5 1.5 0 0 1 3 0v6m0-3a1.5 1.5 0 0 1 3 0v6a6 6 0 0 1-6 6h-1a5 5 0 0 1-4-2l-3-4a1.5 1.5 0 0 1 2.3-1.9L8 14"/>',
-    eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+    eye: '<rect x="2" y="3" width="3" height="18" rx="1"/><rect x="19" y="3" width="3" height="18" rx="1"/><path d="M6 6h12M6 10h12M6 14h12M6 18h12" stroke-dasharray="1 2"/><path d="m9 21 3-5 3 5"/>',
     limit: '<path d="M5 4v16M5 8h9l-2-2m2 2-2 2M19 20V4"/>',
-    rope: '<path d="M8 3v18M12 3v18M16 3v18"/><path d="M5 9h14M5 15h14" stroke-dasharray="2 2"/>',
+    rope: '<path d="M11 2v20m3-20v20" stroke-dasharray="3 2"/><path d="M3 5h18M5 5v7h5V8m9-3v7h-4V8M5 16h14M8 14v4m8-4v4"/><path d="M7 5V3m3 2V3m7 2V3"/>',
     lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
     link: '<circle cx="6" cy="12" r="3"/><circle cx="18" cy="12" r="3"/><path d="M9 12h6"/>',
     buffer: '<path d="M6 21h12M9 21v-4h6v4M12 17V4M8 8h8"/>',
@@ -317,7 +317,7 @@ const MobileHUD = (() => {
     ['rope', '주로프 측정', () => RopeMeasure.start()],
     ['lock', '인터록', () => InterlockDemo.start(1)],
     ['link', '연동로프', () => RelayRopeDemo.start(1)],
-    ['buffer', '카 완충기', () => BufferDemo.start('car')],
+    ['buffer', '완충기', () => BufferDemo.start('car')],
     ['shield', '문 이탈방지', () => RetentionDemo.start(1)]
   ];
   // 기존 시연의 모드만 고른다. 사고 상황·제동 동작은 각 시연 모듈이 계속 소유한다.
@@ -339,25 +339,88 @@ const MobileHUD = (() => {
     brake: { options: [
       ['dual', '더블', brakeChoice('dual')],
       ['single', '싱글', brakeChoice('single')]
+    ] },
+    buffer: { label: '대상', options: [
+      ['car', '카', () => BufferDemo.start('car')],
+      ['cwt', '균형추', () => BufferDemo.start('cwt')]
     ] }
   };
   const DEMO_MODE_ICON = {
     normal: '<circle cx="12" cy="12" r="8"/><path d="m8 12 3 3 5-6"/>',
     none: '<circle cx="12" cy="12" r="8"/><path d="m6.5 17.5 11-11"/>',
     dual: '<rect x="5" y="4" width="5" height="16" rx="1.5"/><rect x="14" y="4" width="5" height="16" rx="1.5"/>',
-    single: '<rect x="9.5" y="4" width="5" height="16" rx="1.5"/>'
+    single: '<rect x="9.5" y="4" width="5" height="16" rx="1.5"/>',
+    car: '<rect x="5" y="3" width="14" height="18" rx="1.5"/><path d="M12 3v18"/>',
+    cwt: '<rect x="6" y="3" width="12" height="18" rx="1"/><path d="M6 8h12M6 12h12M6 16h12"/>'
   };
-  let demoWrap, demoFab, demoList;
+  const DEMO_SUMMARY = {
+    gov:'로프 파단 후 과속 감지와 비상정지 과정을 봅니다.',
+    door:'문이 열린 채 출발할 때 로프브레이크의 역할을 비교합니다.',
+    up:'카가 과속으로 올라갈 때 안전장치의 작동을 비교합니다.',
+    brake:'더블·싱글 브레이크의 고장 시 제동 차이를 봅니다.',
+    power:'정전 후 비상 배터리로 승객을 구출하는 과정을 봅니다.',
+    hand:'정지한 카에서 승객을 수동으로 구출하는 과정을 봅니다.',
+    eye:'문 사이의 장애물을 감지하면 문이 다시 열리는 모습을 봅니다.',
+    limit:'강제감속·리미트·파이널 스위치의 작동을 봅니다.',
+    rope:'캘리퍼스로 로프의 마모부와 비마모부 지름을 비교합니다.',
+    lock:'승장문 잠금과 전기 접점의 작동 순서를 봅니다.',
+    link:'연동로프가 끊어졌을 때 문에 생기는 변화를 봅니다.',
+    buffer:'카 또는 균형추가 완충기에 닿는 모습을 봅니다.',
+    shield:'승장문 충격과 이탈방지장치의 역할·한계를 봅니다.'
+  };
+  let demoWrap, demoFab, demoList, demoPreview, previewPlay, selectedSkill = null;
+  function closeDemoPreview() {
+    if (selectedSkill) { selectedSkill.classList.remove('selected'); selectedSkill.setAttribute('aria-expanded', 'false'); }
+    selectedSkill = null;
+    if (demoPreview) { demoPreview.hidden = true; previewPlay.onclick = null; }
+  }
+  function placeDemoPreview() {
+    if (!selectedSkill || demoPreview.hidden) return;
+    if (!media.matches) { closeDemoPreview(); return; }
+    const r = selectedSkill.getBoundingClientRect(), rail = demoList.getBoundingClientRect();
+    if (r.bottom <= rail.top || r.top >= rail.bottom) { closeDemoPreview(); return; }
+    const barRect = bar.getBoundingClientRect(), bottom = barRect.width > barRect.height ? barRect.top - 8 : innerHeight - 10;
+    demoPreview.style.left = `${Math.max(8, r.left - demoPreview.offsetWidth - 10)}px`;
+    demoPreview.style.top = `${Math.max(8, Math.min(bottom - demoPreview.offsetHeight, r.top))}px`;
+  }
+  function showDemoPreview(button, icon, name, run, launch) {
+    if (selectedSkill === button && !demoPreview.hidden) { closeDemoPreview(); return; }
+    closeDemoPreview(); selectedSkill = button;
+    button.classList.add('selected'); button.setAttribute('aria-expanded', 'true');
+    demoPreview.dataset.demo = icon;
+    demoPreview.querySelector('strong').textContent = name;
+    demoPreview.querySelector('p').textContent = DEMO_SUMMARY[icon];
+    const modes = demoPreview.querySelector('.demo-preview-modes'); modes.replaceChildren();
+    const options = DEMO_CHOICES[icon]?.options;
+    let start = options ? options[0][2] : run;
+    const labelPlay = label => previewPlay.setAttribute('aria-label', name + (label ? ' · ' + label : '') + ' 시연 재생');
+    labelPlay(options?.[0][1]);
+    for (const [index, [mode, label, fn]] of (options || []).entries()) {
+      const choice = document.createElement('button'); choice.type = 'button'; choice.dataset.previewMode = mode;
+      choice.textContent = label; choice.setAttribute('aria-pressed', String(index === 0));
+      choice.onclick = () => {
+        start = fn; labelPlay(label);
+        modes.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === choice)));
+      };
+      modes.append(choice);
+    }
+    modes.hidden = !options;
+    previewPlay.onclick = () => launch(start);
+    demoPreview.hidden = false; placeDemoPreview();
+  }
   const demoMenuAvailable = () => (media.matches || document.body.classList.contains('desktop-hud')) && !demoActive() && !CharacterWalk.active;
   function setDemoMenu(open) {
     open = !!open && demoMenuAvailable();
     demoWrap.classList.toggle('open', open);
     demoFab.setAttribute('aria-expanded', String(open));
     demoList.hidden = !open;
+    closeDemoPreview();
     if (open) {
       demoList.querySelectorAll('.demo-group').forEach(group => {
         group.classList.remove('expanded');
-        group.querySelector('.demo-disclosure').setAttribute('aria-expanded', String(!media.matches));
+        const button = group.querySelector('.demo-disclosure');
+        button.setAttribute('aria-expanded', String(!media.matches));
+        button.setAttribute('aria-controls', media.matches ? 'm-demo-preview' : `demo-options-${group.dataset.demo}`);
       });
       demoList.scrollTop = 0; setRun(false); closeAllMenus();
     }
@@ -369,6 +432,10 @@ const MobileHUD = (() => {
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5z" fill="currentColor"/></svg><span>시연</span></button>' +
       '<ul id="m-demo-list" role="menu" aria-label="시연 목록" hidden></ul>';
     demoFab = demoWrap.querySelector('#m-demo-fab'); demoList = demoWrap.querySelector('#m-demo-list');
+    demoPreview = document.createElement('section'); demoPreview.id = 'm-demo-preview'; demoPreview.hidden = true;
+    demoPreview.setAttribute('aria-label', '선택한 시연');
+    demoPreview.innerHTML = '<strong></strong><p></p><div class="demo-preview-modes" aria-label="시연 조건" hidden></div><button type="button" id="m-demo-play"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg><span>재생</span></button>';
+    previewPlay = demoPreview.querySelector('#m-demo-play'); demoWrap.append(demoPreview);
     for (const [icon, name, run] of DEMOS) {
       const li = document.createElement('li'); li.setAttribute('role', 'none');
       const choices = DEMO_CHOICES[icon];
@@ -382,23 +449,19 @@ const MobileHUD = (() => {
         li.dataset.demo = icon;
         const disclosure = document.createElement('button');
         disclosure.type = 'button'; disclosure.className = 'demo-disclosure';
+        disclosure.classList.add('demo-skill');
         disclosure.setAttribute('role', 'menuitem'); disclosure.setAttribute('aria-expanded', String(!media.matches));
         disclosure.setAttribute('aria-controls', `demo-options-${icon}`);
-        disclosure.setAttribute('aria-label', name + ' 비교 선택');
+        disclosure.setAttribute('aria-label', name + ' ' + (choices.label || '비교') + ' 선택');
         disclosure.innerHTML = heading + '<svg class="demo-chevron" aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 4 4 4-4"/></svg>';
         disclosure.addEventListener('click', () => {
           if (!media.matches) return;
-          const expanded = !li.classList.contains('expanded');
-          demoList.querySelectorAll('.demo-group').forEach(group => {
-            group.classList.remove('expanded');
-            group.querySelector('.demo-disclosure').setAttribute('aria-expanded', 'false');
-          });
-          li.classList.toggle('expanded', expanded); disclosure.setAttribute('aria-expanded', String(expanded));
-          if (expanded) li.scrollIntoView({ block: 'nearest' });
+          showDemoPreview(disclosure, icon, name, run, launch);
         });
         li.append(disclosure);
         const list = document.createElement('div'); list.id = `demo-options-${icon}`; list.className = 'demo-options';
-        list.setAttribute('role', 'group'); list.setAttribute('aria-label', name + ' 비교 시연');
+        list.dataset.title = name;
+        list.setAttribute('role', 'group'); list.setAttribute('aria-label', name + ' ' + (choices.label || '비교') + ' 시연');
         for (const [mode, label, start] of choices.options) {
           const choice = document.createElement('button');
           choice.type = 'button'; choice.className = 'demo-choice'; choice.dataset.demoMode = mode;
@@ -409,14 +472,21 @@ const MobileHUD = (() => {
         li.append(list);
       } else {
         const b = document.createElement('button'); b.type = 'button'; b.setAttribute('role', 'menuitem'); b.dataset.demo = icon;
-        b.innerHTML = heading; b.addEventListener('click', () => launch(run)); li.append(b);
+        b.className = 'demo-skill'; b.setAttribute('aria-label', name);
+        b.innerHTML = heading;
+        b.addEventListener('click', () => media.matches ? showDemoPreview(b, icon, name, run, launch) : launch(run)); li.append(b);
       }
+      const skill = li.querySelector('.demo-skill');
+      if (media.matches) { skill.setAttribute('aria-controls', 'm-demo-preview'); skill.setAttribute('aria-expanded', 'false'); }
+      skill.addEventListener('contextmenu', e => { if (media.matches) e.preventDefault(); });
       demoList.append(li);
     }
     demoFab.addEventListener('click', () => setDemoMenu(!demoWrap.classList.contains('open')));
     // 바깥(3D 장면·다른 버튼)을 누르거나 Esc 로 접는다. 장면을 누른 터치는 그대로 카메라 조작으로 이어진다.
     document.addEventListener('pointerdown', e => { if (demoWrap.classList.contains('open') && !demoWrap.contains(e.target)) setDemoMenu(false); }, true);
     document.addEventListener('keydown', e => { if (e.key === 'Escape') setDemoMenu(false); });
+    demoList.addEventListener('scroll', placeDemoPreview, {passive:true});
+    window.addEventListener('resize', placeDemoPreview);
     $('hud').append(demoWrap);
   }
 

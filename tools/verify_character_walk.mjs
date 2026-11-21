@@ -140,9 +140,8 @@ try {
   }
   await page.evaluate(() => PassengerControls.request(0));
   await page.waitForFunction(() => curFloor === 0 && currentState === ELEVATOR_STATE.DOOR_OPEN);
-  await walk(0, 2.5); await walk(2.3, 2.5); await walk(2.3, 10);
-  check('ramp descends to ground', (await state()).zone === 'ground' && Math.abs((await state()).p[1] - .055) < .001);
-  await walk(2.3, 2.5); check('ramp ascends to landing', (await state()).zone === 'landing');
+  await walk(0, 2.5); await walk(2.3, 2.5);
+  check('first landing right edge blocks the removed ramp route', (await state()).zone === 'landing' && (await state()).p[0] < 1.7);
   await walk(0, 2.5); await walk(0, 10); check('stairs descend to ground', (await state()).zone === 'ground');
   await walk(0, 40); check('garden boundary prevents escape', (await state()).p[2] < 23);
   await tap('#walk-home'); await walk(-15, 5.2); await walk(-15, 13);

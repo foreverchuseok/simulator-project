@@ -4,7 +4,7 @@
     function installShadowCache(renderScene, mainCamera, webglRenderer) {
       const values = [];
       const checkedMaterials = new Set();
-      let cursor = 0, previousLength = -1, dirty = true;
+      let cursor = 0, previousLength = -1, dirty = true, quietChecks = 0, skip = false;
       const previousHook = renderScene.onBeforeRender;
       function remember(value) {
         if (values[cursor] !== value) { values[cursor] = value; dirty = true; }
@@ -66,6 +66,8 @@
       renderScene.onBeforeRender = function (r, s, c, target) {
         previousHook.call(this, r, s, c, target);
         if (c !== mainCamera || !r.shadowMap.enabled || r.shadowMap.autoUpdate) return;
+        // 30번 연속 변화가 없으면 한 프레임 건너 검사한다(카메라만 도는 동안 절약, 움직임 시작 시 최대 1프레임 지연).
+        if (quietChecks >= 30 && (skip = !skip)) return;
         cursor = 0; dirty = false;
         checkedMaterials.clear();
         remember(r.shadowMap.type); remember(mainCamera.layers.mask);
@@ -73,7 +75,8 @@
         if (cursor !== previousLength) dirty = true;
         previousLength = cursor;
         values.length = cursor;
-        if (dirty) r.shadowMap.needsUpdate = true;
+        if (dirty) { r.shadowMap.needsUpdate = true; quietChecks = 0; renderScene.userData.shadowChangedAt = performance.now(); }
+        else quietChecks++;
       };
     }
 
@@ -1249,14 +1252,14 @@
        buildFlowerField() : 들꽃 + 씨앗 줄기 포인트.
     ------------------------------------------------------------------ */
     const FLAT_ZONES = [ // 지형 평탄화 부지 {cx, cz, hw, hd, blend}
-      { cx: 2.1, cz: 5.8,   hw: 7.4,  hd: 7.2,  blend: 6 },   // 승강로 + 전면 계단/나선형 휠체어 램프 광장 부지 평탄화
+      { cx: 2.1, cz: 5.8,   hw: 7.4,  hd: 7.2,  blend: 6 },   // 승강로 + 전면 계단 광장 부지 평탄화
       { cx: -17, cz: -28,   hw: 8.6,  hd: 6.4,  blend: 9 },   // koelsa2 캠퍼스 부지
       { cx: 17,  cz: -24.5, hw: 14.0, hd: 10.5, blend: 10 },  // 본관 타워 + 로비
       { cx: 17,  cz: -11,   hw: 20.0, hd: 6.2,  blend: 9 }    // 본관 전면 보도블록 광장
     ];
     const NO_GRASS_RECTS = [ // 풀잎 산포 제외 footprint {cx, cz, hw, hd}
       { cx: 0,   cz: -0.2,  hw: 3.6,  hd: 3.4 },   // 승강로 벽체
-      { cx: 2.1, cz: 6.5,   hw: 7.0,  hd: 6.0 },   // 승강로 전면 계단 및 나선형 휠체어 경사로 광장 전 구역
+      { cx: 2.1, cz: 6.5,   hw: 7.0,  hd: 6.0 },   // 승강로 전면 계단 광장 전 구역
       { cx: -17, cz: -28,   hw: 7.6,  hd: 5.6 },   // 캠퍼스 패드
       { cx: 17,  cz: -24.5, hw: 13.0, hd: 10.2 },  // 본관 건물
       { cx: 17,  cz: -11,   hw: 19.7, hd: 6.1 }    // 본관 전면 보도블록 광장
@@ -1936,12 +1939,12 @@
 
     /* ── 공중 지반(네모난 땅덩어리) ──────────────────────────────────
        넓은 지면 대신 승강로 + 보도블록 광장 footprint 만 남긴 사각 지반을 세운다.
-       상면은 기존 외부 지면과 같은 Y0-0.03 레벨이라 보도블록·계단·램프 높이는 그대로다.
+       상면은 기존 외부 지면과 같은 Y0-0.03 레벨이라 보도블록·계단 높이는 그대로다.
        옆면은 수직 절벽으로 곧게 내려가다 아래쪽에서 안개에 녹는다. */
     const BUILD_GROUND_SCENERY = false; // 옛 풀밭·개울·도심 생성 코드 보존. 현재는 장식 없는 스튜디오 바닥.
     const PLINTH_MARGIN = 4.0;          // 보도블록·승강로 바깥으로 남는 흙·잔디 테두리 폭
     const PLAZA_BACK_MARGIN = 2.5;      // 승강로 뒤편으로 깔리는 보도블록 폭
-    const PLAZA_FRONT_MARGIN = 3.0;     // 경사로 발치 앞 보도블록 여유
+    const PLAZA_FRONT_MARGIN = 3.0;     // 계단 발치 앞 보도블록 여유
     const PLINTH_STEP = 1.3;            // 절벽 정점 간격(둘레 방향)
     // [깊이(m), 수평 배율] — 거의 수직으로 내려가며 아주 조금만 좁아진다.
     const PLINTH_PROFILE = [
@@ -2306,14 +2309,14 @@
         buildStreamAndRocks(landscape);
       }
 
-      // 보도블록 광장 — 승강로 중심(X=0)에서 좌우 대칭으로 퍼지고, 승강로 뒤편부터 직선 경사로 발치까지 덮는다.
+      // 보도블록 광장 — 승강로 중심(X=0)에서 좌우 대칭으로 퍼지고, 승강로 뒤편부터 계단 발치까지 덮는다.
       // 승강로 외벽 footprint 는 구멍으로 비워 피트 바닥(Y0)을 덮지 않는다.
       const approach = lobbyApproachLayout();
       const wallOut = S.SHAFT_W / 2 + S.WALL_T;
       const shaftBackOutZ = SHAFT_BACK_Z - S.WALL_T;
       const paverW = 13.0;
       const paverZ0 = shaftBackOutZ - PLAZA_BACK_MARGIN;
-      const paverZ1 = approach.rampEndZ + PLAZA_FRONT_MARGIN;
+      const paverZ1 = approach.stairEndZ + PLAZA_FRONT_MARGIN;
       const plazaShape = new THREE.Shape();
       plazaShape.moveTo(-paverW / 2, -paverZ1); plazaShape.lineTo(paverW / 2, -paverZ1);
       plazaShape.lineTo(paverW / 2, -paverZ0); plazaShape.lineTo(-paverW / 2, -paverZ0);
@@ -2330,7 +2333,7 @@
       plaza.receiveShadow = true;
       g.add(plaza);
 
-      // 장식 없는 중성 바닥. 보행 영역과 광장·피트·계단·램프의 높이는 유지한다.
+      // 장식 없는 중성 바닥. 보행 영역과 광장·피트·계단의 높이는 유지한다.
       const floor = new THREE.Mesh(new THREE.CircleGeometry(MEADOW_R, 64), M.conc(0x2d3b4b));
       floor.name = 'studioGround'; floor.rotation.x = -Math.PI / 2; floor.position.y = Y0 - .03;
       floor.receiveShadow = true; g.add(floor);
@@ -2407,17 +2410,13 @@
       parent.add(strip);
     }
 
-    /* ── 1층 진입 계단·직선 경사로 배치 계약 ──────────────────────────
-       계단·경사로(buildLobbyApproachRampAndStairs)와 보도블록 광장·공중 지반(buildOutdoorGround)이
+    /* ── 1층 진입 계단 배치 계약 ────────────────────────────────────
+       계단(buildLobbyApproachStairs)과 보도블록 광장·공중 지반(buildOutdoorGround)이
        같은 값을 쓴다. 통로 폭·길이·난간 두께는 여기만 고친다. */
     const APPROACH_STAIR_W = 2.2;  // 계단 폭(도어 중앙 정렬)
     const APPROACH_STEP_COUNT = 10;
     const APPROACH_STEP_TREAD = 0.30;
-    const STAIR_WING_T   = 0.07;   // 계단 양측 난간벽 두께
-    const RAMP_CLEAR_W   = APPROACH_STAIR_W; // 경사로 유효폭 = 옆 계단 폭
-    const RAMP_WALL_T    = 0.07;   // 양측 난간벽 두께
-    const RAMP_WALL_H    = 0.9;    // 경사면 위 난간벽 높이
-    const RAMP_TO_RAIL   = 1.7;    // 통로 수평길이 = 계단 난간 수평길이 × 1.7
+    const STAIR_WING_T   = 0.07;   // 계단 양측 석재 측판 두께
     const RAIL_POST_R    = 0.012;  // 난간 지주 반지름
     const RAIL_TOP_R     = 0.013;  // 상단 핸드레일 반지름
     const RAIL_MID_R     = 0.009;  // 중간 레일 반지름
@@ -2431,228 +2430,100 @@
       const lobbyDepth = 1.5 + (S.SHAFT_D / 2 - FRONT_WALL_INNER_Z); // ≈ 2.02m
       const lobbyBackZ = wallZ + S.WALL_T / 2;                    // 로비 슬래브 후면단 (≈ 1.49m)
       const lobbyFrontZ = lobbyBackZ + lobbyDepth;                // 로비 슬래브 전면단 (≈ 3.51m)
-      // 경사로는 계단 우측 난간벽 외면에 내측 난간벽을 붙여 나란히 둔다.
-      const rampX0 = APPROACH_STAIR_W / 2 + STAIR_WING_T + RAMP_WALL_T; // 경사면 내측단
-      const rampX1 = rampX0 + RAMP_CLEAR_W;                              // 경사면 외측단
-      // 통로는 계단 난간보다 수평으로 1.7배 길다. 한 줄로 지면까지 내려간다.
       const stairRun = APPROACH_STEP_COUNT * APPROACH_STEP_TREAD;
-      const rampRun = stairRun * RAMP_TO_RAIL;
-      const rampProfile = [[lobbyFrontZ, slabY], [lobbyFrontZ + rampRun, groundY]];
-      const z = lobbyFrontZ + rampRun;
       return {
         groundY, slabY, deltaH, wallZ, totalWallW, lobbyDepth, lobbyBackZ, lobbyFrontZ,
-        stairW: APPROACH_STAIR_W, rampX0, rampX1, rampProfile, rampEndZ: z
+        stairW: APPROACH_STAIR_W, stairEndZ: lobbyFrontZ + stairRun
       };
     }
 
-    /**
-     * 1층 승강장 단차(1.72m) 해소 어셈블리:
-     * 1. 1층 로비 슬래브 하부 포디움 기초벽 (공중 뜸 차단 및 건물 대지 안착)
-     * 2. 전면 보행자 직통 계단 (폭 2.2m, 10단, 양측 스테인리스 핸드레일 + 상하 점자블록)
-     * 3. 우측 장애인 직선 경사로 (계단 옆 콘크리트 매스 + 양측 난간벽 + 로비 우측 상부참)
-     * 4. 1층 로비 슬래브 외곽 추락방지 안전 난간
-     */
-    function buildLobbyApproachRampAndStairs(parent) {
+    /** 1층 중앙 계단 하나. 위층과 같은 석재·헤어라인 금속으로 좌우 대칭 마감한다. */
+    function buildLobbyApproachStairs(parent) {
       const approachGrp = new THREE.Group();
-      approachGrp.name = 'lobbyApproachRampAndStairs';
-
+      approachGrp.name = 'lobbyApproachStairs';
       const L = lobbyApproachLayout();
-      const { groundY, slabY, deltaH, wallZ, totalWallW, lobbyDepth, lobbyFrontZ, lobbyBackZ } = L;
-      const slabBotY= slabY - 0.12;           // 1층 로비 슬래브 하면 (1.64m)
-      const lobbyCZ     = (lobbyFrontZ + lobbyBackZ) / 2;
-      const lobbyLeftX  = -totalWallW / 2;                   // -1.945m
-      const lobbyRightX = totalWallW / 2;                    // +1.945m
+      const { groundY, slabY, deltaH, totalWallW, lobbyDepth, lobbyFrontZ, lobbyBackZ, stairEndZ } = L;
+      const half = totalWallW / 2, lobbyCZ = (lobbyFrontZ + lobbyBackZ) / 2;
+      const podiumH = slabY - 0.12 - groundY, podiumCY = groundY + podiumH / 2;
+      const stairW = L.stairW, stepCount = APPROACH_STEP_COUNT, stepTread = APPROACH_STEP_TREAD;
+      const stepRise = deltaH / stepCount, stairRun = stairEndZ - lobbyFrontZ;
+      const podiumMat = lobbyFrontWallMats(totalWallW, podiumH, lobbyDepth);
+      const stoneEdge = M.conc(0xd0cbc4);
+      // 공용 로비 텍스처를 공유하고 계단 상면 UV만 실제 디딤 폭·깊이로 맞춘다.
+      const lobbyStone = lobbyMarbleFaceMats(totalWallW, lobbyDepth);
+      const treadMat = lobbyStone[2].clone(); treadMat.roughness = 0.64;
+      const trimMat = lobbyFinishMats().steel;
+      const postMat = M.ss(0x737d83);
 
-      // 재질 — 고급형 미끄럼방지(Non-slip) 차콜/슬레이트 그레이 및 스테인리스 마감
-      const podiumMat   = lobbyFrontWallMats ? lobbyFrontWallMats(totalWallW, deltaH, lobbyDepth) : M.conc(0xcad0d8);
-      const concStepMat = M.conc(0x48505a); // 논슬립 슬레이트 그레이 계단 디딤판 (버너구이 석재 질감)
-      const ssRailMat   = M.ss(0xd0d8e2);   // 스테인리스 핸드레일 파이프
-      const ssPostMat   = M.ss(0xb0b8c2);   // 스테인리스 난간 지주
-      const rampSlabMat = M.conc(0x424851); // 버너구이 화강석/MMA 엠보스 논슬립 차콜 그레이 경사로 바닥재
-      const rampWallMat = M.conc(0xcad0d8); // 경사로 난간벽 — 계단 측벽과 같은 노출 콘크리트
-
-      // ────────────────────────────────────────────────────────────────
-      // 1. 1층 로비 슬래브 하부 포디움 기초 (Podium Substructure)
-      //    공중에 떠 있던 1층 슬래브 아래 공간을 튼튼한 건축 기단부로 완벽 폐쇄
-      // ────────────────────────────────────────────────────────────────
-      const podiumH = slabBotY - groundY; // 약 1.60m
-      const podiumCY = groundY + podiumH / 2;
-      // 전면 기초벽
+      // 기단은 승강장 폭 안에서 끝내고 오른쪽 확장 참을 만들지 않는다.
       createBox(totalWallW, podiumH, 0.25, podiumMat, 0, podiumCY, lobbyFrontZ - 0.125, approachGrp);
-      // 좌측 기초벽
-      createBox(0.25, podiumH, lobbyDepth, podiumMat, lobbyLeftX + 0.125, podiumCY, lobbyCZ, approachGrp);
-      // 우측 기초벽 — 바깥은 경사로 상부참 매스가 붙는다
-      createBox(0.25, podiumH, lobbyDepth, podiumMat, lobbyRightX - 0.125, podiumCY, lobbyCZ, approachGrp);
-      // 내부 기초 콘크리트 코어
-      createBox(totalWallW - 0.25, podiumH, lobbyDepth - 0.25, M.conc(0x8a929b), 0, podiumCY, lobbyCZ, approachGrp);
+      [-1, 1].forEach(side => createBox(0.25, podiumH, lobbyDepth, podiumMat,
+        side * (half - 0.125), podiumCY, lobbyCZ, approachGrp));
+      createBox(totalWallW - 0.25, podiumH, lobbyDepth - 0.25, stoneEdge, 0, podiumCY, lobbyCZ, approachGrp);
 
-      // ────────────────────────────────────────────────────────────────
-      // 2. 전면 보행자 진입 계단 (Pedestrian Staircase)
-      //    승강기 도어 중앙 정렬(X ∈ [-1.1m, +1.1m], 폭 2.2m), 10단 화강석 계단
-      // ────────────────────────────────────────────────────────────────
-      const stairW = L.stairW;
-      const stairCX = 0.00;
-      const stepCount = APPROACH_STEP_COUNT;
-      const stepRise = deltaH / stepCount; // 0.172m
-      const stepTread = APPROACH_STEP_TREAD;
-
+      // 10단의 디딤 높이·폭·길이는 기존 보행 계약과 같고, 전면 끝에 얇은 금속 노싱만 더한다.
       for (let s = 0; s < stepCount; s++) {
-        const stepTopY = slabY - (s + 1) * stepRise;
-        const stepFrontZ = lobbyFrontZ + (s + 1) * stepTread;
-        const curStepH = stepTopY - groundY + stepRise;
-        createBox(stairW, stepRise, stepTread, concStepMat,
-          stairCX, stepTopY + stepRise / 2, stepFrontZ - stepTread / 2, approachGrp);
-        if (curStepH - stepRise > 0.01) {
-          createBox(stairW, curStepH - stepRise, stepTread, M.conc(0x9aa2aa),
-            stairCX, groundY + (curStepH - stepRise) / 2, stepFrontZ - stepTread / 2, approachGrp);
-        }
+        const topY = slabY - s * stepRise, height = topY - groundY;
+        const frontZ = lobbyFrontZ + (s + 1) * stepTread;
+        createBox(stairW, height - 0.012, stepTread, stoneEdge,
+          0, groundY + (height - 0.012) / 2, frontZ - stepTread / 2, approachGrp);
+        const cap = createBox(stairW, 0.012, stepTread, treadMat,
+          0, topY - 0.006, frontZ - stepTread / 2, approachGrp);
+        const uv = cap.geometry.attributes.uv;
+        for (let i = 8; i < 12; i++) uv.setXY(i, uv.getX(i) * stairW / totalWallW, uv.getY(i) * stepTread / lobbyDepth);
+        createBox(stairW - 0.08, 0.004, 0.025, trimMat,
+          0, topY + 0.002, frontZ - 0.0125, approachGrp);
       }
 
-      // 계단 양측 마감 측벽 (Wing Walls)
-      const stairLen = stepCount * stepTread; // 3.0m
-      const stairEndZ = lobbyFrontZ + stairLen;
+      // 계단보다 높게 솟던 직사각형 벽 대신 디딤을 따라 낮아지는 얇은 석재 측판.
+      const cheekTop = stepRise + 0.04;
+      const profile = [[lobbyFrontZ, groundY], [lobbyFrontZ, slabY + cheekTop],
+        [stairEndZ, groundY + cheekTop], [stairEndZ, groundY]];
       [-1, 1].forEach(side => {
-        const wx = side * (stairW / 2 + STAIR_WING_T / 2);
-        createBox(STAIR_WING_T, deltaH + 0.15, stairLen, M.conc(0xcad0d8),
-          stairCX + wx, groundY + (deltaH + 0.15) / 2, (lobbyFrontZ + stairEndZ) / 2, approachGrp);
+        const shape = new THREE.Shape(profile.map(([z, y]) => new THREE.Vector2(-z, y)));
+        const cheek = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: STAIR_WING_T, bevelEnabled: false }), stoneEdge);
+        cheek.rotation.y = Math.PI / 2;
+        cheek.position.x = side < 0 ? -stairW / 2 - STAIR_WING_T : stairW / 2;
+        cheek.castShadow = cheek.receiveShadow = true; approachGrp.add(cheek);
       });
 
-      // 계단 양측 스테인리스 안전 핸드레일 (높이 900mm)
-      [-stairW / 2 + 0.05, stairW / 2 - 0.05].forEach(rx => {
-        const postCount = 4;
-        for (let p = 0; p <= postCount; p++) {
-          const t = p / postCount;
-          const px = stairCX + rx;
-          const pz = lobbyFrontZ + t * stairLen;
-          const py = slabY - t * deltaH;
-          const post = createCylinder(RAIL_POST_R, RAIL_POST_R, 0.90, ssPostMat, px, py + 0.45, pz, approachGrp);
-          post.castShadow = true;
+      const up = new THREE.Vector3(0, 1, 0);
+      const rail = (a, b, radius = RAIL_TOP_R) => {
+        const dir = b.clone().sub(a), center = a.clone().add(b).multiplyScalar(0.5);
+        const mesh = createCylinder(radius, radius, dir.length(), trimMat, center.x, center.y, center.z, approachGrp);
+        mesh.quaternion.setFromUnitVectors(up, dir.normalize());
+      };
+      const railH = 0.95, midH = railH / 2;
+      [-1, 1].forEach(side => {
+        const x = side * (stairW / 2 - 0.04);
+        for (let p = 0; p <= 4; p++) {
+          const t = p / 4, y = slabY - t * deltaH;
+          createCylinder(RAIL_POST_R, RAIL_POST_R, railH, postMat,
+            x, y + railH / 2, lobbyFrontZ + t * stairRun, approachGrp);
         }
-        // 상단 핸드레일 파이프
-        const startPt = new THREE.Vector3(stairCX + rx, slabY + 0.90, lobbyFrontZ);
-        const endPt   = new THREE.Vector3(stairCX + rx, groundY + 0.90, stairEndZ);
-        const railCurve = new THREE.LineCurve3(startPt, endPt);
-        const railMesh = new THREE.Mesh(new THREE.TubeGeometry(railCurve, 16, RAIL_TOP_R, 8, false), ssRailMat);
-        approachGrp.add(railMesh);
+        rail(new THREE.Vector3(x, slabY + railH, lobbyFrontZ), new THREE.Vector3(x, groundY + railH, stairEndZ));
+        rail(new THREE.Vector3(x, slabY + midH, lobbyFrontZ), new THREE.Vector3(x, groundY + midH, stairEndZ), RAIL_MID_R);
 
-        // 중간 레일 (높이 450mm)
-        const midStart = new THREE.Vector3(stairCX + rx, slabY + 0.45, lobbyFrontZ);
-        const midEnd   = new THREE.Vector3(stairCX + rx, groundY + 0.45, stairEndZ);
-        const midCurve = new THREE.LineCurve3(midStart, midEnd);
-        const midMesh  = new THREE.Mesh(new THREE.TubeGeometry(midCurve, 16, RAIL_MID_R, 8, false), ssRailMat);
-        approachGrp.add(midMesh);
-      });
-
-      // 계단 상단 및 하단 점자블록 띠
-      addTactileStrip(approachGrp, stairCX, slabY + 0.002, lobbyFrontZ - 0.20, 6, 0.3);
-      addTactileStrip(approachGrp, stairCX, groundY + 0.002, stairEndZ + 0.35, 6, 0.3);
-
-      // ────────────────────────────────────────────────────────────────
-      // 3. 우측 장애인 직선 경사로 (Straight Concrete Wheelchair Ramp)
-      //    계단 우측 측벽에 붙어 로비 전면단에서 +Z 로 곧게 내려간다.
-      //    철골·기둥 없이 지면까지 채운 콘크리트 매스이고, 양측 난간은 벽체다.
-      //    폭은 계단과 같고, 수평 길이는 계단 난간의 1.7배다. 상부참은 외측단까지 같이 넓어진다.
-      // ────────────────────────────────────────────────────────────────
-      const { rampX0, rampX1, rampProfile, rampEndZ } = L;
-      const rampCX = (rampX0 + rampX1) / 2;
-      const massBaseY = Y0 - 0.02; // 지반 상면(Y0-0.03) 바로 위까지 채워 보도블록 사이 틈을 없앤다
-
-      // [z, y] 종단 다각형을 X 방향 [x0, x1] 로 밀어낸 매스 (shape x = -Z, 회전 후 +X 로 압출)
-      function addProfileMass(poly, x0, x1, mat) {
-        const shape = new THREE.Shape(poly.map(([z, y]) => new THREE.Vector2(-z, y)));
-        const geo = new THREE.ExtrudeGeometry(shape, { depth: x1 - x0, bevelEnabled: false });
-        const mesh = new THREE.Mesh(geo, mat);
-        mesh.rotation.y = Math.PI / 2;
-        mesh.position.x = x0;
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-        approachGrp.add(mesh);
-        return mesh;
-      }
-      const wallTop = rampProfile.map(([z, y]) => [z, y + RAMP_WALL_H]);
-
-      // (1) 경사로 본체 — 경사면·수평참을 이은 채움 콘크리트
-      addProfileMass([[lobbyFrontZ, massBaseY], ...rampProfile, [rampEndZ, massBaseY]],
-        rampX0, rampX1, rampSlabMat);
-
-      // (2) 상부참 — 로비 우측을 경사로 외측단까지 넓혀 1.5m 이상 수평면을 확보한다
-      const landW = rampX1 - lobbyRightX;
-      createBox(landW, podiumH, lobbyDepth, M.conc(0x8a929b),
-        lobbyRightX + landW / 2, podiumCY, lobbyCZ, approachGrp);
-      createBox(landW, 0.12, lobbyDepth, lobbyMarbleFaceMats(landW, lobbyDepth),
-        lobbyRightX + landW / 2, slabY - 0.06, lobbyCZ, approachGrp);
-
-      // (3) 양측 난간벽 — 경사면을 따라 RAMP_WALL_H 위로 올라오는 콘크리트 벽
-      //     내측: 계단 측벽 바깥면에 붙는다. 외측: 상부참 후면까지 이어 감싼다.
-      addProfileMass([[lobbyFrontZ, massBaseY], ...wallTop, [rampEndZ, massBaseY]],
-        rampX0 - RAMP_WALL_T, rampX0, rampWallMat);
-      const landBackZ = lobbyBackZ - RAMP_WALL_T;
-      addProfileMass([[landBackZ, massBaseY], [landBackZ, slabY + RAMP_WALL_H], ...wallTop, [rampEndZ, massBaseY]],
-        rampX1, rampX1 + RAMP_WALL_T, rampWallMat);
-      // 상부참 후면벽 (승강로 외벽 모서리 ~ 외측 난간벽)
-      const backWallH = slabY + RAMP_WALL_H - massBaseY;
-      createBox(landW, backWallH, RAMP_WALL_T, rampWallMat,
-        lobbyRightX + landW / 2, massBaseY + backWallH / 2, lobbyBackZ - RAMP_WALL_T / 2, approachGrp);
-
-      // (4) 경사 구간 미끄럼방지 줄눈 패드 — 한 번의 드로우콜(InstancedMesh)
-      const padSlots = [];
-      for (let k = 0; k < rampProfile.length - 1; k++) {
-        const [za, ya] = rampProfile[k], [zb, yb] = rampProfile[k + 1];
-        if (Math.abs(ya - yb) < 1e-6) continue; // 수평참은 제외
-        const len = Math.hypot(zb - za, yb - ya);
-        const ang = Math.atan2(ya - yb, zb - za);
-        for (let s = 0.30; s < len - 0.15; s += 0.45) {
-          const t = s / len;
-          padSlots.push({ ang, y: ya + (yb - ya) * t + 0.003 * Math.cos(ang), z: za + (zb - za) * t + 0.003 * Math.sin(ang) });
+        // 로비의 좌우 측면과 계단 옆 짧은 전면 난간을 같은 마감으로 닫는다.
+        const outerX = side * (half - 0.03), frontZ = lobbyFrontZ - 0.03;
+        for (let p = 0; p <= 3; p++) {
+          const z = lobbyBackZ + 0.08 + (lobbyDepth - 0.11) * p / 3;
+          createCylinder(RAIL_POST_R, RAIL_POST_R, railH, postMat, outerX, slabY + railH / 2, z, approachGrp);
         }
-      }
-      const pads = new THREE.InstancedMesh(new THREE.BoxGeometry(RAMP_CLEAR_W - 0.20, 0.006, 0.045),
-        M.conc(0x1a1d22), padSlots.length);
-      const padDummy = new THREE.Object3D();
-      padSlots.forEach((p, i) => {
-        padDummy.position.set(rampCX, p.y, p.z);
-        padDummy.rotation.set(p.ang, 0, 0);
-        padDummy.updateMatrix();
-        pads.setMatrixAt(i, padDummy.matrix);
+        for (const h of [railH, midH]) {
+          rail(new THREE.Vector3(outerX, slabY + h, lobbyBackZ + 0.08), new THREE.Vector3(outerX, slabY + h, frontZ), h === railH ? RAIL_TOP_R : RAIL_MID_R);
+          rail(new THREE.Vector3(side * stairW / 2, slabY + h, frontZ), new THREE.Vector3(outerX, slabY + h, frontZ), h === railH ? RAIL_TOP_R : RAIL_MID_R);
+        }
+        createCylinder(RAIL_POST_R, RAIL_POST_R, railH, postMat,
+          side * (stairW / 2 + 0.10), slabY + railH / 2, frontZ, approachGrp);
+        // 위층 슬래브와 같은 헤어라인 테두리. 계단 진입부 중앙은 비운다.
+        const edgeW = half - stairW / 2;
+        createBox(edgeW, 0.12, 0.006, trimMat,
+          side * (stairW / 2 + edgeW / 2), slabY - 0.06, lobbyFrontZ + 0.003, approachGrp);
+        createBox(0.006, 0.12, lobbyDepth, trimMat, side * (half + 0.003), slabY - 0.06, lobbyCZ, approachGrp);
       });
-      pads.receiveShadow = true;
-      approachGrp.add(pads);
 
-      // (5) 시작·끝 점형블록 — 하단은 보도블록 상면(Y0+0.055) 위에 올린다
-      addTactileStrip(approachGrp, rampCX, slabY + 0.002, lobbyFrontZ - 0.30, 6, 0.3);
-      addTactileStrip(approachGrp, rampCX, groundY + 0.018, rampEndZ + 0.35, 6, 0.3);
-
-      // ────────────────────────────────────────────────────────────────
-      // 4. 1층 로비 슬래브 외곽 추락방지 안전 난간
-      //    (전면 좌측·좌측단 스테인리스 난간. 전면 우측은 경사로 상부참으로 열려 있다)
-      // ────────────────────────────────────────────────────────────────
-      // (1) 전면 좌측 난간: X ∈ [lobbyLeftX, -stairW/2]
-      const frontRailLeftX0 = lobbyLeftX;
-      const frontRailLeftX1 = -stairW / 2;
-      for (let fx = frontRailLeftX0 + 0.1; fx <= frontRailLeftX1 - 0.05; fx += 0.40) {
-        createCylinder(RAIL_POST_R, RAIL_POST_R, 0.90, ssPostMat, fx, slabY + 0.45, lobbyFrontZ - 0.03, approachGrp);
-      }
-      const frontRailCurve = new THREE.LineCurve3(
-        new THREE.Vector3(frontRailLeftX0, slabY + 0.90, lobbyFrontZ - 0.03),
-        new THREE.Vector3(frontRailLeftX1, slabY + 0.90, lobbyFrontZ - 0.03)
-      );
-      approachGrp.add(new THREE.Mesh(new THREE.TubeGeometry(frontRailCurve, 8, RAIL_TOP_R, 8, false), ssRailMat));
-      const midRailLeftCurve = new THREE.LineCurve3(
-        new THREE.Vector3(frontRailLeftX0, slabY + 0.45, lobbyFrontZ - 0.03),
-        new THREE.Vector3(frontRailLeftX1, slabY + 0.45, lobbyFrontZ - 0.03)
-      );
-      approachGrp.add(new THREE.Mesh(new THREE.TubeGeometry(midRailLeftCurve, 8, RAIL_MID_R, 8, false), ssRailMat));
-
-      // (3) 좌측단 전장 난간: Z ∈ [lobbyBackZ, lobbyFrontZ]
-      for (let lz = lobbyBackZ + 0.2; lz <= lobbyFrontZ - 0.05; lz += 0.55) {
-        createCylinder(RAIL_POST_R, RAIL_POST_R, 0.90, ssPostMat, lobbyLeftX + 0.03, slabY + 0.45, lz, approachGrp);
-      }
-      const leftRailCurve = new THREE.LineCurve3(
-        new THREE.Vector3(lobbyLeftX + 0.03, slabY + 0.90, lobbyBackZ),
-        new THREE.Vector3(lobbyLeftX + 0.03, slabY + 0.90, lobbyFrontZ)
-      );
-      approachGrp.add(new THREE.Mesh(new THREE.TubeGeometry(leftRailCurve, 10, RAIL_TOP_R, 8, false), ssRailMat));
-
+      approachGrp.userData.layout = { type: 'single-stair', width: stairW, steps: stepCount, rise: stepRise, tread: stepTread };
       batchStaticChildren(approachGrp, 'lobbyApproach');
       parent.add(approachGrp);
     }
@@ -2747,8 +2618,8 @@
     function buildFrontWallAndLobby() {
       if (wallGrp) scene.remove(wallGrp);
       wallGrp = new THREE.Group();
-      // 1층 승강장 단차 해소 (포디움 기단부, 보행자 직통 계단, 우측 나선형 휠체어 경사로)
-      buildLobbyApproachRampAndStairs(wallGrp);
+      // 1층 승강장 단차 해소 — 중앙 계단 하나와 좌우 대칭 석재 기단
+      buildLobbyApproachStairs(wallGrp);
       // 외면=석재 사진, 승강로 내면=콘크리트. 현판·문틀은 그대로 둔다.
       const jambSs = M.silverHairline(0xc8d0d8, 0.28);
       const wallZ = FRONT_WALL_INNER_Z + S.WALL_T / 2; // 승강로 전면벽 — 카 전면에서 ~200mm (문 구역 깊이 확보)
@@ -2786,7 +2657,7 @@
         const lobbyDepth = 1.5 + (S.SHAFT_D / 2 - FRONT_WALL_INNER_Z);
         createBox(totalWallW, 0.12, lobbyDepth, lobbyMarbleFaceMats(totalWallW, lobbyDepth),
           0, fy - 0.06, wallZ + S.WALL_T / 2 + lobbyDepth / 2, wallGrp);
-        // 1층 슬래브는 기단·계단·경사로와 맞물리므로 테두리는 2층부터
+        // 1층 슬래브 테두리는 계단 어셈블리가 출입부를 비워 마감한다
         if (i > 0) addSlabTrim(finGrp, fy, faceZ, totalWallW, lobbyDepth);
 
         // 천장 Y 좌표 (해당 층 바닥 + 층고)
@@ -4459,6 +4330,9 @@
           }
         }
       };
+      // 슬래브 마감·로프 구멍 턱·보·베드·방진패드·편향 받침 등 이 함수에서만 만들고 다시 참조하지 않는
+      // 이름 없는 직속 메시를 같은 재질끼리 묶는다(2026-11-21 최적화 4단계). 장치 그룹·이름 붙은 부품은 그대로다.
+      batchStaticChildren(mrGrp, 'machineRoom');
       scene.add(mrGrp);
     }
 

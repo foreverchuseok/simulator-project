@@ -1,4 +1,4 @@
-/* 승강로 전면 광장·경사로 스크린샷 — 사용: node tools/shot_approach.mjs [라벨] */
+/* 승강로 전면 광장·계단 스크린샷 — 사용: node tools/shot_approach.mjs [라벨] */
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -24,7 +24,7 @@ try {
   await page.goto(`http://127.0.0.1:${server.address().port}/index.html`, { waitUntil: 'networkidle' });
   await page.waitForFunction(() => govHandles()?.ready && document.getElementById('loading').classList.contains('hide'));
   const info = await page.evaluate(() => {
-    const g = scene.getObjectByName('lobbyApproachRampAndStairs');
+    const g = scene.getObjectByName('lobbyApproachStairs');
     const b = new THREE.Box3().setFromObject(g);
     const isl = new THREE.Box3().setFromObject(scene.getObjectByName('skyIslandBody'));
     return { SHAFT_W: S.SHAFT_W, SHAFT_D: S.SHAFT_D, WALL_T: S.WALL_T, FRONT_WALL_INNER_Z, SHAFT_BACK_Z, Y0, F0: FLOOR_Y[0], FLOOR_Y,

@@ -81,7 +81,7 @@ try{
  for(const view of ['approach','car','landing']){
   await page.evaluate(view=>{
    if(view==='approach'){
-    const approach=scene.getObjectByName('lobbyApproachRampAndStairs');
+    const approach=scene.getObjectByName('lobbyApproachStairs');
     scene.children.forEach(o=>{if(!o.isLight)o.visible=o===approach.parent;});
     controls.enableDamping=false;controls.minDistance=.1;
     controls.target.set(1,lobbyApproachLayout().slabY,lobbyApproachLayout().lobbyFrontZ+1);

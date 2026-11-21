@@ -51,37 +51,32 @@ const CharacterWalk = (() => {
     if (a.zone === 'car' && !open) return null;
     const floor = f >= 0 ? f : a.floor;
     const first = floor === 0, left = -L.totalWallW / 2 + r + .04;
-    const right = (first ? L.rampX1 : L.totalWallW / 2) - r - .04;
+    const right = L.totalWallW / 2 - r - .04;
     const stairLane = Math.abs(x) <= L.stairW / 2 - r - .06;
-    const rampLane = x >= L.rampX0 + r + .025 && x <= L.rampX1 - r - .025;
     if (x >= left && x <= right && z >= L.lobbyBackZ + r + .04 && z <= L.lobbyFrontZ &&
-        (z <= L.lobbyFrontZ - r - .04 || first && (stairLane || rampLane)))
+        (z <= L.lobbyFrontZ - r - .04 || first && stairLane))
       return { y: FLOOR_Y[floor], zone: 'landing', floor };
     if (!first) return null;
-    const stairEnd = L.lobbyFrontZ + APPROACH_STEP_COUNT * APPROACH_STEP_TREAD;
+    const stairEnd = L.stairEndZ;
     if (stairLane && z >= L.lobbyFrontZ && z <= stairEnd) {
       const step = Math.min(APPROACH_STEP_COUNT - 1, Math.floor((z - L.lobbyFrontZ) / APPROACH_STEP_TREAD));
       return { y: L.slabY - step * L.deltaH / APPROACH_STEP_COUNT, zone: 'stairs', floor: 0 };
     }
-    if (rampLane && z >= L.lobbyFrontZ && z <= L.rampEndZ)
-      return { y: L.slabY - (z - L.lobbyFrontZ) / (L.rampEndZ - L.lobbyFrontZ) * L.deltaH, zone: 'ramp', floor: 0 };
     // Finite ground, shaft footprint and approach retaining walls.
     if ((x / (21 - r)) ** 2 + ((z - 6) / (17 - r)) ** 2 > 1) return null;
     if (Math.abs(x) < L.totalWallW / 2 + r && z > SHAFT_BACK_Z - S.WALL_T - r && z < L.lobbyBackZ + r) return null;
-    if (x > -L.totalWallW / 2 - r && x < L.rampX1 + RAMP_WALL_T + r &&
+    if (Math.abs(x) < L.totalWallW / 2 + r &&
         z > L.lobbyBackZ - r && z < L.lobbyFrontZ + r) return null;
     if (Math.abs(x) < L.stairW / 2 + STAIR_WING_T + r && z > L.lobbyFrontZ &&
         z < stairEnd + (stairLane ? 0 : r)) return null;
-    if (x > L.rampX0 - RAMP_WALL_T - r && x < L.rampX1 + RAMP_WALL_T + r &&
-        z > L.lobbyFrontZ && z < L.rampEndZ + (rampLane ? 0 : r)) return null;
     const paved = x >= plaza.x0 && x <= plaza.x1 && z >= plaza.z0 && z <= plaza.z1;
     return { y: paved ? plaza.y : Y0 - .03, zone: 'ground', floor: 0 };
   }
   function tryStep(a, dx, dz) {
     const p = a.root.position, next = support(p.x + dx, p.z + dz, a);
     if (!next || Math.abs(next.y - p.y) > layout.deltaH / APPROACH_STEP_COUNT + .035) return false;
-    // Never step sideways through the walls of parallel stairs/ramp.
-    if ((a.zone === 'stairs' || a.zone === 'ramp') && next.zone !== a.zone &&
+    // 계단 측면을 뚫고 지상·승강장 사이를 건너뛰지 않는다.
+    if (a.zone === 'stairs' && next.zone !== a.zone &&
         next.zone !== 'landing' && next.zone !== 'ground') return false;
     p.set(p.x + dx, next.y, p.z + dz); a.zone = next.zone; a.floor = next.floor; return true;
   }
@@ -149,7 +144,7 @@ const CharacterWalk = (() => {
   function refreshStatus() {
     if (!active) return;
     const place = active.zone === 'car' ? (moving ? '엘리베이터 이동 중' : `${curFloor + 1}층 · 엘리베이터 안`) :
-      active.zone === 'landing' ? `${active.floor + 1}층 승강장` : active.zone === 'stairs' ? '계단' : active.zone === 'ramp' ? '경사로' : '정원';
+      active.zone === 'landing' ? `${active.floor + 1}층 승강장` : active.zone === 'stairs' ? '계단' : '정원';
     const value = active.label + ' · ' + place;
     if (lastStatus !== value) { status.textContent = value; lastStatus = value; }
     document.getElementById('walk-call').hidden = active.zone !== 'landing';

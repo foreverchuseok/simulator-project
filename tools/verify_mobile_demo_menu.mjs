@@ -48,6 +48,8 @@ try{
  await page.touchscreen.tap(60,300);await page.waitForTimeout(200);assert.equal(await vis('#m-demo-list'),false,'outside tap closes list');
  await page.tap('#m-demo-fab');
  const t0=Date.now();await page.tap('#m-demo-list button:has-text("문닫힘 안전장치")');
+ assert.equal(await demoOn(),false,'icon only shows the name and description');
+ await page.tap('#m-demo-play');
  assert.equal(await vis('#m-demo-list'),false,'list hidden immediately after choose');
  await page.waitForFunction(()=>PhotoEyeDemo.active,null,{timeout:20000});report.startMs=Date.now()-t0;
  assert.equal(await page.evaluate(()=>MobileHUD.mode),'demo');assert.equal(await vis('#m-demo-fab'),false,'fab hidden in demo');
@@ -60,6 +62,7 @@ try{
  // 두 번째 시연(ARD) — 앞 시연 뒤 잔여 상태 영향을 피하려고 새로 불러온다
  await page.reload({waitUntil:'networkidle'});await page.waitForFunction(()=>govHandles()?.ready&&hatchDoors.every(h=>h.interlock?.ready)&&CarDoor.state?.ready&&document.querySelector('#loading.hide'));await page.waitForTimeout(1500);
  await page.tap('#m-demo-fab');await page.tap('#m-demo-list button:has-text("ARD 자동구출")');
+ assert.equal(await demoOn(),false,'ARD preview does not start the demo');await page.tap('#m-demo-play');
  await page.waitForFunction(()=>ARDDemo.active,null,{timeout:20000});await page.waitForTimeout(800);await shot('5-ard');
  await page.waitForFunction(()=>!document.getElementById('m-demo-exit').disabled,null,{timeout:30000}).catch(()=>{});
  await page.tap('#m-demo-exit').catch(()=>{});

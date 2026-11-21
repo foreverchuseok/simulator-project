@@ -481,10 +481,11 @@ const PartGlow = (() => {
     placeMenu();
     const now = performance.now() / 1000, ease = 1 - Math.exp(-Math.min(.25, now - (lastNow || now)) * 12);
     lastNow = now;
-    time.value = now;
+    const pulse = typeof IdleThrottle !== 'undefined' ? IdleThrottle.pulseTime(now) : now;   // 정지 화면에서는 맥동을 늦춘다
+    time.value = pulse;
     renderer.getDrawingBufferSize(res.value);
     const lit = [];
-    for (const part of parts) { syncPart(part, now, ease || .18); if (part.root.visible) lit.push(part); }
+    for (const part of parts) { syncPart(part, pulse, ease || .18); if (part.root.visible) lit.push(part); }
     if (!lit.length) return;
     const autoClear = renderer.autoClear, autoReset = renderer.info.autoReset;
     renderer.autoClear = false; renderer.info.autoReset = false;

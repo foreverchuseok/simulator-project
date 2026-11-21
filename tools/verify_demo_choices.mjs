@@ -10,7 +10,7 @@ try{
  await press('#m-demo-fab');
  assert.equal(await p.locator('#m-demo-list > li').count(),13);
  assert.equal(await p.locator('#m-demo-list [role="tab"], #demo-panel-risk').count(),0);
- assert.equal(await p.locator('#m-demo-list [data-demo="gov"]').innerText(),'과속 조절기');
+ assert.equal(await p.locator('#m-demo-list [data-demo="gov"]').textContent(),'과속 조절기');
  assert.equal(await p.evaluate(()=>DemoExit.active||moving),false);
  await p.screenshot({path:`${out}/${mobile?'mobile':'desktop'}-compact.png`});
  await press('#m-demo-fab');
@@ -18,11 +18,12 @@ try{
  for(const [key,modes,module]of [['door',['normal','none'],'UCMDemo'],['up',['normal','none'],'AscentDemo'],['brake',['dual','single'],'BrakeDemo']]){
   for(const mode of modes){
    await p.waitForFunction(()=>!DemoExit.active&&!DemoExit.busy&&CarDoor.secured());
-   await press('#m-demo-fab');await press(`#m-demo-list [data-demo="${key}"] .demo-name`);
-   const list=p.locator(`#demo-options-${key}`);assert.equal(await list.isVisible(),true);assert.equal(await list.locator('button').count(),2);
+   await press('#m-demo-fab');await press(`#m-demo-list [data-demo="${key}"] ${mobile?'.demo-disclosure':'.demo-name'}`);
+   const list=p.locator(mobile?'#m-demo-preview':`#demo-options-${key}`);assert.equal(await list.isVisible(),true);assert.equal(await list.locator(mobile?'.demo-preview-modes button':'button').count(),2);
    assert.equal(await p.evaluate(()=>DemoExit.active),false,'heading never starts a demo');
    await p.screenshot({path:`${out}/${mobile?'mobile':'desktop'}-${key}-${mode}.png`});
-   await press(`#demo-options-${key} [data-demo-mode="${mode}"]`);
+   await press(mobile?`#m-demo-preview [data-preview-mode="${mode}"]`:`#demo-options-${key} [data-demo-mode="${mode}"]`);
+   if(mobile){assert.equal(await p.evaluate(()=>DemoExit.active),false,'condition selection does not start a demo');await press('#m-demo-play');}
    await p.waitForFunction(()=>DemoExit.active&&!document.getElementById('demo-exit').hidden);
    const selected=await p.evaluate(name=>name==='UCMDemo'?UCMDemo.state.mode:name==='AscentDemo'?AscentDemo.state.mode:BrakeDemo.state.mode,module);
    assert.equal(selected,mode);assert.equal(await p.locator('#m-demo-list').isVisible(),false);
@@ -39,9 +40,9 @@ try{
   if(await p.locator('#m-demo-list').isVisible())await press('#m-demo-fab');
   await press('#m-demo-fab');
   await press('#m-demo-list [data-demo="up"] .demo-disclosure');
-  const box=await p.locator('#m-demo-list').boundingBox(),option=await p.locator('#demo-options-up [data-demo-mode="none"]').boundingBox();
+  const box=await p.locator('#m-demo-list').boundingBox(),option=await p.locator('#m-demo-preview').boundingBox();
   assert.ok(box.x>=0&&box.y>=0&&box.x+box.width<=size.width+.5&&box.y+box.height<=size.height+.5,JSON.stringify({size,box}));
-  assert.ok(option.y>=box.y&&option.y+option.height<=box.y+box.height+.5,'both choices fit inside scrolling list');
+  assert.ok(option.x+option.width<=box.x&&option.y>=0&&option.y+option.height<=size.height+.5,'preview fits left of the right icon rail');
   await p.screenshot({path:`${out}/mobile-${size.width}x${size.height}.png`});
  }
  assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));assert.deepEqual(errors,[]);

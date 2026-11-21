@@ -884,7 +884,8 @@
     }
   </style>
   <link rel="stylesheet" href="css/desktop-hud.css?v=20261105-light-modern2">
-  <link rel="stylesheet" href="css/mobile-hud.css?v=20261106-exit-spacing">
+  <link rel="stylesheet" href="css/mobile-hud.css?v=20261107-demo-preview">
+  <link rel="stylesheet" href="css/mobile-demo-guide.css?v=20261107-subtitles">
 </head>
 
 <body>
@@ -1101,13 +1102,14 @@
   <script src="js/ucm-effects.js?v=20260930-ascent-1"></script>
   <script src="js/ucm-demo.js?v=20261106-pause-explore"></script>
   <script src="js/ascent-demo.js?v=20261106-pause-explore"></script>
-  <script src="js/brake-demo.js?v=20261106-pause-explore"></script>
+  <script src="js/brake-grip-fx.js?v=20261108-grip"></script>
+  <script src="js/brake-demo.js?v=20261108-grip"></script>
   <script src="js/buffer-demo.js?v=20261106-pause-explore"></script>
   <script src="js/part-actions.js?v=20261105-governor-label"></script>
   <script src="js/overspeed-effects.js?v=20260930-ovs-1"></script>
   <script src="js/ui.js?v=20261106-pause-explore"></script>
   <script src="js/desktop-hud.js?v=20261004-1"></script>
-  <script src="js/mobile-hud.js?v=20261106-pause-explore"></script>
+  <script src="js/mobile-hud.js?v=20261107-demo-preview"></script>
   <script src="js/passenger-controls.js?v=20261002-passenger-buttons"></script>
   <script src="js/hall-inspector.js?v=20261002-manual-rescue"></script>
   <script src="js/hall-manual.js?v=20260930-glow-1"></script>
@@ -1119,6 +1121,7 @@
   <script src="js/retention-demo.js?v=20261106-pause-explore"></script>
   <script src="js/demo-pause.js?v=20261106-pause-explore"></script>
   <script src="js/demo-exit.js?v=20261106-opposite-2"></script>
+  <script src="js/mobile-demo-guide.js?v=20261107-subtitles"></script>
   <script src="js/finger-gap.js?v=20260930-glow-1"></script>
   <script src="js/emergency-lighting.js?v=20260930-glow-1"></script>
   <script src="js/ard-demo.js?v=20261106-pause-explore"></script>
@@ -1126,6 +1129,10 @@
   <script src="js/photo-eye-demo.js?v=20261106-pause-explore"></script>
   <script src="js/rope-measure.js?v=20261106-pause-explore"></script>
   <script src="js/terminal-demo.js?v=20261106-pause-explore"></script>
+  <script src="js/perf-monitor.js?v=20261121-opt"></script>
+  <script src="js/adaptive-quality.js?v=20261121-opt"></script>
+  <script src="js/idle-throttle.js?v=20261121-opt"></script>
+  <script src="js/screen-cull.js?v=20261121-opt"></script>
 
   <script>
     // 층수 및 층고 배열 (피트 1.76m, 1층 4.0m, 2층 3.65m, 3층 3.7m)
@@ -1628,8 +1635,12 @@
       CharacterWalk.init();
       DesktopHUD.init();
       MobileHUD.init();         // 모바일 하단 바 (js/mobile-hud.js) — PC 화면과 서로 겹치지 않는다
+      MobileDemoGuide.build();  // 모바일 시연 하단 자막 · 큰 설명창 숨김
 
       installShadowCache(scene, camera, renderer);
+      PerfMonitor.install(scene, renderer);   // ?fps 연속 계측 (js/perf-monitor.js)
+      ScreenCull.install(scene, camera, renderer);   // 2px 미만 원거리 소형 부품은 메인 목록에서만 뺀다 (js/screen-cull.js)
+      AdaptiveQuality.init();                 // 저FPS 기기만 DPR·그림자 단계 조절 (js/adaptive-quality.js)
 
       setTimeout(() => { document.getElementById('loading').classList.add('hide'); renderLoop(); }, 500);
       window.addEventListener('resize', () => {
@@ -1640,6 +1651,8 @@
 
     function renderLoop() {
       requestAnimationFrame(renderLoop);
+      if (!IdleThrottle.frame()) return;    // 정지 화면은 30→12fps (js/idle-throttle.js)
+      PerfMonitor.frameStart(IdleThrottle.throttled);
       syncCabinView();
       HallInterlock.updateAll(hatchDoors);
       DoorBypass.update();
@@ -1667,6 +1680,7 @@
       PhotoEyeDemo.update();
       RopeMeasure.update();
       TerminalDemo.update();
+      MobileDemoGuide.update();
       PitLadder.update();
       ControlPanel.update();
       MachineRoomPower.update();
@@ -1678,9 +1692,13 @@
       EmergencyLighting.update();
       CharacterWalk.update(performance.now() / 1000);
       syncBackgroundView();
+      PerfMonitor.updateDone();
       renderer.render(scene, camera);
+      PerfMonitor.drawDone();
       PartGlow.render();          // 기능 부품 발광·탭 메뉴 (js/part-glow.js) — 메인 깊이 버퍼 위에 덧그림
       AscentDemo.renderInset();
+      IdleThrottle.after();
+      PerfMonitor.frameEnd();
     }
 
     init();

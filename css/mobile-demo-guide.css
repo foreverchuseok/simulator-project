@@ -1,0 +1,27 @@
+/* 모바일 모든 시연: 장면 위 설명창 없이 맨 아래 고정 높이 자막만 표시한다. */
+#m-demo-guide[hidden], #m-demo-guide-action[hidden], #m-demo-guide-dismiss[hidden],
+body:not(.m-hud) #m-demo-guide { display:none !important; }
+body.m-hud :is(#terminal-demo-panel,#manual-rescue-panel,#ard-panel,#photo-eye-panel,
+  #rope-measure-panel,#retention-demo-panel,#relay-demo-panel,#interlock-demo-panel,
+  #ucm-summary,#ucm-stage,#ascent-stage,#brake-compare-ending,#brake-compare-stage,
+  #buffer-stage,#ovs-summary,#ovs-stage) { display:none !important; }
+body.m-hud #m-demo-guide {
+  position:fixed; z-index:130; left:var(--edge); right:var(--m-right); bottom:var(--m-above);
+  display:flex; align-items:center; gap:6px; height:68px; padding:5px 8px; box-sizing:border-box;
+  border:0; border-radius:6px; background:#0c1823d9; color:#f5f8fb;
+  font:14px/19px sans-serif; box-shadow:none;
+}
+#m-demo-guide-copy { flex:1; min-width:0; pointer-events:none; }
+#m-demo-guide strong { display:block; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font:500 11px/16px sans-serif; color:#b2cec8; }
+#m-demo-guide .m-guide-summary { display:block; height:38px; white-space:pre; overflow:hidden; overflow-wrap:normal; font:14px/19px sans-serif; text-size-adjust:100%; -webkit-text-size-adjust:100%; }
+body.m-hud #m-demo-guide-action { flex:none; min-width:64px; min-height:44px; padding:4px 6px; border:1px solid #86b1a377; border-radius:7px; background:#29463ee0; color:#e8f6ef; font:600 11px sans-serif; cursor:pointer; touch-action:manipulation; }
+body.m-hud #m-demo-guide-dismiss { flex:none; width:36px; min-height:44px; border:0; background:transparent; color:inherit; font:24px sans-serif; cursor:pointer; touch-action:manipulation; }
+#m-demo-guide button:focus-visible { outline:2px solid #a8e6ca; outline-offset:1px; }
+/* 취객 이야기에서 HUD가 숨겨져 있는 동안 자막은 화면 맨 아래로 내린다. */
+body.m-hud.retention-story #m-demo-guide { bottom:var(--edge-b); }
+/* 중복 설명·말풍선은 숨기고 실제 부품·치수선·효과는 유지한다. */
+body.m-hud.m-demo-compact :is(.buffer-demo-label,#manual-rescue-level,#photo-eye-callout,
+  #photo-eye-bubble,#relay-story-bubble,#retention-demo-badge,.retention-part-label) { display:none !important; }
+@media (orientation:landscape) {
+  body.m-hud #m-demo-guide { max-width:680px; margin-left:auto; }
+}
