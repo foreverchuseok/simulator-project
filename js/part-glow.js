@@ -26,7 +26,9 @@ const PartGlow = (() => {
   let beaconScene = null, beaconPts = null, beaconGeo = null, beaconMat = null, beaconCount = 0;
   let beaconPosArr = null, beaconPhaseArr = null, beaconScaleArr = null, beaconHits = [];
   const reducedMotion = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
-  const _bDir = new THREE.Vector3(), _bSize = new THREE.Vector3(), _bProj = new THREE.Vector3(), _bPos = new THREE.Vector3();
+  const _bDir = new THREE.Vector3(), _bSize = new THREE.Vector3(), _bProj = new THREE.Vector3(), _bPos = new THREE.Vector3(), _bInv = new THREE.Matrix4();
+  // 비콘 기준점(경계상자 윗면)은 부품별로 이 프레임 간격마다 엇갈려 다시 잰다. 그 사이에는 기준 노드의 변환만 따라간다(카 이동 추종).
+  const BEACON_BOX_FRAMES = 30;
   try { enabled = localStorage.getItem(STORE) !== '0'; } catch (e) { /* 저장소 없음 */ }
 
   /* ── 셰이더 ── */
@@ -657,7 +659,35 @@ const PartGlow = (() => {
     beaconScene = new THREE.Scene(); beaconScene.autoUpdate = false;
     beaconScene.add(beaconPts);
   }
+  // 경계상자 윗면(매립 소형 부품은 중심)을 첫 대상의 로컬 좌표로 저장해 두고, 매 프레임은 행렬 곱 한 번으로 월드 위치(_bPos)를 얻는다.
+  function beaconAnchor(part) {
+    const ref = part.objects[0];
+    if (part.bRef !== ref || part.bMeshes !== part.meshes || !(frame < part.bNext)) {
+      const first = part.bRef === undefined;
+      part.bRef = ref; part.bMeshes = part.meshes;
+      part.bNext = frame + (first ? 1 + parts.indexOf(part) % BEACON_BOX_FRAMES : BEACON_BOX_FRAMES);
+      box.makeEmpty();
+      for (const m of part.meshes) if (worldVisible(m)) box.expandByObject(m);
+      if (box.isEmpty()) { part.bLocal = null; return false; }
+      box.getCenter(_bPos);
+      box.getSize(_bSize);
+      part.bSz = _bSize.length() || 0.1;
+      if (part.bSz >= 0.15) _bPos.y = box.max.y + Math.min(0.06, part.bSz * 0.08);
+      // 크기 0으로 숨긴 노드처럼 역행렬이 없으면 월드 좌표를 그대로 둔다(다음 재측정까지 고정).
+      part.bFixed = ref.matrixWorld.determinant() === 0;
+      part.bLocal = (part.bLocal || new THREE.Vector3()).copy(_bPos);
+      if (!part.bFixed) part.bLocal.applyMatrix4(_bInv.copy(ref.matrixWorld).invert());
+    }
+    if (!part.bLocal) return false;
+    _bPos.copy(part.bLocal);
+    if (!part.bFixed) _bPos.applyMatrix4(ref.matrixWorld);
+    return true;
+  }
+  // 값이 바뀐 프레임에만 GPU 버퍼를 다시 올린다.
+  let beaconDirty = false;
+  function setBeacon(arr, i, v) { v = Math.fround(v); if (arr[i] !== v) { arr[i] = v; beaconDirty = true; } }
   function updateBeacons(mobile) {
+    const prevCount = beaconCount;
     beaconCount = 0; beaconHits = [];
     if (!beaconGeo || !mobile || !enabled || mobileDemoRunning()) {
       if (beaconGeo) beaconGeo.setDrawRange(0, 0);
@@ -673,14 +703,9 @@ const PartGlow = (() => {
       if (farView && !repPrio && part !== menuPart) continue;
       const live = liveEntries(part);
       if (!live.length || live.every(e => e.button.disabled)) continue;
-      box.makeEmpty();
-      for (const m of part.meshes) if (worldVisible(m)) box.expandByObject(m);
-      if (box.isEmpty()) continue;
-      // 경계상자 윗면(매립 소형 부품은 중심) + 카메라 쪽으로 약간 띄워 자체 메시에 가리지 않으면서 벽 뒤는 깊이 버퍼로 자연 가림.
-      box.getCenter(_bPos);
-      box.getSize(_bSize);
-      const sz = _bSize.length() || 0.1;
-      if (sz >= 0.15) _bPos.y = box.max.y + Math.min(0.06, sz * 0.08);
+      if (!beaconAnchor(part)) continue;
+      // 기준점에서 카메라 쪽으로 약간 띄워 자체 메시에 가리지 않으면서 벽 뒤는 깊이 버퍼로 자연 가림.
+      const sz = part.bSz;
       _bDir.copy(camera.position).sub(_bPos);
       const dist = _bDir.length();
       if (dist < 0.05) continue;
@@ -700,15 +725,18 @@ const PartGlow = (() => {
       if (beaconCount >= maxAllowed) break;
       if (beaconHits.some(h => Math.hypot(h.x - c.sx, h.y - c.sy) < minSep)) continue;
       const i = beaconCount++;
-      beaconPosArr[i * 3] = c.x; beaconPosArr[i * 3 + 1] = c.y; beaconPosArr[i * 3 + 2] = c.z;
-      beaconPhaseArr[i] = ((c.part.name.length * 0.27 + i * 0.19) % 1);
-      beaconScaleArr[i] = farView ? 0.88 : THREE.MathUtils.clamp(0.84 + Math.min(0.24, c.sz * 0.15), 0.84, 1.08);
+      setBeacon(beaconPosArr, i * 3, c.x); setBeacon(beaconPosArr, i * 3 + 1, c.y); setBeacon(beaconPosArr, i * 3 + 2, c.z);
+      setBeacon(beaconPhaseArr, i, (c.part.name.length * 0.27 + i * 0.19) % 1);
+      setBeacon(beaconScaleArr, i, farView ? 0.88 : THREE.MathUtils.clamp(0.84 + Math.min(0.24, c.sz * 0.15), 0.84, 1.08));
       beaconHits.push({ part: c.part, x: c.sx, y: c.sy });
     }
     if (beaconCount > 0) {
-      beaconGeo.attributes.position.needsUpdate = true;
-      beaconGeo.attributes.aPhase.needsUpdate = true;
-      beaconGeo.attributes.aScale.needsUpdate = true;
+      if (beaconDirty || beaconCount !== prevCount) {
+        beaconGeo.attributes.position.needsUpdate = true;
+        beaconGeo.attributes.aPhase.needsUpdate = true;
+        beaconGeo.attributes.aScale.needsUpdate = true;
+        beaconDirty = false;
+      }
       beaconMat.uniforms.uDpr.value = renderer.getPixelRatio();
       beaconMat.uniforms.uDim.value = menuPart ? 0.32 : 1.0;
       beaconMat.uniforms.uReduced.value = reducedMotion.matches ? 1.0 : 0.0;

@@ -19,7 +19,8 @@ try{
   await page.goto(URL,{waitUntil:'networkidle'});await ready();
   await page.evaluate(()=>{try{localStorage.removeItem('partGlowEnabled');}catch(e){}PartGlow.setEnabled(true);controls.enableDamping=false;
     window.__cam=(p,t)=>{gsap.killTweensOf(camera.position);gsap.killTweensOf(controls.target);if(typeof leaveCabinView==='function')leaveCabinView();
-      const k=Math.max(1,.9/camera.aspect);camera.position.copy(p).sub(t).multiplyScalar(k).add(t);controls.target.copy(t);controls.update();};});  // 세로 화면은 moveCam 처럼 같은 방향으로 물러난다
+      const k=Math.max(1,.9/camera.aspect);camera.position.copy(p).sub(t).multiplyScalar(k).add(t);controls.target.copy(t);controls.update();
+      camera.updateMatrixWorld();};});  // 세로 화면은 moveCam 처럼 같은 방향으로 물러난다. 다음 렌더 전에 화면 중심을 재도 새 시점 기준이 되게 행렬을 바로 갱신한다.
   const tap=async(x,y)=>mobile?page.touchscreen.tap(x,y):page.mouse.click(x,y);
   const clickSel=async s=>mobile?page.tap(s):page.click(s);
   const frames=n=>page.evaluate(n=>new Promise(r=>{let i=0;const f=()=>++i>=n?r():requestAnimationFrame(f);requestAnimationFrame(f);}),n);
