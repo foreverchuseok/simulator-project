@@ -1560,18 +1560,21 @@ function updateManualCameraNear() {
         }
         return g;
       }
+      // 벽에 붙은 장치(승장 호출버튼)는 불투명 유지 — 버튼 램프는 재질 속성으로 켜고 끄므로 고스트로 바꾸면 상태도 어긋난다.
+      const KEEP_OPAQUE = /^HallCallButton_/;
       function applyList(roots, opacity, bucket) {
-        for (const root of roots) {
-          if (!root) continue;
-          root.traverse(o => {
-            if (!o.isMesh || !o.material) return;
+        const visit = o => {
+          if (KEEP_OPAQUE.test(o.name)) return;
+          if (o.isMesh && o.material) {
             const orig = o.material;
             const ghost = Array.isArray(orig) ? orig.map(m => makeGhost(m, opacity)) : makeGhost(orig, opacity);
             bucket.push([o, orig, o.castShadow]);
             o.material = ghost;
             o.castShadow = false;
-          });
-        }
+          }
+          for (const c of o.children) visit(c);
+        };
+        for (const root of roots) if (root) visit(root);
       }
       function restoreList(bucket) {
         while (bucket.length) {
