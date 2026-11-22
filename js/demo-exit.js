@@ -301,7 +301,11 @@ const DemoTakeaway = (() => {
     'brake:single': { tone: 'danger', tag: '위험 · 단일(싱글) 주브레이크', text: '공통 스프링 하나가 파손되면 제동력을 모두 잃어 카가 폭주합니다.' },
     'retention:result': { tone: 'info', tag: '핵심 · 상부 비상가이드 + 하부 보강슈', text: '기존 가이드 손상 시 문 이탈을 억제합니다. 충격 예방·점검이 필수입니다.' }
   };
-  let box = null, tagEl = null, textEl = null, dismissedKey = '', activeKey = '';
+  let box = null, tagEl = null, textEl = null, dismissedKey = '', activeKey = '', placeAt = 0;
+  // PC: 결과 화면 요소(요약 카드·브레이크 결과 글자·하단 자막·좌하단 조작 패널·상단 버튼)를 피해 상단 기본 자리 → 맨 아래 가운데 순으로 놓는다.
+  const PC_OBSTACLES = '#ucm-summary,#brake-compare-ending>div,#ucm-stage,#ascent-stage,#brake-compare-stage,#retention-demo-panel,#ovs-summary,' +
+    '#pc-dock,#demo-pause,#ucm-exit,#demo-exit,#demo-compare-next,#fault-reset,#brief-badge,#xray-badge';
+  const PC_TOP = 104, PC_EDGE = 16, PC_DOCK_GAP = 12;
 
   function detectKey() {
     try {
@@ -367,7 +371,40 @@ const DemoTakeaway = (() => {
 
   function hide() {
     if (box && !box.hidden) box.hidden = true;
+    placeAt = 0;
     if (document.body.classList.contains('demo-takeaway-open')) document.body.classList.remove('demo-takeaway-open');
+  }
+
+  function placePC() {
+    if (document.body.classList.contains('m-hud')) { if (box.style.top) box.style.top = box.style.left = box.style.transform = ''; return; }
+    const now = performance.now();
+    if (now < placeAt) return;
+    placeAt = now + 250;   // 결과 패널이 늦게 나타나는 경우를 위해 짧은 간격으로 다시 본다.
+    const w = box.offsetWidth, h = box.offsetHeight;
+    if (!w) return;
+    const rects = [];
+    let dockRight = 0;
+    for (const el of document.querySelectorAll(PC_OBSTACLES)) {
+      if (el.hidden || el.closest('[hidden]')) continue;
+      const cs = getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+      const r = el.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) continue;
+      rects.push(r);
+      if (el.id === 'pc-dock') dockRight = r.right;
+    }
+    const overlap = (x, y) => rects.reduce((sum, r) => sum + Math.max(0, Math.min(x + w, r.right) - Math.max(x, r.left)) * Math.max(0, Math.min(y + h, r.bottom) - Math.max(y, r.top)), 0);
+    const center = (innerWidth - w) / 2;
+    const slots = [
+      [center, PC_TOP],
+      [Math.max(center, dockRight ? dockRight + PC_DOCK_GAP : 0), innerHeight - PC_EDGE - h]
+    ];
+    let best = slots[0], bestArea = Infinity;
+    for (const s of slots) { const a = overlap(s[0], s[1]); if (a < bestArea) { best = s; bestArea = a; } if (!a) break; }
+    const left = Math.round(best[0]) + 'px', top = Math.round(best[1]) + 'px';
+    if (box.style.left !== left) box.style.left = left;
+    if (box.style.top !== top) box.style.top = top;
+    if (box.style.transform !== 'none') box.style.transform = 'none';
   }
 
   function update() {
@@ -386,6 +423,7 @@ const DemoTakeaway = (() => {
     if (tagEl.textContent !== entry.tag) tagEl.textContent = entry.tag;
     if (textEl.textContent !== entry.text) textEl.textContent = entry.text;
     if (box.hidden) box.hidden = false;
+    placePC();
     if (!document.body.classList.contains('demo-takeaway-open')) document.body.classList.add('demo-takeaway-open');
   }
 
