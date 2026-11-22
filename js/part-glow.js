@@ -700,6 +700,8 @@ const PartGlow = (() => {
     const camDist = camera.position.distanceTo(controls.target);
     const farView = camDist > OVERVIEW_DIST;
     const minSep = farView ? 42 : 36;
+    // 고리 CSS px 1개가 거리 1m에서 덮는 월드 길이.
+    const pxWorld = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / camera.zoom / innerHeight;
     const cands = [];
     for (const part of parts) {
       if (!part.active) continue;
@@ -713,14 +715,18 @@ const PartGlow = (() => {
       _bDir.copy(camera.position).sub(_bPos);
       const dist = _bDir.length();
       if (dist < 0.05) continue;
-      const nudge = sz < 0.15 ? 0.09 : THREE.MathUtils.clamp(Math.min(sz * 0.15, dist * 0.025), 0.055, 0.14);
+      const scale = farView ? 0.88 : THREE.MathUtils.clamp(0.84 + Math.min(0.24, sz * 0.15), 0.84, 1.08);
+      // 고리는 한 깊이로 그려져 원거리에서는 실제 공간을 넓게 덮는다(32m에서 약 1.3m). 비스듬한 문·벽 면이 고리 절반을
+      // 깎지 않도록 고리 크기의 0.25배까지 더 띄운다(더 키우면 옆 시점에서 벽 뒤 고리가 드러남). 근거리는 기존 값이 더 크다.
+      const ringWorld = beaconMat.uniforms.uBaseSize.value * scale * dist * pxWorld;
+      const nudge = Math.max(sz < 0.15 ? 0.09 : THREE.MathUtils.clamp(Math.min(sz * 0.15, dist * 0.025), 0.055, 0.14), ringWorld * 0.25);
       _bPos.addScaledVector(_bDir, nudge / dist);
       _bProj.copy(_bPos).project(camera);
       if (_bProj.z < -1 || _bProj.z > 1 || Math.abs(_bProj.x) > 0.94 || Math.abs(_bProj.y) > 0.90) continue;
       const sx = (_bProj.x + 1) * innerWidth / 2, sy = (1 - _bProj.y) * innerHeight / 2;
       // 선택된 부품은 Tier 2 발광을 쓰므로 표시 고리는 그리지 않되, 같은 자리 재탭(확대·닫기)용 히트 좌표는 유지한다.
       if (part === menuPart) { beaconHits.push({ part, x: sx, y: sy }); continue; }
-      cands.push({ part, x: _bPos.x, y: _bPos.y, z: _bPos.z, sx, sy, dist, prio: repPrio, sz });
+      cands.push({ part, x: _bPos.x, y: _bPos.y, z: _bPos.z, sx, sy, dist, prio: repPrio, scale });
     }
     // 원거리는 대표 우선순위, 근거리는 대표 + 카메라 최단거리 순으로 겹침 억제.
     cands.sort((a, b) => farView ? (b.prio - a.prio || a.dist - b.dist) : (b.prio - a.prio || a.dist - b.dist));
@@ -731,7 +737,7 @@ const PartGlow = (() => {
       const i = beaconCount++;
       setBeacon(beaconPosArr, i * 3, c.x); setBeacon(beaconPosArr, i * 3 + 1, c.y); setBeacon(beaconPosArr, i * 3 + 2, c.z);
       setBeacon(beaconPhaseArr, i, (c.part.name.length * 0.27 + i * 0.19) % 1);
-      setBeacon(beaconScaleArr, i, farView ? 0.88 : THREE.MathUtils.clamp(0.84 + Math.min(0.24, c.sz * 0.15), 0.84, 1.08));
+      setBeacon(beaconScaleArr, i, c.scale);
       beaconHits.push({ part: c.part, x: c.sx, y: c.sy });
     }
     if (beaconCount > 0) {
