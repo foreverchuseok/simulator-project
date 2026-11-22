@@ -22,13 +22,30 @@
 
 ## 현재 단계 — 모바일 사용 경험 개편
 
+### 2026-11-22 모바일 부품 표시를 「터치 표시 고리」로 교체 (`js/part-glow.js`)
+
+- **변경 이유·내용**: 기존 금색 별빛 비콘(흰 중심·둥근 빛 번짐·십자 광선·깜박임)이 부품에 달린 전등으로 오인돼, `js/part-glow.js`의 `beaconFS` 셰이더만 **터치 표시 고리**(가운데가 빈 얇은 고정 고리 + 가운데 작은 점 + 천천히 퍼지며 사라지는 고리 1개)로 교체했다.
+  - 색은 평평한 금색 한 톤(`vec3(0.98, 0.76, 0.22)`, 흰색 하이라이트·푸른빛/민트 없음)이며, 흰 벽·밝은 바닥 위 시인성을 위해 고리·점 가장자리에 반투명 어두운 갈색 테두리를 얇게 넣었다.
+  - `uReduced`(`prefers-reduced-motion: reduce`)에서는 퍼지는 고리를 끄고 고정 고리·점만 표시하며, 메뉴 열림 시 `uDim`(32%) 흐려짐, `updateBeacons`·`beaconAnchor`·`beaconHits`·드로우콜(`THREE.Points` 1회, 스텐실 0회)·탭 동작·PC 발광·일반 투명 혼합은 그대로 유지했다.
+  - `index.html`의 `js/part-glow.js?v=20261122-touch-ring`으로 버전을 올리고, `part-glow.js` 주석과 문서(`docs/MOBILE-PART-INTERACTION-ANALYSIS.md`, `docs/ROADMAP.md`)의 별빛 비콘 설명을 갱신했다.
+- **검증 결과**:
+  - `node tools/verify_part_glow.mjs` PC·모바일 통과(오류 0건).
+  - **S22+(`SM-S906N` / Chrome / `384×701` / DPR 2) 실기기 전후 캡처(`temporary/touch-ring/`, 오류 0건)**: `before-overview.png`·`before-mr.png` vs `after-overview.png`·`after-mr.png`, `after-mr-dim.png`(제어반 탭 시 팝업·선택 1부품 강조·주변 고리 흐려짐), `after-mr-reduced.png`(움직임 줄이기 시 고정 고리·점만 표시), `after-hall.png`(밝은 승강장 문·틀 위 시인성). 전등 오인 없이 누르는 표시 고리로 읽히며 흰 벽·밝은 바닥 위에서도 또렷하게 보임을 확인했다.
+  - **S22+ 동일 조건 전후 교대 성능 측정(`quality=0`, DPR 2, 각 20초, `temporary/fps/ring-{before1,after1,before2,after2}-phone-q0.json`)**:
+    - 전1(35.3→35.4℃): `idle` 18.2fps(CPU 52.1ms, 발광 1.2ms), `mr` 29.8fps(CPU 26.3ms, 발광 1.1ms).
+    - 후1(35.8→36.1℃): `idle` 15.4fps(CPU 58.3ms, 발광 1.3ms), `mr` 28.7fps(CPU 27.8ms, 발광 1.2ms).
+    - 전2(36.2→36.3℃): `idle` 15.9fps(CPU 60.8ms, 발광 1.4ms), `mr` 29.2fps(CPU 28.4ms, 발광 1.2ms).
+    - 후2(36.2→36.4℃): `idle` 16.0fps(CPU 60.1ms, 발광 1.3ms), `mr` 28.6fps(CPU 28.6ms, 발광 1.2ms).
+    - 호출(`idle` 2,367 / `mr` 572)·삼각형(`idle` 1,341,836 / `mr` 402,099) 완전 동일. 발열이 안정된 2회차(36.2~36.4℃) 기준 프레임·CPU·발광 시간 모두 **차이 없음(동등, 성능 개선 아님)**.
+- **남은 일**: 사용자 실화면 확인, 실기기 가로 화면 확인, 세로 태블릿(`601~900px`) 분기 정리 및 태블릿 연속 새로고침 GPU 크래시 대책(기존 보류 항목). Claude Code 교차 검증(`verify_part_glow` PC·모바일 통과) 후 2026-11-22 main 배포.
+
 ### 2026-11-22 고객·교육생 브리핑 개편 (1~6번 구현 완료 · 사용자 확인 대기)
 
 - **완료된 1~5번 (모두 PC·모바일·S22+ 실기기 검증 통과, 현재 로컬 워킹트리 미커밋 상태)**:
-  1. **모바일 금색 별빛 비콘 (Phase 1)** — `js/part-glow.js`: 단일 `THREE.Points` 금색 4각 별빛·리플(+1 드로우콜, 스텐실 0), 원거리 대표 부품 겹침 억제·근거리 세부 노출, 비콘 직접 1탭 팝업·천천히 재탭 닫힘·700ms 내 2연타 확대.
+  1. **모바일 터치 표시 고리 (Phase 1)** — `js/part-glow.js`: 단일 `THREE.Points` 평평한 금색 고정 고리·가운데 점·퍼지는 고리 1개 + 어두운 갈색 테두리(+1 드로우콜, 스텐실 0), 원거리 대표 부품 겹침 억제·근거리 세부 노출, 고리 직접 1탭 팝업·천천히 재탭 닫힘·700ms 내 2연타 확대.
   2. **14종 시연 일시정지 A안 통일 (Phase 3)** — `js/demo-pause.js`, `js/mobile-hud.js`, `js/mobile-demo-guide.js`, `js/retention-demo.js`, `css/mobile-hud.css`, `css/mobile-demo-guide.css`: 완충기·문 이탈방지(`retention-story`) 포함 모바일 14종 전체가 하단 바 `#demo-pause`를 사용하며 일시정지 시 `[▶ 계속]` + `[⌂ 첫 화면]`(`#m-demo-exit`)으로 즉시 전환(`MobileHUD.syncDemoBar()`, 우상단 `×` 유지).
   3. **비-시연 설비 일괄 원상복구 (`SceneClean`)** — `js/demo-exit.js`, `js/pit-ladder.js`, `js/building-lights.js`, `js/emergency-lighting.js`: 제어반·분전함 문, 피트 사다리, 승장문 수동개방/비상키, 조명·비상등, 비상통화, 점검운전·바이패스·비상정지 중 하나라도 열려/켜져 있으면 상단 `↺ 설비 정리`(`#scene-clean-btn`) 자동 표시, 1탭 무리로드 원상복구 + 1층 전체 보기 복귀.
-  4. **구역별 원터치 시점 이동 (`CameraZones`)** — `index.html`, `js/ui.js`, `js/mobile-hud.js`, `css/mobile-hud.css`, `css/desktop-hud.css`: PC 「보기」 / 모바일 「시점」(`#dd-overview`) 안에 `기계실`·`카 상부`(현재 카 높이 추종)·`승강장`(현재 층 추종)·`피트` 4개 원터치 버튼 추가(도착 시 로컬 금색 비콘 자동 활성화).
+  4. **구역별 원터치 시점 이동 (`CameraZones`)** — `index.html`, `js/ui.js`, `js/mobile-hud.js`, `css/mobile-hud.css`, `css/desktop-hud.css`: PC 「보기」 / 모바일 「시점」(`#dd-overview`) 안에 `기계실`·`카 상부`(현재 카 높이 추종)·`승강장`(현재 층 추종)·`피트` 4개 원터치 버튼 추가(도착 시 로컬 터치 표시 고리 자동 활성화).
   5. **외벽·카 벽 반투명 「외벽 투시」 보기 (`XrayView`)** — `index.html`, `js/ui.js`, `js/mobile-hud.js`, `js/part-glow.js`: `wallGrp`+지사 현판(`opacity 0.16`)·카 불투명 외판(`opacity 0.22`) 반투명 전환, 내부 안전장치·문·레일·로프 100% 불투명 유지, `WeakMap` 고스트 재질 캐시, 과속 절개(`setOVSCutaway`) 충돌 방지(`suspendCar`), 브리핑 모드 호환, 우하단 `투시 ×` 배지(`#xray-badge`, `window` 캡처).
 - **Claude Code 교차 검증 (2026-11-22)**: 1~5번 회귀 검사 PC·모바일 통과. 외벽 투시(`XrayView`)와 종단 스위치 시연 카 반투명(`TerminalDemo.ghostCar`)이 같은 재질을 서로 원본으로 저장해 종료 뒤 카 외판 42개 메시가 반투명으로 남던 결함을 `js/terminal-demo.js`에서 `XrayView.suspendCar()` 연결로 수정(3가지 순서 검사 통과). 승장 호출버튼(`HallCallButton_1~4`)은 `wallGrp` 소속이지만 투시 대상에서 제외해 불투명을 유지한다(`XrayView` `KEEP_OPAQUE`, 반투명 메시 145→109개). 버튼 램프는 `HallFinish.setLamp()`가 재질 값을 바꾸므로, 고스트 재질로 바꾸면 투시 해제 뒤 램프 상태가 어긋나던 문제도 함께 막는다. `verify_mobile_hud`(낙하 중 종료)·`verify_terminal_switches`(390px `#terminal-demo-reset` 숨김) 실패는 HEAD에서도 동일한 기존 실패다.
   - 6번(`DemoTakeaway`) 교차 검증: 결과 배너 7종(개문발차·상승과속 정상/미설치, 더블/싱글, 문 이탈방지) 문구·톤 정상, 모바일 겹침 0건. PC에서 개문발차 정상 요약 카드(`#ucm-summary`)·브레이크 결과 글자(`#brake-compare-ending>div`)에 걸치던 문제는 `DemoTakeaway.placePC()`로 해결했다: 결과 요소 실제 위치를 재서 상단 기본 자리(104px)가 막히면 맨 아래 가운데(하단 자막 아래, 좌하단 조작 패널 오른쪽)로 옮긴다. PC 5개 크기(901×560~1920×1080) × 결과 7종 겹침 0건, 모바일 배치 변경 없음.
@@ -43,7 +60,7 @@
 
 - **4) 구역별 원터치 시점 이동 (`CameraZones`, `index.html`, `js/ui.js`, `js/mobile-hud.js`, `css/mobile-hud.css`, `css/desktop-hud.css`)**:
   - 기존 PC 「보기」 / 모바일 하단 「시점」 메뉴(`#dd-overview`) 안에 **`기계실` · `카 상부` · `승강장` · `피트`** 4개 바로가기 버튼을 추가했다(모바일 2열 팝오버 `132px`, 기존 `#overview-home`·`#m-home`·`#c-cabin`·`#m-cabin` 유지).
-  - `카 상부`는 현재 카 높이(`carGrp.position.y`), `승강장`은 현재 층(`FLOOR_Y[curFloor]`)을 기준으로 자동 정렬하며, 각 구역에 도착하면 근거리 부품의 금색 별빛 비콘이 즉시 깨어나 바로 탭해 설명할 수 있다.
+  - `카 상부`는 현재 카 높이(`carGrp.position.y`), `승강장`은 현재 층(`FLOOR_Y[curFloor]`)을 기준으로 자동 정렬하며, 각 구역에 도착하면 근거리 부품의 터치 표시 고리가 즉시 깨어나 바로 탭해 설명할 수 있다.
 - **5) 외벽·카 벽 반투명 투시 보기 (`XrayView`, `index.html`, `js/ui.js`, `js/mobile-hud.js`, `js/part-glow.js`)**:
   - 「보기 / 시점」 메뉴의 **`외벽 투시`** 토글(`#xray-toggle` / `#m-xray`)로 승강로 전면벽·좌측벽·로비 마감·지사 로고 현판(`wallGrp`, `opacity 0.16`)과 카 불투명 외판(`opacity 0.22`)만 반투명으로 전환하고, 승장문·인터록·가이드레일·종단 스위치·세이프티기어·균형추·로프·완충기·기계실 설비는 100% 불투명으로 유지한다.
   - 고스트 재질은 `WeakMap`에 1회 복제 캐시해 재토글 비용을 없앴고, 과속 시연 절개(`setOVSCutaway`)와 충돌하지 않도록 카 절개 시 카 투시만 일시 양보(`suspendCar`)하며, 토글 시 `PartGlow.invalidateBlockers()`로 가림 판정을 즉시 갱신한다.
@@ -53,11 +70,11 @@
   - **S22+(`SM-S906N` / Chrome / `384×701`) 실기기 터치·캡처(`temporary/zones-xray/`)**: 시점 2열 메뉴 경계, `기계실`(6개 비콘)·`카 상부`(8개)·`승강장`(9개)·`피트`(3개) 이동 및 구도, `외벽 투시` 켜기·`투시 ×` 배지 끄기 모두 통과.
   - 기존 회귀: `verify_desktop_hud`(6종 반응형 포함), `verify_background_modes --mobile`, `verify_part_glow` 모두 통과. 요청 없이 커밋·푸시하지 않았다.
 
-### 2026-11-22 모바일 금색 별빛 비콘(Phase 1) · 14종 일시정지 A안 통일(Phase 3) · 설비 일괄 정리(`SceneClean`) 완료
+### 2026-11-22 모바일 터치 표시 고리(Phase 1) · 14종 일시정지 A안 통일(Phase 3) · 설비 일괄 정리(`SceneClean`) 완료
 
-- [MOBILE-PART-INTERACTION-ANALYSIS.md](MOBILE-PART-INTERACTION-ANALYSIS.md)의 남은 확정 사항(**Phase 1 금색 비콘**, **Phase 3 14종 일시정지 A안 통일**, **2차 비-시연 설비 일괄 원상복구**)을 모두 구현하고 PC·모바일·실기기(S22+) 검증을 마쳤다.
-- **1) Phase 1 — 모바일 Tier 1 금색 별빛 비콘 (`js/part-glow.js`)**:
-  - 단일 `THREE.Points` 커스텀 셰이더(드로우콜 +1회, 스텐실 클리어 0회)로 4각 별빛 글린트 + 은은한 동심원 리플을 금색 단일 톤(`#ffcf5c`→`#fff6d6`, 민트·푸른빛 없음)으로 표시한다. `IdleThrottle.pulseTime`, `prefers-reduced-motion: reduce`, 설정 「부품 빛 효과」(`#part-glow-toggle`)와 연동된다.
+- [MOBILE-PART-INTERACTION-ANALYSIS.md](MOBILE-PART-INTERACTION-ANALYSIS.md)의 남은 확정 사항(**Phase 1 터치 표시 고리**, **Phase 3 14종 일시정지 A안 통일**, **2차 비-시연 설비 일괄 원상복구**)을 모두 구현하고 PC·모바일·실기기(S22+) 검증을 마쳤다.
+- **1) Phase 1 — 모바일 Tier 1 터치 표시 고리 (`js/part-glow.js`)**:
+  - 단일 `THREE.Points` 커스텀 셰이더(드로우콜 +1회, 스텐실 클리어 0회)로 얇은 고정 고리 + 가운데 작은 점 + 천천히 퍼지는 고리 1개를 평평한 금색 한 톤 + 반투명 어두운 갈색 테두리(흰색 하이라이트·민트·푸른빛 없음)로 표시한다. `IdleThrottle.pulseTime`, `prefers-reduced-motion: reduce`, 설정 「부품 빛 효과」(`#part-glow-toggle`)와 연동된다.
   - 경계상자 윗면(매립 소형 부품은 중심) + 카메라 방향 오프셋 + `depthTest: true`로 자체 메시 가림을 피하면서 벽 뒤는 자연 가림 처리했다. 원거리(> 12m 전체 보기)는 대표 부품(`과속 조절기`·`로프브레이크`·`권상기 주브레이크`·`제어반`·`ARD`·`완충기`·`주로프`·`1층 비상키`·`피트 사다리`)과 화면 겹침 억제(`42px`, 최대 8개)만 표시하고, 확대·시점 이동 시 세부 부품이 단계 노출된다.
   - 선택된 부품(`menuPart`)은 Tier 2 풀 발광으로 전환하고 주변 비콘은 32%로 흐려지며, 비콘 좌표 히트(`24px`, `occluded` 유지)를 유지해 비콘 위 1탭 팝업·천천히 재탭 닫기·700ms 내 2연타 확대가 끊김 없이 동작한다.
 - **2) Phase 3 — 14종 시연 일시정지 A안 통일 (`js/demo-pause.js`, `js/mobile-hud.js`, `js/mobile-demo-guide.js`, `js/retention-demo.js`, `css/mobile-hud.css`, `css/mobile-demo-guide.css`)**:

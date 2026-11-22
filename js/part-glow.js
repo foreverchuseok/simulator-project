@@ -17,7 +17,7 @@ const PartGlow = (() => {
   let lastNow = 0, enabled = true, frame = 0, hover = null, menuPart = null, menu, tip, pointer = null, lastOpen = { part: null, time: 0 };
   let tapPt = null, hudDismissed = false, zoomedEvent = null, slowCloseHook = null, wasMobileMode = false;
   const activePointers = new Map();
-  // 모바일 Tier 1 금색 별빛 비콘(2026-11-22 Phase 1): 단일 THREE.Points 드로우콜(+1회, 스텐실 0회).
+  // 모바일 Tier 1 터치 표시 고리(2026-11-22): 단일 THREE.Points 드로우콜(+1회, 스텐실 0회).
   const MAX_BEACONS = 32, OVERVIEW_DIST = 12;
   const OVERVIEW_REPS = new Map([
     ['과속 조절기', 10], ['로프브레이크', 9], ['권상기 주브레이크', 9], ['제어반', 8],
@@ -82,7 +82,7 @@ const PartGlow = (() => {
     }`;
   // 밝은 하늘·벽에서도 금색이 보이도록 일반 혼합을 쓴다(가산 혼합은 흰색으로 날아간다).
   const blend = { transparent: true, depthWrite: false };
-  // 모바일 Tier 1 금색 별빛 비콘 셰이더: 4각 별빛 글린트 + 은은한 동심원 리플(단일 금색 톤, 민트·푸른빛 없음).
+  // 모바일 Tier 1 터치 표시 고리 셰이더: 얇은 고정 고리 + 가운데 작은 점 + 퍼지는 고리 1개(평평한 금색 + 어두운 갈색 테두리).
   const beaconVS = `
     attribute float aPhase;
     attribute float aScale;
@@ -106,28 +106,32 @@ const PartGlow = (() => {
       vec2 p = gl_PointCoord - 0.5;
       float d = length(p);
       if (d > 0.5) discard;
-      float t = uReduced > 0.5 ? 0.35 : fract(uTime * 0.42 + vPhase);
-      float breath = uReduced > 0.5 ? 0.92 : 0.78 + 0.22 * sin(uTime * 3.1 + vPhase * 6.28318);
-      // 4각 별빛(가로·세로 주광선 + 미세 대각선 보조광선)
-      float crossMain = exp(-abs(p.y) * 28.0) * exp(-abs(p.x) * 6.2)
-                      + exp(-abs(p.x) * 28.0) * exp(-abs(p.y) * 6.2);
-      vec2 dp = vec2(p.x + p.y, p.x - p.y) * 0.7071;
-      float crossDiag = (exp(-abs(dp.y) * 34.0) * exp(-abs(dp.x) * 11.0)
-                       + exp(-abs(dp.x) * 34.0) * exp(-abs(dp.y) * 11.0)) * 0.36;
-      float core = exp(-d * d * 56.0);
-      float halo = exp(-d * d * 14.0) * 0.48;
-      // 은은한 동심원 리플 파동 (정지 접근성 설정에서는 끔)
-      float ringR = 0.11 + t * 0.34;
-      float ringEnv = smoothstep(0.0, 0.15, t) * (1.0 - smoothstep(0.55, 1.0, t));
-      float ring = uReduced > 0.5 ? 0.0 : exp(-pow((d - ringR) * 26.0, 2.0)) * ringEnv * 0.58;
-      float star = min(1.3, (crossMain + crossDiag) * 0.72 + core * 0.95);
-      float alpha = clamp((star * breath + halo + ring) * uDim * vScale, 0.0, 1.0);
+      float aa = 0.015;
+      // 1) 얇은 고정 고리(가운데 비움) + 2) 가운데 작은 점
+      float staticDist = abs(d - 0.22);
+      float staticGold = 1.0 - smoothstep(0.020, 0.020 + aa, staticDist);
+      float staticEdge = 1.0 - smoothstep(0.031, 0.031 + aa, staticDist);
+      float dotGold = 1.0 - smoothstep(0.048, 0.048 + aa, d);
+      float dotEdge = 1.0 - smoothstep(0.060, 0.060 + aa, d);
+      float baseGold = max(staticGold, dotGold);
+      float baseRim  = max(staticEdge, dotEdge) * (1.0 - baseGold);
+      // 3) 천천히 퍼지며 사라지는 고리 1개 (움직임은 이것 하나만, uReduced에서는 끔)
+      float t = fract(uTime * 0.36 + vPhase);
+      float ringR = 0.22 + t * 0.24;
+      float ringEnv = smoothstep(0.0, 0.14, t) * (1.0 - smoothstep(0.45, 1.0, t));
+      float ringDist = abs(d - ringR);
+      float ringGold = uReduced > 0.5 ? 0.0 : (1.0 - smoothstep(0.013, 0.013 + aa, ringDist)) * ringEnv;
+      float ringEdge = uReduced > 0.5 ? 0.0 : (1.0 - smoothstep(0.022, 0.022 + aa, ringDist)) * ringEnv;
+      float ringRim  = max(0.0, ringEdge - ringGold);
+      // 평평한 금색 한 톤 + 반투명 어두운 갈색 테두리(흰색 발광·번짐 없음)
+      float gA = max(baseGold * 0.94, ringGold * 0.65);
+      float rA = max(baseRim * 0.48, ringRim * 0.28) * (1.0 - baseGold);
+      float outA = gA + rA * (1.0 - gA);
+      float alpha = clamp(outA * uDim, 0.0, 1.0);
       if (alpha < 0.015) discard;
-      vec3 amber = vec3(0.84, 0.58, 0.07);
-      vec3 gold  = vec3(1.00, 0.812, 0.361);   // #ffcf5c
-      vec3 white = vec3(1.00, 0.965, 0.839);   // #fff6d6
-      vec3 col = mix(amber, gold, clamp(halo * 1.4 + ring + star * 0.5, 0.0, 1.0));
-      col = mix(col, white, clamp(core * 0.9 + crossMain * 0.45, 0.0, 1.0));
+      vec3 gold = vec3(0.98, 0.76, 0.22);
+      vec3 rim  = vec3(0.26, 0.16, 0.04);
+      vec3 col = (gold * gA + rim * rA * (1.0 - gA)) / max(outA, 1e-4);
       gl_FragColor = vec4(col, alpha);
     }`;
   // 스텐실: 부품 몸체 3 → 안쪽 띠 2 → 바깥 띠 1. GREATER 비교로 각 픽셀을 한 번만 칠해 겹침 농도 얼룩이 없다.
@@ -358,7 +362,7 @@ const PartGlow = (() => {
     }
     if (best && occluded(best)) best = null;
     if (best) return best.part;
-    // 모바일 Tier 1 금색 비콘 위를 직접 탭한 경우(24px 여유, 벽 너머는 occluded로 차단).
+    // 모바일 Tier 1 터치 표시 고리 위를 직접 탭한 경우(24px 여유, 벽 너머는 occluded로 차단).
     if (mobile && beaconHits.length) {
       let bestB = null, bestBD = 24;
       for (const b of beaconHits) {
@@ -714,7 +718,7 @@ const PartGlow = (() => {
       _bProj.copy(_bPos).project(camera);
       if (_bProj.z < -1 || _bProj.z > 1 || Math.abs(_bProj.x) > 0.94 || Math.abs(_bProj.y) > 0.90) continue;
       const sx = (_bProj.x + 1) * innerWidth / 2, sy = (1 - _bProj.y) * innerHeight / 2;
-      // 선택된 부품은 Tier 2 발광을 쓰므로 비콘 점은 그리지 않되, 같은 자리 재탭(확대·닫기)용 히트 좌표는 유지한다.
+      // 선택된 부품은 Tier 2 발광을 쓰므로 표시 고리는 그리지 않되, 같은 자리 재탭(확대·닫기)용 히트 좌표는 유지한다.
       if (part === menuPart) { beaconHits.push({ part, x: sx, y: sy }); continue; }
       cands.push({ part, x: _bPos.x, y: _bPos.y, z: _bPos.z, sx, sy, dist, prio: repPrio, sz });
     }
