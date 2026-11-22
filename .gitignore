@@ -32,6 +32,7 @@ yt_info.json
 # 로컬 참고 사진·캡처 폴더와 루트 미사용 이미지 (앱 미로드)
 temporary/
 mobile.jpg
+정밀8대기준.png
 
 # 참고용 PDF (앱이 로드하지 않음 — 로컬 디자인/규격 문서)
 *.pdf
