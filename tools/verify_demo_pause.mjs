@@ -11,9 +11,9 @@ const cases=[
  ['rope',()=>RopeMeasure.start(),'demo-pause'],
  ['interlock',()=>InterlockDemo.start(1),'demo-pause'],
  ['relay',()=>RelayRopeDemo.start(1),'demo-pause'],
- ['retention',()=>RetentionDemo.start(1),'retention-demo-pause'],
- ['car-buffer',()=>BufferDemo.start('car'),'buffer-demo-pause'],
- ['cwt-buffer',()=>BufferDemo.start('cwt'),'buffer-demo-pause'],
+ ['retention',()=>RetentionDemo.start(1),mobile?'demo-pause':'retention-demo-pause'],
+ ['car-buffer',()=>BufferDemo.start('car'),mobile?'demo-pause':'buffer-demo-pause'],
+ ['cwt-buffer',()=>BufferDemo.start('cwt'),mobile?'demo-pause':'buffer-demo-pause'],
  ['governor',()=>startOverspeedFault(document.getElementById('btn-overspeed')),'demo-pause']
 ];
 const browser=phone?await chromium.connectOverCDP('http://127.0.0.1:9222'):await chromium.launch({args:['--enable-gpu','--use-angle=d3d11']});
@@ -44,6 +44,12 @@ try{
   await page.evaluate(code=>{eval('('+code+')')();},start.toString());await page.waitForFunction(id=>{const e=document.getElementById(id);return e&&!e.hidden&&e.getClientRects().length;},id);if(until)await page.waitForFunction(until);await page.waitForTimeout(250);
   await page.evaluate(id=>{document.getElementById(id).addEventListener('click',()=>{window.pauseExpected=pauseView();window.pauseTweens=[...gsap.getTweensOf(camera.position),...gsap.getTweensOf(controls.target)];},{once:true,capture:true});},id);
   await press(id);await page.waitForFunction(()=>DemoPause.paused);const frozen=await page.evaluate(()=>pauseModel());
+  if(mobile){
+   const labels=await page.evaluate(()=>({pause:document.getElementById('demo-pause')?.textContent,home:document.getElementById('m-demo-exit')?.textContent,homeHidden:document.getElementById('m-demo-exit')?.hidden,pausedCls:document.body.classList.contains('m-demo-paused')}));
+   assert.equal(labels.pause,'▶ 계속',key+': mobile pause label');
+   assert.equal(labels.pausedCls,true,key+': mobile paused class');
+   if(!labels.homeHidden)assert.equal(labels.home,'첫 화면',key+': mobile paused home label');
+  }
   assert.equal(await page.evaluate(()=>controls.enabled&&controls.enableRotate&&controls.enablePan&&controls.enableZoom),true,key+': navigation enabled');
   const before=await page.evaluate(()=>pauseView());const v=await page.evaluate(()=>({w:innerWidth,h:innerHeight})),x=v.w*.43,y=v.h*.30;
   if(mobile){

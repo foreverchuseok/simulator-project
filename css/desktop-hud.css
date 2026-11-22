@@ -57,6 +57,10 @@ body.desktop-hud #inspection-return { flex-basis:100%; }
 body.desktop-hud #rail { display:none; }
 body.desktop-hud #hud > .sheet { left:324px;right:auto;top:auto;bottom:12px;max-height:calc(100dvh - 24px);transform-origin:bottom left; }
 body.desktop-hud #pc-view-options #c-cabin { width:100%;margin-top:8px;justify-content:center; }
+#dd-overview .zone-grid { display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px; }
+#dd-overview .zone-btn { min-height:40px;padding:6px 8px;border:1px solid var(--ui-line);border-radius:11px;background:var(--ui-fill);color:var(--ui-text);font:600 13px/1.2 var(--ui-font);cursor:pointer;transition:background .15s; }
+#dd-overview .zone-btn:hover { background:var(--ui-fill-2); }
+#dd-overview #xray-toggle { margin-top:8px;margin-bottom:0; }
 body.desktop-hud #walk-panel { top:90px; }
 body.desktop-hud #pc-dock button:disabled { opacity:.45;cursor:default; }
 body.desktop-hud #m-demo { display:flex;right:16px;top:104px; }

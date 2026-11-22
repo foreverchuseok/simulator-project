@@ -186,8 +186,15 @@ const TerminalDemo = (() => {
 
   /* ── 카 반투명: 스위치는 레일 뒤(카 측면과 벽 사이)에 있어 카 쪽에서만 보인다. 캠(terminalCamAssy)만 불투명 유지 ── */
   function ghostCar(on) {
-    if (!on) { ghosts.forEach(([o, m, g]) => { o.material = m; [].concat(g).forEach(x => x.dispose()); }); ghosts = []; return; }
+    if (!on) {
+      if (!ghosts.length) return;
+      ghosts.forEach(([o, m, g]) => { o.material = m; [].concat(g).forEach(x => x.dispose()); }); ghosts = [];
+      if (typeof XrayView !== 'undefined') XrayView.suspendCar(false); // 외벽 투시가 켜져 있으면 카 외판 반투명을 다시 적용
+      return;
+    }
     if (ghosts.length) return;
+    // 외벽 투시가 바꿔 둔 카 외판 재질을 먼저 돌려받는다(서로 원본으로 저장하면 종료 뒤 반투명이 남는다).
+    if (typeof XrayView !== 'undefined') XrayView.suspendCar(true);
     const cam = carGrp.getObjectByName('terminalCamAssy');
     carGrp.traverse(o => {
       if (!o.isMesh || !o.material) return;

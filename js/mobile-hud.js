@@ -29,7 +29,12 @@ const MobileHUD = (() => {
     clean: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>',
     reload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9a8 8 0 1 1 0 6M4 4v5h5"/></svg>',
     back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h13M8 7l-5 5 5 5"/><path d="M21 5v14"/></svg>',
-    exit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h5a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-5"/><path d="M10 8l-4 4 4 4M6 12h10"/></svg>'
+    exit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h5a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-5"/><path d="M10 8l-4 4 4 4M6 12h10"/></svg>',
+    mr: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.5"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3m-2.6-6.4-2.1 2.1M7.7 16.3l-2.1 2.1m0-12.8 2.1 2.1m8.6 8.6 2.1 2.1"/></svg>',
+    cartop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11h16M6 11V7h12v4M5 11v8h14v-8M12 4v3"/></svg>',
+    hall: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M12 3v18M9 12h.01M15 12h.01"/></svg>',
+    pit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16M7 20v-6h4v6m2 0v-6h4v6M12 4v7m-3-3 3 3 3-3"/></svg>',
+    xray: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2" stroke-dasharray="3 2"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg>'
   };
 
   function barButton(id, modes, icon, label, onClick) {
@@ -115,7 +120,31 @@ const MobileHUD = (() => {
     camera.updateProjectionMatrix();
   }
 
-  // 렌더 루프에서 호출 — 바 모드·라벨만 갱신한다(가벼운 DOM 비교만).
+  function syncDemoBar() {
+    if (!bar || !media.matches) return;
+    const paused = typeof DemoPause !== 'undefined' && DemoPause.paused;
+    const isDemo = mode === 'demo' || demoActive();
+    if (document.body.classList.contains('m-demo-paused') !== (isDemo && paused)) {
+      document.body.classList.toggle('m-demo-paused', isDemo && paused);
+    }
+    if (!isDemo) return;
+    const ucmExit = $('ucm-exit');
+    const latched = !$('fault-reset').hidden || shown(ucmExit);
+    const target = latched ? null : exitTarget();
+    if (exitBtn.hidden !== latched) exitBtn.hidden = latched;
+    if (exitBtn.disabled !== !target) exitBtn.disabled = !target;
+    // 일시정지 중에는 「첫 화면」으로 명확히 전환(A안: ▶ 계속 + ⌂ 첫 화면), 진행 중에는 기존 「시연 종료」 유지.
+    const exitLabel = paused ? '첫 화면' : '시연 종료';
+    const exitSpan = exitBtn.querySelector('span');
+    if (exitSpan.textContent !== exitLabel) {
+      exitBtn.innerHTML = (paused ? ICON.home : ICON.exit) + '<span>' + exitLabel + '</span>';
+    }
+    const exitTitle = paused ? '시연을 끝내고 첫 화면으로 정리' : (target ? '시연을 끝내고 정상 운행 화면으로' : '진행 중인 장면이 끝나면 종료할 수 있습니다');
+    if (exitBtn.title !== exitTitle) {
+      exitBtn.title = exitTitle;
+      if (exitBtn.getAttribute('aria-label') !== exitTitle) exitBtn.setAttribute('aria-label', exitTitle);
+    }
+  }
   function update() {
     if (!bar) return;
     wideView();
@@ -157,18 +186,15 @@ const MobileHUD = (() => {
     const viewOpen = $('dd-overview').classList.contains('open');
     flag($('m-view'), 'active', viewOpen);
     attr($('m-view'), 'aria-expanded', viewOpen);
+    const xrayBtn = $('m-xray');
+    if (xrayBtn && typeof XrayView !== 'undefined') {
+      flag(xrayBtn, 'active', XrayView.active);
+      attr(xrayBtn, 'aria-pressed', XrayView.active);
+    }
     const insLabel = insMode ? '자동' : '수동';
     attr(insBtn, 'aria-label', insTitle);
     if (insBtn.querySelector('span').textContent !== insLabel) insBtn.querySelector('span').textContent = insLabel;
-    if (mode === 'demo') {
-      const ucmExit = $('ucm-exit');
-      const latched = !$('fault-reset').hidden || shown(ucmExit);
-      const target = latched ? null : exitTarget();
-      if (exitBtn.hidden !== latched) exitBtn.hidden = latched;
-      if (exitBtn.disabled !== !target) exitBtn.disabled = !target;
-      const exitTitle = target ? '시연을 끝내고 정상 운행 화면으로' : '진행 중인 장면이 끝나면 종료할 수 있습니다';
-      if (exitBtn.title !== exitTitle) exitBtn.title = exitTitle;
-    }
+    syncDemoBar();
   }
 
   function sync() {
@@ -528,11 +554,13 @@ const MobileHUD = (() => {
     barButton('m-walk-exit', 'walk', 'exit', '체험 종료', () => $('walk-exit').click());
     bar.insertAdjacentHTML('beforeend', '<span class="m-slot-pause-slot"></span><span class="m-slot-reset-slot"></span>');
     exitBtn = barButton('m-demo-exit', 'demo', 'exit', '시연 종료', () => {});
-    // 시연 모듈은 document 캡처 단계에서 허용목록 밖의 버튼을 막는다. 「시연 종료」는 window 캡처에서 먼저 받아
+    // 시연 모듈은 document 캡처 단계에서 허용목록 밖의 버튼을 막는다. 「시연 종료 / 첫 화면」은 window 캡처에서 먼저 받아
     // 각 시연이 이미 허용하는 종료 경로(패널 종료 버튼·비상정지·고장 복귀)로만 넘긴다.
-    window.addEventListener('click', e => {
+    for (const type of ['pointerdown', 'pointerup', 'click']) window.addEventListener(type, e => {
       if (!e.target.closest?.('#m-demo-exit')) return;
       e.stopImmediatePropagation();
+      if (type !== 'click') return;
+      e.preventDefault();
       const go = !exitBtn.disabled && exitTarget();
       if (go) go();
     }, true);
@@ -552,7 +580,23 @@ const MobileHUD = (() => {
     $('dd-op').append(insBtn);
     const views = document.createElement('div');
     views.className = 'm-only m-view-grid';
-    views.append($('m-home'), $('m-cabin'));
+    const makeViewBtn = (id, icon, label, title, onClick) => {
+      const b = document.createElement('button');
+      b.id = id; b.type = 'button'; b.className = 'm-btn';
+      b.innerHTML = (ICON[icon] || '') + '<span>' + label + '</span>';
+      b.title = title; b.setAttribute('aria-label', title);
+      b.addEventListener('click', onClick);
+      return b;
+    };
+    const zoneButtons = [
+      ['m-zone-mr', 'mr', '기계실', '기계실 시점으로 이동', 'mr'],
+      ['m-zone-cartop', 'cartop', '카 상부', '카 상부 시점으로 이동', 'cartop'],
+      ['m-zone-hall', 'hall', '승강장', '현재 층 승강장 시점으로 이동', 'hall'],
+      ['m-zone-pit', 'pit', '피트', '피트 시점으로 이동', 'pit']
+    ].map(([id, icon, label, title, key]) => makeViewBtn(id, icon, label, title, () => { setRun(false); CameraZones.go(key); }));
+    const xrayBtn = makeViewBtn('m-xray', 'xray', '외벽 투시', '외벽·카 벽 반투명 투시 보기 전환', () => { setRun(false); XrayView.toggle(); closeAllMenus(); });
+    xrayBtn.setAttribute('aria-pressed', 'false');
+    views.append($('m-home'), $('m-cabin'), ...zoneButtons, xrayBtn);
     $('dd-overview').querySelector('.sheet-head').after(views);
     const help = document.createElement('p');
     help.className = 'm-only m-view-help';
@@ -567,5 +611,5 @@ const MobileHUD = (() => {
     sync();
   }
 
-  return { init, update, setRun, get mode() { return mode; }, get runOpen() { return runOpen; }, isMobile: () => media.matches, demoChoices: DEMO_CHOICES, demoSummary: DEMO_SUMMARY };
+  return { init, update, syncDemoBar, setRun, get mode() { return mode; }, get runOpen() { return runOpen; }, isMobile: () => media.matches, demoChoices: DEMO_CHOICES, demoSummary: DEMO_SUMMARY };
 })();

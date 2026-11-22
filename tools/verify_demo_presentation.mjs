@@ -93,9 +93,15 @@ try{
    await page.waitForFunction(()=>['recover','done'].includes(TerminalDemo.state.stage));await page.evaluate(()=>{gsap.globalTimeline.timeScale(1);});
   }
   if(name==='retention'){
-   await page.waitForFunction(()=>RetentionDemo.state.phase==='stagger');await press('#m-demo-guide-action');await page.waitForFunction(()=>DemoPause.paused);
-   assert.ok((await page.locator('#m-demo-guide').boundingBox()).y>await page.evaluate(()=>innerHeight-90));
-   await page.screenshot({path:`${out}/${tag}-retention.png`});await press('#m-demo-guide-action');assert.equal(await page.evaluate(()=>DemoPause.paused),false);
+   await page.waitForFunction(()=>RetentionDemo.state.phase==='stagger');
+   await press('#demo-pause');await page.waitForFunction(()=>DemoPause.paused);
+   assert.equal(await page.locator('#demo-pause').innerText(),'▶ 계속');
+   assert.equal(await page.locator('#m-demo-exit').innerText(),'첫 화면');
+   assert.equal(await page.locator('#m-demo-guide-action').isVisible(),false);
+   const gb=await page.locator('#m-demo-guide').boundingBox(),bb=await page.locator('#m-bar').boundingBox();
+   assert.ok(gb&&bb&&gb.y+gb.height<=bb.y+1,'retention subtitle stays above unified mobile bar');
+   await page.screenshot({path:`${out}/${tag}-retention.png`});
+   await press('#demo-pause');assert.equal(await page.evaluate(()=>DemoPause.paused),false);
   }
   if(['photo','rope','car-buffer'].includes(name))await page.screenshot({path:`${out}/${tag}-${name}.png`});
   await exit();console.log('PASS',tag,name);

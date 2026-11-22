@@ -37,7 +37,13 @@ const DemoPause = (() => {
     document.body.appendChild(btn);
     label();
   }
-  function label() { if (btn) { btn.textContent = paused ? '▶ 재생' : '❚❚ 일시정지'; btn.setAttribute('aria-pressed', String(paused)); } }
+  const isMobileUI = () => typeof MobileHUD !== 'undefined' && MobileHUD.isMobile();
+  function label() {
+    if (!btn) return;
+    const text = paused ? (isMobileUI() ? '▶ 계속' : '▶ 재생') : '❚❚ 일시정지';
+    if (btn.textContent !== text) btn.textContent = text;
+    btn.setAttribute('aria-pressed', String(paused));
+  }
   function localPause(on) {
     if (typeof BufferDemo !== 'undefined' && BufferDemo.active) BufferDemo.setPaused(on);
     if (typeof RetentionDemo !== 'undefined' && RetentionDemo.active) RetentionDemo.setPaused(on);
@@ -89,15 +95,22 @@ const DemoPause = (() => {
       gsap.globalTimeline.resume(); MACH.hold?.(false);
     }
     label();
+    if (typeof MobileHUD !== 'undefined' && MobileHUD.syncDemoBar) MobileHUD.syncDemoBar();
   }
   // 렌더 루프에서 호출 — 버튼 표시·자동 해제만 한다.
   function update() {
     if (!btn) return;
     const demo = current();
+    const mobile = isMobileUI();
     // 상승과속·브레이크 비교는 시연 중 스스로 estop 을 켠다 — 멈춘 뒤 사용자가 새로 누른 비상정지만 해제 조건이다.
     if (paused && (!demo || (estop && !saved?.estop))) set(false, { exit: true, ended: !demo });
-    btn.hidden = !demo || !!demo[2];
-    if (demo) btn.title = paused ? '드래그로 회전 · 휠/두 손가락 확대·축소 · 우클릭/두 손가락 이동 · 재생하면 시연 화면으로 복귀' : demo[0] + ' 시연 일시정지·재생';
+    // 모바일은 14종 시연 모두 하단 바의 공통 일시정지 버튼을 사용한다(Phase 3 통일).
+    btn.hidden = !demo || (!mobile && !!demo[2]);
+    if (demo) {
+      label();
+      const title = paused ? '드래그로 회전 · 휠/두 손가락 확대·축소 · 우클릭/두 손가락 이동 · 재생하면 시연 화면으로 복귀' : demo[0] + ' 시연 일시정지·재생';
+      if (btn.title !== title) btn.title = title;
+    }
     if (innerWidth < 800) Object.assign(btn.style, { left: '8px', top: '76px', transform: 'none' });
     // 상단 가운데 12~56px 은 개문발차·상승과속의 「종료 · 정상 복귀」 버튼 자리 — 그 아래에 둔다.
     else Object.assign(btn.style, { left: '50%', top: '64px', transform: 'translateX(-50%)' });

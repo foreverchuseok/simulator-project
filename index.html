@@ -946,7 +946,14 @@
       <div class="sheet glass" id="dd-overview" role="dialog" aria-label="보기">
         <div class="sheet-head"><h3>보기</h3><button class="sheet-close" data-close aria-label="닫기">✕</button></div>
         <button id="overview-home" class="act-code" style="width:100%;min-height:44px">처음 시점으로</button>
+        <div class="zone-grid" role="group" aria-label="구역별 바로 보기">
+          <button type="button" class="zone-btn" data-zone="mr">기계실</button>
+          <button type="button" class="zone-btn" data-zone="cartop">카 상부</button>
+          <button type="button" class="zone-btn" data-zone="hall">승강장</button>
+          <button type="button" class="zone-btn" data-zone="pit">피트</button>
+        </div>
         <div id="pc-view-options"></div>
+        <button type="button" class="toggle" id="xray-toggle" aria-pressed="false" title="외벽·카 벽을 반투명하게 전환해 내부 장치와 움직임을 관찰합니다"><span><b><span class="l-full">외벽 투시</span><span class="l-short">투시</span></b><small>외벽·카 벽 반투명 보기</small></span></button>
       </div>
 
       <!-- 시트: 설정 -->

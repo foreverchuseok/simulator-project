@@ -219,6 +219,13 @@ const PitLadder = (() => {
       PartActions.positionButton(actionButton,(anchor.x+1)*innerWidth/2+18,(1-anchor.y)*innerHeight/2-22);
     }
   }
+  let foldTween = null;
+  function restoreClosed() {
+    if (!root) return;
+    foldTween?.kill(); foldTween = null;
+    busy = false;
+    setPose(false);
+  }
   function toggle() {
     if (!root || !modelReady || busy || moving) return false;
     const open = !deployed;
@@ -228,10 +235,11 @@ const PitLadder = (() => {
     syncButton();
     const st = { fold: open ? 0 : 1 };
     setContact(false); // 펴는 순간부터, 접을 때는 클립이 다시 물 때까지 운행 차단
-    gsap.to(st, { fold: open ? 1 : 0, duration: 1.2, ease: 'power2.inOut',
-      onUpdate: () => pose(st.fold), onComplete: () => { busy = false; setPose(open); } });
+    foldTween?.kill();
+    foldTween = gsap.to(st, { fold: open ? 1 : 0, duration: 1.2, ease: 'power2.inOut',
+      onUpdate: () => pose(st.fold), onComplete: () => { foldTween = null; busy = false; setPose(open); } });
     return true;
   }
-  return { build, toggle, update, get secured() { return !!root && root.userData.contactClosed; },
+  return { build, toggle, restoreClosed, update, get secured() { return !!root && root.userData.contactClosed; },
     get deployed() { return deployed; }, get busy() { return busy; }, dimensions: D };
 })();

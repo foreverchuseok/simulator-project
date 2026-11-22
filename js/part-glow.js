@@ -17,6 +17,16 @@ const PartGlow = (() => {
   let lastNow = 0, enabled = true, frame = 0, hover = null, menuPart = null, menu, tip, pointer = null, lastOpen = { part: null, time: 0 };
   let tapPt = null, hudDismissed = false, zoomedEvent = null, slowCloseHook = null, wasMobileMode = false;
   const activePointers = new Map();
+  // 모바일 Tier 1 금색 별빛 비콘(2026-11-22 Phase 1): 단일 THREE.Points 드로우콜(+1회, 스텐실 0회).
+  const MAX_BEACONS = 32, OVERVIEW_DIST = 12;
+  const OVERVIEW_REPS = new Map([
+    ['과속 조절기', 10], ['로프브레이크', 9], ['권상기 주브레이크', 9], ['제어반', 8],
+    ['ARD 자동구출장치', 8], ['카 완충기', 8], ['균형추 완충기', 8], ['카 상부 주로프', 7], ['1층 승장문 비상키', 7], ['피트 사다리', 6]
+  ]);
+  let beaconScene = null, beaconPts = null, beaconGeo = null, beaconMat = null, beaconCount = 0;
+  let beaconPosArr = null, beaconPhaseArr = null, beaconScaleArr = null, beaconHits = [];
+  const reducedMotion = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
+  const _bDir = new THREE.Vector3(), _bSize = new THREE.Vector3(), _bProj = new THREE.Vector3(), _bPos = new THREE.Vector3();
   try { enabled = localStorage.getItem(STORE) !== '0'; } catch (e) { /* 저장소 없음 */ }
 
   /* ── 셰이더 ── */
@@ -70,6 +80,54 @@ const PartGlow = (() => {
     }`;
   // 밝은 하늘·벽에서도 금색이 보이도록 일반 혼합을 쓴다(가산 혼합은 흰색으로 날아간다).
   const blend = { transparent: true, depthWrite: false };
+  // 모바일 Tier 1 금색 별빛 비콘 셰이더: 4각 별빛 글린트 + 은은한 동심원 리플(단일 금색 톤, 민트·푸른빛 없음).
+  const beaconVS = `
+    attribute float aPhase;
+    attribute float aScale;
+    uniform float uBaseSize;
+    uniform float uDpr;
+    varying float vPhase;
+    varying float vScale;
+    void main(){
+      vPhase = aPhase;
+      vScale = aScale;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      gl_PointSize = uBaseSize * uDpr * aScale;
+    }`;
+  const beaconFS = `
+    uniform float uTime;
+    uniform float uDim;
+    uniform float uReduced;
+    varying float vPhase;
+    varying float vScale;
+    void main(){
+      vec2 p = gl_PointCoord - 0.5;
+      float d = length(p);
+      if (d > 0.5) discard;
+      float t = uReduced > 0.5 ? 0.35 : fract(uTime * 0.42 + vPhase);
+      float breath = uReduced > 0.5 ? 0.92 : 0.78 + 0.22 * sin(uTime * 3.1 + vPhase * 6.28318);
+      // 4각 별빛(가로·세로 주광선 + 미세 대각선 보조광선)
+      float crossMain = exp(-abs(p.y) * 28.0) * exp(-abs(p.x) * 6.2)
+                      + exp(-abs(p.x) * 28.0) * exp(-abs(p.y) * 6.2);
+      vec2 dp = vec2(p.x + p.y, p.x - p.y) * 0.7071;
+      float crossDiag = (exp(-abs(dp.y) * 34.0) * exp(-abs(dp.x) * 11.0)
+                       + exp(-abs(dp.x) * 34.0) * exp(-abs(dp.y) * 11.0)) * 0.36;
+      float core = exp(-d * d * 56.0);
+      float halo = exp(-d * d * 14.0) * 0.48;
+      // 은은한 동심원 리플 파동 (정지 접근성 설정에서는 끔)
+      float ringR = 0.11 + t * 0.34;
+      float ringEnv = smoothstep(0.0, 0.15, t) * (1.0 - smoothstep(0.55, 1.0, t));
+      float ring = uReduced > 0.5 ? 0.0 : exp(-pow((d - ringR) * 26.0, 2.0)) * ringEnv * 0.58;
+      float star = min(1.3, (crossMain + crossDiag) * 0.72 + core * 0.95);
+      float alpha = clamp((star * breath + halo + ring) * uDim * vScale, 0.0, 1.0);
+      if (alpha < 0.015) discard;
+      vec3 amber = vec3(0.84, 0.58, 0.07);
+      vec3 gold  = vec3(1.00, 0.812, 0.361);   // #ffcf5c
+      vec3 white = vec3(1.00, 0.965, 0.839);   // #fff6d6
+      vec3 col = mix(amber, gold, clamp(halo * 1.4 + ring + star * 0.5, 0.0, 1.0));
+      col = mix(col, white, clamp(core * 0.9 + crossMain * 0.45, 0.0, 1.0));
+      gl_FragColor = vec4(col, alpha);
+    }`;
   // 스텐실: 부품 몸체 3 → 안쪽 띠 2 → 바깥 띠 1. GREATER 비교로 각 픽셀을 한 번만 칠해 겹침 농도 얼룩이 없다.
   const band = ref => ({ stencilWrite: true, stencilRef: ref, stencilFunc: THREE.GreaterStencilFunc,
     stencilFail: THREE.KeepStencilOp, stencilZFail: THREE.KeepStencilOp, stencilZPass: THREE.ReplaceStencilOp });
@@ -226,7 +284,10 @@ const PartGlow = (() => {
     if (bodyHas('buffer-demo-active') && !/buffer-demo-action$/.test(e.button.id)) return true;
     return false;
   }
-  const liveEntries = part => part.entries.filter(e => !e.button.hidden && !suppressed(e));
+  const liveEntries = part => {
+    const mobileRep = isMobileGeneral() && OVERVIEW_REPS.has(part.name);
+    return part.entries.filter(e => (!e.button.hidden || mobileRep) && !suppressed(e));
+  };
   function worldVisible(o) { for (let p = o; p; p = p.parent) if (!p.visible) return false; return true; }
 
   function refresh() {
@@ -295,6 +356,24 @@ const PartGlow = (() => {
     }
     if (best && occluded(best)) best = null;
     if (best) return best.part;
+    // 모바일 Tier 1 금색 비콘 위를 직접 탭한 경우(24px 여유, 벽 너머는 occluded로 차단).
+    if (mobile && beaconHits.length) {
+      let bestB = null, bestBD = 24;
+      for (const b of beaconHits) {
+        if (!b.part.active) continue;
+        const d = Math.hypot(x - b.x, y - b.y);
+        if (d < bestBD) {
+          box.makeEmpty(); b.part.meshes.forEach(m => { if (worldVisible(m)) box.expandByObject(m); });
+          if (box.isEmpty()) continue;
+          box.clampPoint(camera.position, v);
+          const worldDistance = camera.position.distanceTo(v); v.project(camera);
+          ray.setFromCamera(ndc.set(v.x, v.y), camera);
+          if (occluded({ part: b.part, distance: worldDistance })) continue;
+          bestBD = d; bestB = b.part;
+        }
+      }
+      if (bestB) return bestB;
+    }
     // 작은 부품은 화면 경계상자 근처(PC 16px, 모바일 22px) 탭도 받는다. 벽 너머 부품은 occluded로 차단한다.
     let near = null, distance = Infinity;
     for (const part of parts) {
@@ -559,6 +638,83 @@ const PartGlow = (() => {
     menu.style.top = chosen.y + 'px';
   }
 
+  function initBeacons() {
+    beaconPosArr = new Float32Array(MAX_BEACONS * 3);
+    beaconPhaseArr = new Float32Array(MAX_BEACONS);
+    beaconScaleArr = new Float32Array(MAX_BEACONS);
+    beaconGeo = new THREE.BufferGeometry();
+    beaconGeo.setAttribute('position', new THREE.BufferAttribute(beaconPosArr, 3).setUsage(THREE.DynamicDrawUsage));
+    beaconGeo.setAttribute('aPhase', new THREE.BufferAttribute(beaconPhaseArr, 1).setUsage(THREE.DynamicDrawUsage));
+    beaconGeo.setAttribute('aScale', new THREE.BufferAttribute(beaconScaleArr, 1).setUsage(THREE.DynamicDrawUsage));
+    beaconGeo.setDrawRange(0, 0);
+    beaconMat = new THREE.ShaderMaterial({
+      vertexShader: beaconVS, fragmentShader: beaconFS,
+      uniforms: { uTime: time, uBaseSize: { value: 34 }, uDpr: { value: 1 }, uDim: { value: 1 }, uReduced: { value: 0 } },
+      transparent: true, depthTest: true, depthWrite: false
+    });
+    beaconPts = new THREE.Points(beaconGeo, beaconMat);
+    beaconPts.frustumCulled = false; beaconPts.matrixAutoUpdate = false;
+    beaconScene = new THREE.Scene(); beaconScene.autoUpdate = false;
+    beaconScene.add(beaconPts);
+  }
+  function updateBeacons(mobile) {
+    beaconCount = 0; beaconHits = [];
+    if (!beaconGeo || !mobile || !enabled || mobileDemoRunning()) {
+      if (beaconGeo) beaconGeo.setDrawRange(0, 0);
+      return;
+    }
+    const camDist = camera.position.distanceTo(controls.target);
+    const farView = camDist > OVERVIEW_DIST;
+    const minSep = farView ? 42 : 36;
+    const cands = [];
+    for (const part of parts) {
+      if (!part.active) continue;
+      const repPrio = OVERVIEW_REPS.get(part.name) || 0;
+      if (farView && !repPrio && part !== menuPart) continue;
+      const live = liveEntries(part);
+      if (!live.length || live.every(e => e.button.disabled)) continue;
+      box.makeEmpty();
+      for (const m of part.meshes) if (worldVisible(m)) box.expandByObject(m);
+      if (box.isEmpty()) continue;
+      // 경계상자 윗면(매립 소형 부품은 중심) + 카메라 쪽으로 약간 띄워 자체 메시에 가리지 않으면서 벽 뒤는 깊이 버퍼로 자연 가림.
+      box.getCenter(_bPos);
+      box.getSize(_bSize);
+      const sz = _bSize.length() || 0.1;
+      if (sz >= 0.15) _bPos.y = box.max.y + Math.min(0.06, sz * 0.08);
+      _bDir.copy(camera.position).sub(_bPos);
+      const dist = _bDir.length();
+      if (dist < 0.05) continue;
+      const nudge = sz < 0.15 ? 0.09 : THREE.MathUtils.clamp(Math.min(sz * 0.15, dist * 0.025), 0.055, 0.14);
+      _bPos.addScaledVector(_bDir, nudge / dist);
+      _bProj.copy(_bPos).project(camera);
+      if (_bProj.z < -1 || _bProj.z > 1 || Math.abs(_bProj.x) > 0.94 || Math.abs(_bProj.y) > 0.90) continue;
+      const sx = (_bProj.x + 1) * innerWidth / 2, sy = (1 - _bProj.y) * innerHeight / 2;
+      // 선택된 부품은 Tier 2 발광을 쓰므로 비콘 점은 그리지 않되, 같은 자리 재탭(확대·닫기)용 히트 좌표는 유지한다.
+      if (part === menuPart) { beaconHits.push({ part, x: sx, y: sy }); continue; }
+      cands.push({ part, x: _bPos.x, y: _bPos.y, z: _bPos.z, sx, sy, dist, prio: repPrio, sz });
+    }
+    // 원거리는 대표 우선순위, 근거리는 대표 + 카메라 최단거리 순으로 겹침 억제.
+    cands.sort((a, b) => farView ? (b.prio - a.prio || a.dist - b.dist) : (b.prio - a.prio || a.dist - b.dist));
+    const maxAllowed = farView ? 8 : MAX_BEACONS;
+    for (const c of cands) {
+      if (beaconCount >= maxAllowed) break;
+      if (beaconHits.some(h => Math.hypot(h.x - c.sx, h.y - c.sy) < minSep)) continue;
+      const i = beaconCount++;
+      beaconPosArr[i * 3] = c.x; beaconPosArr[i * 3 + 1] = c.y; beaconPosArr[i * 3 + 2] = c.z;
+      beaconPhaseArr[i] = ((c.part.name.length * 0.27 + i * 0.19) % 1);
+      beaconScaleArr[i] = farView ? 0.88 : THREE.MathUtils.clamp(0.84 + Math.min(0.24, c.sz * 0.15), 0.84, 1.08);
+      beaconHits.push({ part: c.part, x: c.sx, y: c.sy });
+    }
+    if (beaconCount > 0) {
+      beaconGeo.attributes.position.needsUpdate = true;
+      beaconGeo.attributes.aPhase.needsUpdate = true;
+      beaconGeo.attributes.aScale.needsUpdate = true;
+      beaconMat.uniforms.uDpr.value = renderer.getPixelRatio();
+      beaconMat.uniforms.uDim.value = menuPart ? 0.32 : 1.0;
+      beaconMat.uniforms.uReduced.value = reducedMotion.matches ? 1.0 : 0.0;
+    }
+    beaconGeo.setDrawRange(0, beaconCount);
+  }
   function setEnabled(value) {
     enabled = !!value;
     try { localStorage.setItem(STORE, enabled ? '1' : '0'); } catch (e) { /* 저장소 없음 */ }
@@ -636,6 +792,7 @@ const PartGlow = (() => {
     });
     const toggle = document.getElementById('part-glow-toggle');
     if (toggle) toggle.addEventListener('click', () => setEnabled(!enabled));
+    initBeacons();
     setEnabled(enabled);
   }
 
@@ -676,16 +833,21 @@ const PartGlow = (() => {
     renderer.getDrawingBufferSize(res.value);
     const lit = [];
     for (const part of parts) { syncPart(part, pulse, ease || .18); if (part.root.visible) lit.push(part); }
-    if (!lit.length) return;
+    updateBeacons(mobile);
+    if (!lit.length && !beaconCount) return;
     const autoClear = renderer.autoClear, autoReset = renderer.info.autoReset;
     renderer.autoClear = false; renderer.info.autoReset = false;
+    if (beaconCount > 0) renderer.render(beaconScene, camera);
     // 부품 속 부품(제어반 ⊃ 점검 스위치)도 테두리가 보이도록 부품마다 스텐실을 비운다.
     for (const part of lit) { renderer.clearStencil(); renderer.render(part.root, camera); }
     renderer.autoClear = autoClear; renderer.info.autoReset = autoReset;
   }
 
   return { bind, init, render, closeMenu, setEnabled, get enabled() { return enabled; }, palette: { IDLE, HOT },
-    get parts() { return parts; }, get menuPart() { return menuPart; }, pickAt, activate, partCenter,
+    get parts() { return parts; }, get menuPart() { return menuPart; }, get beaconCount() { return beaconCount; },
+    get beacons() { return beaconHits.map(b => ({ name: b.part.name, x: b.x, y: b.y })); },
+    invalidateBlockers() { blockersAt = -1e9; },
+    pickAt, activate, partCenter,
     markZoomTap(e) { zoomedEvent = e; closeMenu(); },
     hudWasDismissed() { return hudDismissed; },
     onSlowClose(fn) { slowCloseHook = fn; } };

@@ -37,6 +37,7 @@ const EmergencyLighting=(()=>{
       const label=`카상부·카내 비상등 ${on?'끄기':'켜기'}`;button.setAttribute('aria-label',label);button.title=label;}
   }
   function toggle(){if(!ready)return false;on=!on;apply();return true;}
+  function set(value){if(!ready)return false;on=!!value;apply();return true;}
   function wire(parent,name,points){CarWiring.run(parent,name,points,{radius:.0022,bend:.018});}
   async function build(){
     if(built)return;built=true;
@@ -85,5 +86,5 @@ const EmergencyLighting=(()=>{
     button.hidden=!shown;
     if(shown)PartActions.positionButton(button,(point.x+1)*innerWidth/2-22,(1-point.y)*innerHeight/2-22);
   }
-  return {build,update,toggle,lamps,get power(){return power;},get ready(){return ready;},get on(){return on;}};
+  return {build,update,toggle,set,lamps,get power(){return power;},get ready(){return ready;},get on(){return on;}};
 })();

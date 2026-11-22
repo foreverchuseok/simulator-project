@@ -22,6 +22,50 @@
 
 ## 현재 단계 — 모바일 사용 경험 개편
 
+### 2026-11-22 고객·교육생 브리핑 개편 (1~6번 구현 완료 · 사용자 확인 대기)
+
+- **완료된 1~5번 (모두 PC·모바일·S22+ 실기기 검증 통과, 현재 로컬 워킹트리 미커밋 상태)**:
+  1. **모바일 금색 별빛 비콘 (Phase 1)** — `js/part-glow.js`: 단일 `THREE.Points` 금색 4각 별빛·리플(+1 드로우콜, 스텐실 0), 원거리 대표 부품 겹침 억제·근거리 세부 노출, 비콘 직접 1탭 팝업·천천히 재탭 닫힘·700ms 내 2연타 확대.
+  2. **14종 시연 일시정지 A안 통일 (Phase 3)** — `js/demo-pause.js`, `js/mobile-hud.js`, `js/mobile-demo-guide.js`, `js/retention-demo.js`, `css/mobile-hud.css`, `css/mobile-demo-guide.css`: 완충기·문 이탈방지(`retention-story`) 포함 모바일 14종 전체가 하단 바 `#demo-pause`를 사용하며 일시정지 시 `[▶ 계속]` + `[⌂ 첫 화면]`(`#m-demo-exit`)으로 즉시 전환(`MobileHUD.syncDemoBar()`, 우상단 `×` 유지).
+  3. **비-시연 설비 일괄 원상복구 (`SceneClean`)** — `js/demo-exit.js`, `js/pit-ladder.js`, `js/building-lights.js`, `js/emergency-lighting.js`: 제어반·분전함 문, 피트 사다리, 승장문 수동개방/비상키, 조명·비상등, 비상통화, 점검운전·바이패스·비상정지 중 하나라도 열려/켜져 있으면 상단 `↺ 설비 정리`(`#scene-clean-btn`) 자동 표시, 1탭 무리로드 원상복구 + 1층 전체 보기 복귀.
+  4. **구역별 원터치 시점 이동 (`CameraZones`)** — `index.html`, `js/ui.js`, `js/mobile-hud.js`, `css/mobile-hud.css`, `css/desktop-hud.css`: PC 「보기」 / 모바일 「시점」(`#dd-overview`) 안에 `기계실`·`카 상부`(현재 카 높이 추종)·`승강장`(현재 층 추종)·`피트` 4개 원터치 버튼 추가(도착 시 로컬 금색 비콘 자동 활성화).
+  5. **외벽·카 벽 반투명 「외벽 투시」 보기 (`XrayView`)** — `index.html`, `js/ui.js`, `js/mobile-hud.js`, `js/part-glow.js`: `wallGrp`+지사 현판(`opacity 0.16`)·카 불투명 외판(`opacity 0.22`) 반투명 전환, 내부 안전장치·문·레일·로프 100% 불투명 유지, `WeakMap` 고스트 재질 캐시, 과속 절개(`setOVSCutaway`) 충돌 방지(`suspendCar`), 브리핑 모드 호환, 우하단 `투시 ×` 배지(`#xray-badge`, `window` 캡처).
+- **Claude Code 교차 검증 (2026-11-22)**: 1~5번 회귀 검사 PC·모바일 통과. 외벽 투시(`XrayView`)와 종단 스위치 시연 카 반투명(`TerminalDemo.ghostCar`)이 같은 재질을 서로 원본으로 저장해 종료 뒤 카 외판 42개 메시가 반투명으로 남던 결함을 `js/terminal-demo.js`에서 `XrayView.suspendCar()` 연결로 수정(3가지 순서 검사 통과). 승장 호출버튼도 `wallGrp` 소속이라 투시 때 함께 반투명이 된다. `verify_mobile_hud`(낙하 중 종료)·`verify_terminal_switches`(390px `#terminal-demo-reset` 숨김) 실패는 HEAD에서도 동일한 기존 실패다. S22+ 실기기는 미확인.
+- **6) 비교 시연 결과 한 줄 핵심 요약 (`DemoTakeaway`, `js/demo-exit.js`, 2026-11-22)**:
+  - 개문발차(`UCMDemo` 정상/미설치/미작동), 상승과속(`AscentDemo` 정상/미설치), 주브레이크 비교(`BrakeDemo` 더블/싱글), 문 이탈방지(`RetentionDemo` 결과 단계) 완료 시 안전(금색)/위험(적색) 톤의 한 줄 핵심 결론 배너(`#demo-takeaway`, `×` 닫기 `window` 캡처, 일시정지 시 자동 숨김)를 즉시 표시한다.
+  - 모바일은 하단 자막(`#m-demo-guide`) 바로 위, PC는 상단 중앙(`top: 104px`)에 배치해 `#demo-compare-next`·`#demo-exit`·원본 결과 화면과 겹치지 않는다. `verify_demo_opposite`(PC·모바일) 및 `verify_demo_presentation --layout-only` 통과(오류 0건). 사용자 화면 확인 및 S22+ 실기기 확인 대기.
+- **기타 보류 항목 (사용자 지시로 추후 진행)**: 세로 태블릿(`601~900px`) 시연 버튼·모바일 HUD 분기 정리, 태블릿 연속 새로고침 GPU 크래시(`pagehide` `WEBGL_lose_context`).
+
+### 2026-11-22 브리핑용 구역별 원터치 시점 이동(`CameraZones`) · 외벽 투시(`XrayView`) 추가
+
+- **4) 구역별 원터치 시점 이동 (`CameraZones`, `index.html`, `js/ui.js`, `js/mobile-hud.js`, `css/mobile-hud.css`, `css/desktop-hud.css`)**:
+  - 기존 PC 「보기」 / 모바일 하단 「시점」 메뉴(`#dd-overview`) 안에 **`기계실` · `카 상부` · `승강장` · `피트`** 4개 바로가기 버튼을 추가했다(모바일 2열 팝오버 `132px`, 기존 `#overview-home`·`#m-home`·`#c-cabin`·`#m-cabin` 유지).
+  - `카 상부`는 현재 카 높이(`carGrp.position.y`), `승강장`은 현재 층(`FLOOR_Y[curFloor]`)을 기준으로 자동 정렬하며, 각 구역에 도착하면 근거리 부품의 금색 별빛 비콘이 즉시 깨어나 바로 탭해 설명할 수 있다.
+- **5) 외벽·카 벽 반투명 투시 보기 (`XrayView`, `index.html`, `js/ui.js`, `js/mobile-hud.js`, `js/part-glow.js`)**:
+  - 「보기 / 시점」 메뉴의 **`외벽 투시`** 토글(`#xray-toggle` / `#m-xray`)로 승강로 전면벽·좌측벽·로비 마감·지사 로고 현판(`wallGrp`, `opacity 0.16`)과 카 불투명 외판(`opacity 0.22`)만 반투명으로 전환하고, 승장문·인터록·가이드레일·종단 스위치·세이프티기어·균형추·로프·완충기·기계실 설비는 100% 불투명으로 유지한다.
+  - 고스트 재질은 `WeakMap`에 1회 복제 캐시해 재토글 비용을 없앴고, 과속 시연 절개(`setOVSCutaway`)와 충돌하지 않도록 카 절개 시 카 투시만 일시 양보(`suspendCar`)하며, 토글 시 `PartGlow.invalidateBlockers()`로 가림 판정을 즉시 갱신한다.
+  - 투시가 켜진 동안 우하단에 작은 **`투시 ×`** 배지(`#xray-badge`, `window` 캡처 처리로 시연 중에도 즉시 해제 가능, 브리핑 모드 배지와 겹치지 않음)를 표시한다.
+- **검증 결과 (오류 0건)**:
+  - PC(`1280×850`) 4개 구역 이동 + `외벽 투시` 원본 재질 97개 100% 복원 + 과속 절개 호환 통과, `?brief=1` 브리핑 모드 배지 비겹침·호환 통과.
+  - **S22+(`SM-S906N` / Chrome / `384×701`) 실기기 터치·캡처(`temporary/zones-xray/`)**: 시점 2열 메뉴 경계, `기계실`(6개 비콘)·`카 상부`(8개)·`승강장`(9개)·`피트`(3개) 이동 및 구도, `외벽 투시` 켜기·`투시 ×` 배지 끄기 모두 통과.
+  - 기존 회귀: `verify_desktop_hud`(6종 반응형 포함), `verify_background_modes --mobile`, `verify_part_glow` 모두 통과. 요청 없이 커밋·푸시하지 않았다.
+
+### 2026-11-22 모바일 금색 별빛 비콘(Phase 1) · 14종 일시정지 A안 통일(Phase 3) · 설비 일괄 정리(`SceneClean`) 완료
+
+- [MOBILE-PART-INTERACTION-ANALYSIS.md](MOBILE-PART-INTERACTION-ANALYSIS.md)의 남은 확정 사항(**Phase 1 금색 비콘**, **Phase 3 14종 일시정지 A안 통일**, **2차 비-시연 설비 일괄 원상복구**)을 모두 구현하고 PC·모바일·실기기(S22+) 검증을 마쳤다.
+- **1) Phase 1 — 모바일 Tier 1 금색 별빛 비콘 (`js/part-glow.js`)**:
+  - 단일 `THREE.Points` 커스텀 셰이더(드로우콜 +1회, 스텐실 클리어 0회)로 4각 별빛 글린트 + 은은한 동심원 리플을 금색 단일 톤(`#ffcf5c`→`#fff6d6`, 민트·푸른빛 없음)으로 표시한다. `IdleThrottle.pulseTime`, `prefers-reduced-motion: reduce`, 설정 「부품 빛 효과」(`#part-glow-toggle`)와 연동된다.
+  - 경계상자 윗면(매립 소형 부품은 중심) + 카메라 방향 오프셋 + `depthTest: true`로 자체 메시 가림을 피하면서 벽 뒤는 자연 가림 처리했다. 원거리(> 12m 전체 보기)는 대표 부품(`과속 조절기`·`로프브레이크`·`권상기 주브레이크`·`제어반`·`ARD`·`완충기`·`주로프`·`1층 비상키`·`피트 사다리`)과 화면 겹침 억제(`42px`, 최대 8개)만 표시하고, 확대·시점 이동 시 세부 부품이 단계 노출된다.
+  - 선택된 부품(`menuPart`)은 Tier 2 풀 발광으로 전환하고 주변 비콘은 32%로 흐려지며, 비콘 좌표 히트(`24px`, `occluded` 유지)를 유지해 비콘 위 1탭 팝업·천천히 재탭 닫기·700ms 내 2연타 확대가 끊김 없이 동작한다.
+- **2) Phase 3 — 14종 시연 일시정지 A안 통일 (`js/demo-pause.js`, `js/mobile-hud.js`, `js/mobile-demo-guide.js`, `js/retention-demo.js`, `css/mobile-hud.css`, `css/mobile-demo-guide.css`)**:
+  - 완충기(`BufferDemo`)·문 이탈방지(`RetentionDemo`, `retention-story` 포함)까지 모바일 14종 시연 전체가 하단 바(`#m-bar`)의 공통 `#demo-pause`를 사용하도록 통일하고(`#buffer-demo-pause`와 자막 중복 정지 버튼 제거, PC 기존 버튼 유지), 일시정지 시 `[▶ 계속]` + `[⌂ 첫 화면]`(`#m-demo-exit`)으로 즉시 전환(`MobileHUD.syncDemoBar()`, 우상단 `×` 유지)한다.
+- **3) 비-시연 설비 일괄 원상복구 (`js/demo-exit.js` `SceneClean`, `js/pit-ladder.js`, `js/building-lights.js`, `js/emergency-lighting.js`)**:
+  - 제어반·분전함 문, 피트 사다리, 승장문 수동개방/비상키, 조명·비상등, 비상통화, 점검운전·바이패스·비상정지 중 하나라도 열려/켜져 있으면 상단에 `↺ 설비 정리`(`#scene-clean-btn`)가 자동 표시되고, 1탭으로 **페이지 새로고침 없이** 모든 설비를 닫고 1층 정상 상태 + 전체 보기로 복구한다(브리핑 모드·속도·로고·빛 효과 설정 유지).
+- **검증 결과**:
+  - 로컬 PC·모바일: `verify_part_glow`(PC·모바일), `verify_demo_pause`(PC 14종 + `--mobile` 14종), `verify_demo_presentation`(모바일 18건), `verify_demo_exit --mobile`(31건), `verify_mobile_demo_menu`, `verify_perf_quality`(드로우콜 `2,361→2,362`, +1회) 모두 통과, 오류 0건.
+  - **S22+(`SM-S906N` / Chrome / `384×701` / DPR 2.8125) 실기기 터치·캡처(`temporary/phase13-phone/`, 오류 0건)**: 전체 보기 금색 비콘 5개(Tier 2 0개), 비콘 직접 1탭 팝업·선택 1부품 강조·천천히 재탭 닫힘, 700ms 내 2연타 확대(`32.41m→2.00m`), 제어반·분전함·기계실 조명 연 뒤 `↺ 설비 정리` 1탭 무리로드 복귀, `문 이탈방지`·`카 완충기`·`인터록` 일시정지 A안(`❚❚ 일시정지`→`▶ 계속`+`첫 화면`→즉시 복귀) 모두 통과.
+  - **S22+ 동일 조건 성능(`quality=0`, `idle=0`, DPR 2, `temporary/fps/phase13-after-phone-q0.json`)**: 기본 화면 **20.8fps**, CPU 중앙값 **45.6ms**(발광 1.5ms, 31.6→32.6℃), 호출 **2,367/2,367**, 삼각형 **1,341,836**(+0). 변경 전(`phase2-after-phone-q0.json`: 호출 2,361, 삼각형 1,341,836, CPU 48.7ms) 대비 회귀 없음. 요청 없이 커밋·푸시하지 않았다.
+
 ### 2026-11-22 저사양 태블릿용 「브리핑 모드」 추가 (`js/brief-mode.js`)
 
 - 갤럭시탭 S7 FE(`SM-T735N`, 2560×1600, DPR 1.875) 등 저사양 태블릿용 선택 옵션 **「브리핑 모드(가벼운 화면)」**를 추가했다. 기본은 꺼짐이며 다른 기기(S22+·PC)의 화질과 동작은 바꾸지 않는다.

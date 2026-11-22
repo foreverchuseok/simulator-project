@@ -67,6 +67,8 @@ const DemoExit = (() => {
       if (!handlesExit(e)) return;
       e.preventDefault(); e.stopImmediatePropagation(); cancel();
     }, true);
+    SceneClean.build();
+    DemoTakeaway.build();
   }
   function completedComparison() {
     const demo = comparisons.find(d => d.state().active);
@@ -158,10 +160,234 @@ const DemoExit = (() => {
   function update() {
     if (!button) return;
     const demo = current();
-    if (busy) { compareButton.hidden = true; if (!demo) finish(); return; }
+    if (busy) { compareButton.hidden = true; SceneClean.hide(); DemoTakeaway.hide(); if (!demo) finish(); return; }
     updateComparison(demo);
     if (button.hidden === !!demo) button.hidden = !demo;
     if (!demo) rememberLanding();
+    SceneClean.update(!!demo);
+    DemoTakeaway.update();
   }
-  return { build, update, cancel, get active() { return !!current(); }, get busy() { return busy; } };
+  return { build, update, cancel, closeDoorsNow, get active() { return !!current(); }, get busy() { return busy; } };
+})();
+
+// 비-시연 설비 조작(제어반·분전함 문, 피트 사다리, 승장문 수동개방, 조명·비상등, 비상통화, 점검운전·바이패스·비상정지)을
+// 페이지 새로고침 없이 한 번에 원상복구 + 첫 화면으로 정리한다 (2026-11-22).
+const SceneClean = (() => {
+  let btn = null, nextCheck = 0;
+  function dirty() {
+    try {
+      if (DemoExit.active || DemoExit.busy || CharacterWalk.active || inspectionResetting) return false;
+      const bl = typeof BuildingLights !== 'undefined' ? BuildingLights.state : null;
+      return !!(
+        (typeof ControlPanel !== 'undefined' && (ControlPanel.open || ControlPanel.busy)) ||
+        (typeof MachineRoomPower !== 'undefined' && (MachineRoomPower.open || MachineRoomPower.busy)) ||
+        (typeof PitLadder !== 'undefined' && (PitLadder.deployed || PitLadder.busy || !PitLadder.secured)) ||
+        (typeof HallManual !== 'undefined' && (HallManual.active || HallManual.busy || !document.getElementById('hall-panel')?.hidden)) ||
+        (bl && (bl.mr || bl.shaft || bl.car)) ||
+        (typeof EmergencyLighting !== 'undefined' && EmergencyLighting.on) ||
+        (typeof EmergencyCall !== 'undefined' && EmergencyCall.state.active) ||
+        (typeof InspectionStations !== 'undefined' && InspectionStations.active) ||
+        (typeof DoorBypass !== 'undefined' && DoorBypass.mode !== 'off') ||
+        insMode || estop
+      );
+    } catch (e) { return false; }
+  }
+  function run() {
+    if (DemoExit.active || DemoExit.busy || CharacterWalk.active || inspectionResetting) return false;
+    PartGlow.closeMenu();
+    PartActions.close();
+    closeAllMenus();
+    leaveCabinView();
+    if (typeof EmergencyCall !== 'undefined' && EmergencyCall.state.active) EmergencyCall.hangUp();
+    if (typeof InspectionStations !== 'undefined' && InspectionStations.active) InspectionStations.release();
+    if (typeof InspectionReturn !== 'undefined' && InspectionReturn.busy) InspectionReturn.cancel();
+    if (typeof HallManual !== 'undefined') { HallManual.dismiss(); HallManual.resetAll(); }
+    if (typeof DoorBypass !== 'undefined' && DoorBypass.mode !== 'off') DoorBypass.setMode('off');
+    if (typeof ControlPanel !== 'undefined' && (ControlPanel.open || ControlPanel.busy)) ControlPanel.restoreOpen(false);
+    if (typeof MachineRoomPower !== 'undefined' && (MachineRoomPower.open || MachineRoomPower.busy)) MachineRoomPower.restoreOpen(false);
+    if (typeof PitLadder !== 'undefined' && (PitLadder.deployed || PitLadder.busy || !PitLadder.secured)) PitLadder.restoreClosed();
+    if (typeof BuildingLights !== 'undefined' && BuildingLights.resetAll) BuildingLights.resetAll();
+    if (typeof EmergencyLighting !== 'undefined' && EmergencyLighting.on) EmergencyLighting.set(false);
+    if (typeof TerminalDemo !== 'undefined' && TerminalDemo.clearFaults) TerminalDemo.clearFaults();
+    insHold = 0; insStop();
+    if (estop) {
+      estop = false;
+      const stop = document.getElementById('btn-estop');
+      if (stop) {
+        stop.classList.remove('armed'); stop.setAttribute('aria-pressed', 'false'); stop.setAttribute('aria-label', '비상정지');
+        const span = stop.querySelector('span');
+        if (span && typeof estopLabel === 'function') span.textContent = estopLabel(!!portraitHUD?.isPortrait(), false);
+      }
+    }
+    if (insMode) setInspectionMode(false, { recover: false });
+    gsap.killTweensOf(carGrp.position); gsap.killTweensOf(cwtGrp.position);
+    gsap.killTweensOf(camera); gsap.killTweensOf(camera.position); gsap.killTweensOf(controls.target);
+    DemoExit.closeDoorsNow();
+    const targetFloor = 0;
+    const targetCarY = FLOOR_Y[targetFloor] + S.CAR_H / 2;
+    const dy = targetCarY - carGrp.position.y;
+    carGrp.position.y = targetCarY;
+    cwtGrp.position.y -= dy;
+    spinSheaves(dy);
+    curFloor = targetFloor; moving = false; currentState = ELEVATOR_STATE.IDLE;
+    refreshRopes(); refreshGovernorRope(); refreshTerminalDevices();
+    const light = scene.getObjectByName('carLight'); if (light) light.position.y = carGrp.position.y + S.CAR_H * .75;
+    MACH.motorOff(); MACH.brakeSet(); window.speechSynthesis?.cancel();
+    controls.enabled = true;
+    const damping = controls.enableDamping;
+    controls.enableDamping = false; controls.update();
+    const home = overviewCameraPose();
+    camera.position.fromArray(home.position); controls.target.fromArray(home.target); controls.update();
+    controls.enableDamping = damping;
+    syncAllIndicators(curFloor + 1, '');
+    updateStatus('v-floor', `${curFloor + 1}F`, '#3fb950');
+    updateStatus('v-spd', '0 m/min');
+    updateStatus('v-dir', '설비 정리 완료 · 첫 화면', '#3fb950');
+    updateStatus('v-door', '닫힘', '#3fb950');
+    document.querySelectorAll('#fbtns .c-btn').forEach(b => { b.classList.toggle('active', Number(b.dataset.f) === curFloor); b.classList.remove('called'); });
+    if (btn) btn.hidden = true;
+    return true;
+  }
+  function build() {
+    if (btn) return;
+    const style = document.createElement('style');
+    style.textContent = `
+      #scene-clean-btn{position:fixed;left:50%;top:max(14px,env(safe-area-inset-top));transform:translateX(-50%);z-index:112;
+        display:inline-flex;align-items:center;gap:6px;min-height:38px;padding:0 13px;border:1px solid #d9b252;border-radius:999px;
+        background:#fcfaf5f2;color:#4a3309;font:700 12px/1 var(--ui-font,sans-serif);box-shadow:0 3px 14px rgba(32,24,6,.22);cursor:pointer;touch-action:manipulation;white-space:nowrap}
+      #scene-clean-btn[hidden]{display:none!important}
+      #scene-clean-btn svg{width:15px;height:15px;flex:none}
+      #scene-clean-btn:active{background:#f1e3bc}
+      #scene-clean-btn:focus-visible{outline:2px solid #c88e1a;outline-offset:2px}
+      body.m-hud #scene-clean-btn{top:calc(var(--edge-t,10px) + 60px)}
+      @media (orientation:landscape){
+        body.m-hud #scene-clean-btn{left:auto;right:var(--m-right,72px);top:var(--edge-t,10px);transform:none}
+      }
+      body.m-hud.portrait-tools-hidden #scene-clean-btn{visibility:hidden;pointer-events:none}
+    `;
+    document.head.append(style);
+    btn = document.createElement('button');
+    btn.id = 'scene-clean-btn'; btn.type = 'button'; btn.hidden = true;
+    btn.innerHTML = '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg><span>설비 정리</span>';
+    btn.title = '열어 둔 제어반·분전함·사다리·조명·점검 상태를 한 번에 닫고 첫 화면으로 복귀';
+    btn.setAttribute('aria-label', '설비 정리 · 열어 둔 설비 모두 닫고 첫 화면으로');
+    btn.addEventListener('click', run);
+    document.body.append(btn);
+  }
+  function hide() { if (btn && !btn.hidden) btn.hidden = true; }
+  function update(demoActive) {
+    if (!btn) return;
+    if (demoActive) { hide(); return; }
+    const now = performance.now();
+    if (now < nextCheck) return;
+    nextCheck = now + 140;
+    const obstructed = document.querySelector('#m-demo.open,.sheet.open') || document.body.classList.contains('m-run-open') || document.getElementById('hud')?.classList.contains('tools-hidden');
+    const show = !obstructed && dirty();
+    if (btn.hidden === show) btn.hidden = !show;
+  }
+  return { build, update, hide, dirty, run };
+})();
+
+// 6번: 「정상 vs 미설치 / 더블 vs 싱글 / 이탈방지」 비교 시연 완료 시 한 줄 핵심 결론 배너 (2026-11-22).
+// 관리주체·고객 브리핑에서 안전장치의 필요성과 미설치 위험을 또렷하게 요약한다.
+const DemoTakeaway = (() => {
+  const COPY = {
+    'door:normal': { tone: 'safe', tag: '안전 · 로프브레이크 정상', text: '문이 열린 채 움직이면 로프를 즉시 잡아 끼임·추락 사고를 막습니다.' },
+    'door:none': { tone: 'danger', tag: '위험 · 로프브레이크 미설치', text: '제동장치가 없으면 문이 열린 상태로 카가 상승해 중대사고로 이어집니다.' },
+    'door:fail': { tone: 'danger', tag: '위험 · 로프브레이크 미작동', text: '장치가 작동하지 않으면 개문발차를 막지 못해 승객 끼임 위험이 큽니다.' },
+    'up:normal': { tone: 'safe', tag: '안전 · 상승과속 방지장치 정상', text: '정격속도 초과 즉시 로프브레이크가 카를 잡아 상부 충돌을 막습니다.' },
+    'up:none': { tone: 'danger', tag: '위험 · 상승과속 방지장치 미설치', text: '상승 폭주를 막을 장치가 없으면 카가 최상부 슬래브와 정면 충돌합니다.' },
+    'brake:dual': { tone: 'safe', tag: '안전 · 이중(더블) 주브레이크', text: '한쪽 스프링·슈가 고장 나도 독립된 나머지 브레이크가 카를 붙잡습니다.' },
+    'brake:single': { tone: 'danger', tag: '위험 · 단일(싱글) 주브레이크', text: '공통 스프링 하나가 파손되면 제동력을 모두 잃어 카가 폭주합니다.' },
+    'retention:result': { tone: 'info', tag: '핵심 · 상부 비상가이드 + 하부 보강슈', text: '기존 가이드 손상 시 문 이탈을 억제합니다. 충격 예방·점검이 필수입니다.' }
+  };
+  let box = null, tagEl = null, textEl = null, dismissedKey = '', activeKey = '';
+
+  function detectKey() {
+    try {
+      if (typeof DemoPause !== 'undefined' && DemoPause.paused) return '';
+      if (typeof UCMDemo !== 'undefined' && UCMDemo.state.active && UCMDemo.state.stage === 'done') {
+        return 'door:' + (UCMDemo.state.mode || 'normal');
+      }
+      if (typeof AscentDemo !== 'undefined' && AscentDemo.active && AscentDemo.state.stage === 'done') {
+        return 'up:' + (AscentDemo.state.mode || 'normal');
+      }
+      if (typeof BrakeDemo !== 'undefined' && BrakeDemo.active && ['held', 'paused'].includes(BrakeDemo.state.stage)) {
+        return 'brake:' + (BrakeDemo.state.mode || 'dual');
+      }
+      if (typeof RetentionDemo !== 'undefined' && RetentionDemo.active && RetentionDemo.state.phase === 'result') {
+        return 'retention:result';
+      }
+    } catch (e) {}
+    return '';
+  }
+
+  function build() {
+    if (box) return;
+    const style = document.createElement('style');
+    style.textContent = `
+      #demo-takeaway{position:fixed;left:50%;top:104px;transform:translateX(-50%);z-index:126;
+        display:flex;align-items:center;gap:10px;max-width:min(580px,calc(100vw - 240px));padding:9px 12px 9px 14px;
+        border-radius:14px;border:1px solid #d9b252;background:#fcfaf5f5;color:#2b2110;
+        font-family:var(--ui-font,sans-serif);box-shadow:0 6px 22px rgba(24,18,6,.26);box-sizing:border-box}
+      #demo-takeaway[hidden]{display:none!important}
+      #demo-takeaway[data-tone="safe"]{border-color:#d4ab46;background:#fcfaf3f7;color:#2c220f}
+      #demo-takeaway[data-tone="danger"]{border-color:#e06b5c;background:#fff5f3f7;color:#3d1410}
+      #demo-takeaway[data-tone="info"]{border-color:#d9b252;background:#fcfaf5f7;color:#2c220f}
+      #demo-takeaway .dt-body{flex:1;min-width:0}
+      #demo-takeaway .dt-tag{display:inline-block;padding:2px 7px;margin-bottom:3px;border-radius:999px;font:800 10.5px/1.3 var(--ui-font,sans-serif);letter-spacing:-.01em}
+      #demo-takeaway[data-tone="safe"] .dt-tag{background:#8c5c08;color:#fffdf8}
+      #demo-takeaway[data-tone="danger"] .dt-tag{background:#c23326;color:#fff}
+      #demo-takeaway[data-tone="info"] .dt-tag{background:#7d5510;color:#fffdf8}
+      #demo-takeaway p{margin:0;font:650 12.5px/1.4 var(--ui-font,sans-serif);word-break:keep-all}
+      #demo-takeaway button{flex:none;width:30px;height:30px;border:0;border-radius:8px;background:rgba(0,0,0,.07);color:inherit;font:700 16px/1 sans-serif;cursor:pointer;touch-action:manipulation}
+      #demo-takeaway button:focus-visible{outline:2px solid #c88e1a;outline-offset:2px}
+      body.m-hud #demo-takeaway{left:var(--edge,10px);right:var(--m-right,10px);top:auto;bottom:calc(var(--m-above,68px) + 74px);transform:none;max-width:none;padding:8px 10px 8px 12px}
+      body.m-hud #demo-takeaway p{font-size:12px;line-height:1.38}
+      body.m-hud.demo-takeaway-open #brief-badge,body.m-hud.demo-takeaway-open #xray-badge{opacity:0;pointer-events:none}
+      @media (orientation:landscape){
+        body.m-hud #demo-takeaway{right:calc(var(--m-right,72px) + 92px);max-width:520px}
+      }
+      body.m-hud.portrait-tools-hidden #demo-takeaway{visibility:hidden;pointer-events:none}
+    `;
+    document.head.append(style);
+    box = document.createElement('aside');
+    box.id = 'demo-takeaway'; box.hidden = true;
+    box.setAttribute('role', 'status'); box.setAttribute('aria-live', 'polite'); box.setAttribute('aria-label', '비교 시연 핵심 결론');
+    box.innerHTML = '<div class="dt-body"><span class="dt-tag"></span><p></p></div><button type="button" id="demo-takeaway-close" aria-label="핵심 요약 닫기">×</button>';
+    tagEl = box.querySelector('.dt-tag'); textEl = box.querySelector('p');
+    document.body.append(box);
+    // 시연의 document 캡처 차단보다 먼저 닫기 버튼을 받는다.
+    for (const type of ['pointerdown', 'pointerup', 'click']) window.addEventListener(type, e => {
+      if (!e.target.closest?.('#demo-takeaway-close')) return;
+      e.stopImmediatePropagation();
+      if (type === 'click') { e.preventDefault(); dismissedKey = activeKey; hide(); }
+    }, true);
+  }
+
+  function hide() {
+    if (box && !box.hidden) box.hidden = true;
+    if (document.body.classList.contains('demo-takeaway-open')) document.body.classList.remove('demo-takeaway-open');
+  }
+
+  function update() {
+    if (!box) return;
+    const key = detectKey();
+    if (!key) {
+      activeKey = ''; dismissedKey = '';
+      hide(); return;
+    }
+    if (key !== activeKey) { activeKey = key; dismissedKey = ''; }
+    if (dismissedKey === key) { hide(); return; }
+    const entry = COPY[key];
+    if (!entry) { hide(); return; }
+    if (box.dataset.tone !== entry.tone) box.dataset.tone = entry.tone;
+    if (box.dataset.key !== key) box.dataset.key = key;
+    if (tagEl.textContent !== entry.tag) tagEl.textContent = entry.tag;
+    if (textEl.textContent !== entry.text) textEl.textContent = entry.text;
+    if (box.hidden) box.hidden = false;
+    if (!document.body.classList.contains('demo-takeaway-open')) document.body.classList.add('demo-takeaway-open');
+  }
+
+  return { build, update, hide, get activeKey() { return box && !box.hidden ? activeKey : ''; } };
 })();

@@ -278,8 +278,11 @@ body.m-hud #interlock-demo-panel, body.m-hud #relay-demo-panel, body.m-hud #ard-
   max-width: none;
 }
 body.m-hud #rope-measure-panel, body.m-hud #terminal-demo-panel { max-height: calc(100dvh - var(--edge-t) - 60px - var(--m-card-bottom)); overflow: auto; }
-body.m-hud.relay-story #m-bar { visibility: visible; }
+body.m-hud.relay-story #m-bar, body.m-hud.retention-story #m-bar { visibility: visible; }
 body.m-hud.relay-story #relay-demo-panel { bottom: var(--m-above); }
+/* Phase 3 일시정지 A안: 멈추면 ▶ 계속(금색 강조) + ⌂ 첫 화면(선명한 복귀)으로 전환한다. */
+body.m-hud.m-demo-paused #m-bar #demo-pause { background: #8c5c08 !important; border-color: #774d05 !important; color: #fffdf8 !important; }
+body.m-hud.m-demo-paused #m-bar #m-demo-exit { background: #f5ebd2 !important; color: #3a2a0b !important; border: 1px solid #d9b252; font-weight: 700; }
 /* 모바일 종료 두 동작: 정상 복귀 글자와 공통 ×를 같은 줄에서 분리한다. */
 body.m-hud #demo-exit { top: calc(var(--edge-t) + 60px); right: var(--m-right); width: 44px; height: 44px; border-radius: 12px; font-size: 24px; line-height: 1; }
 body.m-hud #ucm-exit { top: calc(var(--edge-t) + 60px); right: calc(var(--m-right) + 52px); left: auto; transform: none; width: 128px; max-width: calc(100vw - var(--m-right) - var(--edge) - 52px); min-height: 44px; padding: 7px 10px; font-size: 12px; white-space: nowrap; }
@@ -377,11 +380,14 @@ body.m-hud .sheet .sheet-close { width: 48px; height: 48px; color: #516679; back
 body.m-hud .sheet h4, body.m-hud .sheet .help dd { color: #62788a; }
 body.m-hud .sheet .toggle { color: #203c52; background: #eaf0f5; border: 1px solid #dde6ed; }
 body.m-hud .sheet .toggle[aria-pressed="true"] { background: #dfedf9; border-color: #9fc6e3; }
-body.m-hud #dd-overview #overview-home, body.m-hud #dd-overview #pc-view-options { display: none; }
-body.m-hud .m-view-grid { display: grid !important; grid-template-columns: 1fr; gap: 3px; }
-body.m-hud .m-view-grid .m-btn { height: 44px; min-height: 44px; gap: 2px; padding: 0; border-radius: 8px; background: #eaf0f5; border: 0; font-size: 10px; }
-body.m-hud .m-view-grid .m-btn svg { width: 20px; height: 20px; }
+body.m-hud #dd-overview #overview-home, body.m-hud #dd-overview #pc-view-options,
+body.m-hud #dd-overview .zone-grid, body.m-hud #dd-overview #xray-toggle { display: none; }
+body.m-hud .m-view-grid { display: grid !important; grid-template-columns: 1fr 1fr; gap: 4px; }
+body.m-hud .m-view-grid .m-btn { height: 46px; min-height: 46px; gap: 2px; padding: 2px 3px; border-radius: 10px; background: #eaf0f5; border: 0; font-size: 10px; }
+body.m-hud .m-view-grid .m-btn svg { width: 19px; height: 19px; }
 body.m-hud .m-view-grid .m-btn[aria-pressed="true"] { background: #dfedf9; border-color: #9fc6e3; }
+body.m-hud .m-view-grid #m-xray { grid-column: 1 / -1; height: 40px; min-height: 40px; flex-direction: row; gap: 6px; font-size: 11px; border-top: 1px solid #dce5ed; }
+body.m-hud .m-view-grid #m-xray[aria-pressed="true"] { background: #f5ebd2; color: #5b3b04; border: 1px solid #d9b252; }
 body.m-hud .m-view-help { display: none !important; }
 body.m-hud.m-run-open[data-m-mode="base"] #dd-op {
   grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 12px;
@@ -563,11 +569,11 @@ body.m-hud #pc-manual-controls [data-ins-dir="1"]::before { transform: rotate(-4
 body.m-hud #pc-manual-controls [data-ins-dir="1"]::after { content: '상승'; }
 body.m-hud #pc-manual-controls [data-ins-dir="-1"]::before { transform: rotate(135deg); margin: 0 0 4px; }
 body.m-hud #pc-manual-controls [data-ins-dir="-1"]::after { content: '하강'; }
-/* 모바일 시점은 하단 버튼 위의 작은 선택 목록만 표시한다. */
+/* 모바일 시점은 하단 버튼 위의 2열 구역·투시 선택 팝오버를 표시한다. */
 body.m-hud #dd-overview {
   top: auto; left: var(--edge); right: auto; bottom: var(--m-above);
-  width: 46px; max-height: calc(100dvh - var(--edge-t) - 64px - var(--m-above));
-  padding: 3px; border-radius: 12px; overflow-y: auto;
+  width: 132px; max-height: calc(100dvh - var(--edge-t) - 64px - var(--m-above));
+  padding: 5px; border-radius: 14px; overflow-y: auto;
 }
 body.m-hud #dd-overview .sheet-head, body.m-hud #dd-overview::before { display: none; }
 @media (orientation: landscape) {

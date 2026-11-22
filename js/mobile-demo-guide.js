@@ -145,13 +145,13 @@ const MobileDemoGuide = (() => {
     if (!document.body.classList.contains('m-demo-compact')) document.body.classList.add('m-demo-compact');
     const reset = visible($('terminal-demo-reset')) && TerminalDemo.active ? $('terminal-demo-reset')
       : ARDDemo.active && ['done', 'halted'].includes(ARDDemo.state.stage) && visible($('ard-restore')) ? $('ard-restore') : null;
-    const localPause = !reset && (RetentionDemo.active ? $('retention-demo-pause') : BufferDemo.active && !['done','halted','resetting'].includes(BufferDemo.state.stage) ? $('buffer-demo-pause') : null);
-    const control = reset || localPause;
+    // 모바일 14종 시연의 일시정지는 하단 바(#demo-pause)로 통일한다. 자막 버튼은 수동 복귀·전원 복구 전용.
+    const control = reset;
     hide(action, !control); hide(dismiss, !!DemoExit.active);
     if (control) {
       if (action.dataset.target !== control.id) action.dataset.target = control.id;
       if (action.disabled !== control.disabled) action.disabled = control.disabled;
-      write(action, reset ? reset.id === 'terminal-demo-reset' ? '수동 복귀' : '전원 복구' : DemoPause.paused ? '▶ 재생' : '❚❚ 정지');
+      write(action, reset.id === 'terminal-demo-reset' ? '수동 복귀' : '전원 복구');
     }
     const [title, brief] = text(source, el); subtitle(title, brief, now);
   }

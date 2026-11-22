@@ -29,15 +29,31 @@ try{
   const menuText=()=>page.evaluate(()=>document.getElementById('part-menu').hidden?null:document.getElementById('part-menu').textContent);
   const machineRoom=()=>page.evaluate(()=>{const p=govHandles().wheel.getWorldPosition(new THREE.Vector3());__cam(p.clone().add(new THREE.Vector3(4,2.5,4)),p.clone().add(new THREE.Vector3(0,-.5,0)));});
 
+  // 0) 모바일 전체 보기: 대표 부품 금색 비콘(Tier 1 단일 Points) 1~8개 표시, Tier 2 스텐실 발광 0개.
+  if(mobile){
+   await frames(8);
+   const ov=await page.evaluate(()=>({count:PartGlow.beaconCount,beacons:PartGlow.beacons,lit:PartGlow.parts.filter(p=>p.root.visible).map(p=>p.name)}));
+   assert.ok(ov.count>=2&&ov.count<=8,`전체 보기 대표 비콘 수(2~8): ${ov.count} (${ov.beacons.map(b=>b.name)})`);
+   assert.deepEqual(ov.lit,[],'전체 보기 Tier 2 발광 없음');
+   await page.screenshot({path:`${out}/${tag}-overview-beacons.png`});
+   // 비콘 위 직접 탭 → 소형 팝업 열림.
+   const firstB=ov.beacons[0];
+   await tap(firstB.x,firstB.y);await frames(8);
+   assert.match(await menuText()||'',new RegExp(firstB.name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')),'비콘 직접 탭으로 소형 팝업 열림');
+   await page.evaluate(()=>PartGlow.closeMenu());
+   await page.waitForFunction(()=>PartGlow.parts.every(p=>!p.root.visible),{},{timeout:5000});
+  }
+
   // 1) 떠 있는 원형 아이콘은 화면에 없다.
   await machineRoom();
-  await page.waitForFunction((isMob)=>isMob?PartGlow.parts.some(p=>p.name==='과속 조절기'&&p.active):['과속 조절기','제어반','로프브레이크','권상기 주브레이크'].every(n=>PartGlow.parts.some(p=>p.name===n&&p.active&&p.root.visible)),mobile,{timeout:45000}).catch(()=>{});
+  await page.waitForFunction((isMob)=>isMob?PartGlow.parts.some(p=>p.name==='과속 조절기'&&p.active)&&PartGlow.beaconCount>0:['과속 조절기','제어반','로프브레이크','권상기 주브레이크'].every(n=>PartGlow.parts.some(p=>p.name===n&&p.active&&p.root.visible)),mobile,{timeout:45000}).catch(()=>{});
   const floating=await page.evaluate(()=>[...document.querySelectorAll('#part-actions > .part-action,#pit-ladder-action')].filter(b=>!b.hidden&&getComputedStyle(b).visibility!=='hidden').map(b=>b.id));
   assert.deepEqual(floating,[],'떠 있는 아이콘이 보인다');
-  // 2) PC는 기계실 부품 상시 발광, 모바일 Phase 2는 대기 발광 없음(선택 부품 1개만 강조).
+  // 2) PC는 기계실 부품 상시 발광, 모바일은 Tier 1 금색 비콘(스텐실 0) + 선택 부품 1개만 Tier 2 강조.
   const lit=await page.evaluate(()=>PartGlow.parts.filter(p=>p.active&&p.root.visible).map(p=>p.name));
   if(mobile){
-   assert.deepEqual(lit,[],'모바일 기본 화면은 대기 발광 없음');
+   assert.deepEqual(lit,[],'모바일 기본 화면은 Tier 2 대기 발광 없음');
+   assert.ok(await page.evaluate(()=>PartGlow.beaconCount)>0,'모바일 기계실 금색 비콘 활성');
   }else{
    for(const n of ['과속 조절기','제어반','로프브레이크','권상기 주브레이크'])assert.ok(lit.includes(n),`${n} 발광 없음: ${lit} / 오류: ${errors.slice(0,3).join(" | ")}`);
   }
@@ -175,6 +191,23 @@ try{
    await page.reload({waitUntil:'networkidle'});await ready();
    assert.equal(await page.evaluate(()=>PartGlow.enabled),false,'새로고침 후 설정 유지');
    await page.evaluate(()=>PartGlow.setEnabled(true));
+  }else{
+   // 7-M) 모바일: 설정 「부품 빛 효과」 끄기 → Tier 1 비콘 0개, 탭 팝업은 유지 → 다시 켜기 + 설비 일괄 정리(SceneClean) 검증.
+   await machineRoom();await frames(8);
+   assert.ok(await page.evaluate(()=>PartGlow.beaconCount)>0,'비콘 켜짐');
+   await page.evaluate(()=>PartGlow.setEnabled(false));await frames(4);
+   assert.equal(await page.evaluate(()=>PartGlow.beaconCount),0,'부품 빛 효과 끄면 비콘 0개');
+   await page.evaluate(()=>PartGlow.setEnabled(true));await frames(6);
+   assert.ok(await page.evaluate(()=>PartGlow.beaconCount)>0,'다시 켜면 비콘 복원');
+   // 설비 일괄 정리(SceneClean): 제어반·분전함 문 열기 + 기계실 조명 켜기 → 「설비 정리」 버튼 표시 → 1탭 원상복구(리로드 없음).
+   await page.evaluate(()=>{window.__cleanToken='no-reload';ControlPanel.toggle();MachineRoomPower.toggle();BuildingLights.toggle('mr');});
+   await page.waitForFunction(()=>ControlPanel.open&&MachineRoomPower.open&&BuildingLights.state.mr&&!document.getElementById('scene-clean-btn').hidden,{},{timeout:10000});
+   await page.screenshot({path:`${out}/${tag}-scene-clean-btn.png`});
+   await page.locator('#scene-clean-btn').tap();await frames(6);
+   const cleaned=await page.evaluate(()=>({token:window.__cleanToken,cp:ControlPanel.open,db:MachineRoomPower.open,mrLight:BuildingLights.state.mr,dirty:SceneClean.dirty(),btnHidden:document.getElementById('scene-clean-btn').hidden,gap:camera.position.distanceTo(new THREE.Vector3(...overviewCameraPose().position))}));
+   assert.equal(cleaned.token,'no-reload','페이지 리로드 없이 설비 정리');
+   assert.equal(cleaned.cp,false);assert.equal(cleaned.db,false);assert.equal(cleaned.mrLight,false);
+   assert.equal(cleaned.dirty,false);assert.equal(cleaned.btnHidden,true);assert.ok(cleaned.gap<0.05,'전체 보기 카메라 복귀');
   }
   await context.close();
  }

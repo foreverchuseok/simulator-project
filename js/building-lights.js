@@ -151,6 +151,9 @@ const BuildingLights = (() => {
     if (!(key in state)) return false;
     state[key] = !state[key]; apply(); return true;
   }
+  function resetAll() {
+    state.pit = state.top = state.mr = state.car = false; apply();
+  }
 
   function update() {
     for (const s of Object.values(switches)) {
@@ -167,5 +170,5 @@ const BuildingLights = (() => {
     }
   }
 
-  return { build, toggle, update, get state() { return { ...state, shaft: shaftOn() }; }, spec: MR_LED };
+  return { build, toggle, resetAll, update, get state() { return { ...state, shaft: shaftOn() }; }, spec: MR_LED };
 })();

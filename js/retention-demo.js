@@ -318,7 +318,7 @@ const RetentionDemo=(()=>{
     hicBubble=fx('retention-hic','retention-bubble','딸꾹!');screamBubble=fx('retention-scream','retention-bubble','으악!');bangBurst=fx('retention-bang','','<b>쾅!</b>');
     flashLayer=document.createElement('div');flashLayer.id='retention-flash';document.body.appendChild(flashLayer);
     document.addEventListener('keydown',e=>{if(s.floor>=0){if(e.key==='Escape')finish();else if(e.target.closest?.('#retention-demo-panel'))return;else{e.preventDefault();e.stopImmediatePropagation();}}},true);
-    for(const type of ['click','pointerdown','dblclick','change','wheel'])document.addEventListener(type,e=>{if(s.floor<0||e.target.closest?.('#retention-demo-panel,#btn-estop,#fault-reset')||(DemoPause.paused&&e.target.closest?.('canvas')))return;if(e.target.closest?.('button,input,select,canvas')){e.preventDefault();e.stopImmediatePropagation();}},{capture:true,passive:false});
+    for(const type of ['click','pointerdown','dblclick','change','wheel'])document.addEventListener(type,e=>{if(s.floor<0||e.target.closest?.('#retention-demo-panel,#btn-estop,#fault-reset,#demo-pause')||(DemoPause.paused&&e.target.closest?.('canvas')))return;if(e.target.closest?.('button,input,select,canvas')){e.preventDefault();e.stopImmediatePropagation();}},{capture:true,passive:false});
     // The main resize listener updates camera.aspect later in this event turn.
     window.addEventListener('resize',()=>requestAnimationFrame(()=>{if(s.floor>=0&&!DemoPause.paused)aim(visual.view);}));
   }

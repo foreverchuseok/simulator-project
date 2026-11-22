@@ -700,9 +700,12 @@ function updateManualCameraNear() {
     function setOVSCutaway(enabled){
       if(!enabled){
         ovsDemo.hidden.forEach(([o,material,ghost,shadow])=>{o.material=material;o.castShadow=shadow;(Array.isArray(ghost)?ghost:[ghost]).forEach(m=>m.dispose());});ovsDemo.hidden=[];
-        (ovsDemo.safetyMaterials||[]).forEach(([o,material,highlight,order])=>{o.material=material;o.renderOrder=order;(Array.isArray(highlight)?highlight:[highlight]).forEach(m=>m.dispose());});ovsDemo.safetyMaterials=[];return;
+        (ovsDemo.safetyMaterials||[]).forEach(([o,material,highlight,order])=>{o.material=material;o.renderOrder=order;(Array.isArray(highlight)?highlight:[highlight]).forEach(m=>m.dispose());});ovsDemo.safetyMaterials=[];
+        if(typeof XrayView!=='undefined')XrayView.suspendCar(false);
+        return;
       }
       if(ovsDemo.hidden.length)return;
+      if(typeof XrayView!=='undefined')XrayView.suspendCar(true);
       const keep=new Set(['carSafetyGear','carSafetyLinkage','CarGuideShoe_L_Lower','CarGuideShoe_R_Lower']);ovsDemo.safetyMaterials=[];
       carGrp.traverse(o=>{
         if(!o.isMesh&&!o.isLine)return;
@@ -1326,7 +1329,7 @@ function updateManualCameraNear() {
       latchSources.forEach(b => new MutationObserver(syncResetPill).observe(b, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['disabled'] }));
       resetPill.addEventListener('click', () => document.getElementById(resetPill.dataset.src)?.click());
 
-      // 전체 보기 — 더블클릭으로 가까이 간 화면을 처음 운행 시점으로 되돌린다(부품별 카메라 프리셋은 두지 않는다).
+      // 전체 보기 — 더블클릭으로 가까이 간 화면을 처음 운행 시점으로 되돌린다.
       document.getElementById('overview-home').addEventListener('click', () => {
         closeAllMenus();
         if (overspeedActive || !controls.enabled) return; // 자동 시연·복귀 카메라를 보호한다.
@@ -1337,6 +1340,9 @@ function updateManualCameraNear() {
         const home = overviewCameraPose();
         moveCam(...home.position, ...home.target, false);
       });
+      document.querySelectorAll('[data-zone]').forEach(b => b.addEventListener('click', () => CameraZones.go(b.dataset.zone)));
+      document.getElementById('xray-toggle')?.addEventListener('click', () => XrayView.toggle());
+      XrayView.initUI();
       // 한 번 누르면 탑승 시점 고정(카 추종), 다시 누르면 해제되어 자유 시점으로 돌아간다.
       document.getElementById('c-cabin').addEventListener('click', () => {
         if (cabinFollow) leaveCabinView(); else enterCabinView();
@@ -1488,5 +1494,170 @@ function updateManualCameraNear() {
       gsap.to(camera.position, { x: cx, y: cy, z: cz, duration: 1.2, ease: 'power2.inOut' });
       gsap.to(controls.target, { x: tx, y: ty, z: tz, duration: 1.2, onUpdate: () => controls.update() });
     }
+
+    // 구역별 원터치 카메라 이동(2026-11-22 브리핑용: 기계실·카 상부·승강장·피트).
+    // 각 구역에 도착하면 근거리 부품의 금색 별빛 비콘이 자동으로 깨어나 바로 탭·설명할 수 있다.
+    const CameraZones = (() => {
+      function pose(key) {
+        if (key === 'mr') {
+          return { position: [3.0, Y0 + TOTAL_H + 2.35, 3.1], target: [-0.1, Y0 + TOTAL_H + 0.62, -0.22], fit: true };
+        }
+        if (key === 'cartop') {
+          const roofY = carGrp.position.y + S.CAR_H / 2;
+          return { position: [2.55, roofY + 1.45, CAR_CTR_Z - 1.35], target: [0, roofY + 0.28, CAR_CTR_Z + 0.05], fit: true };
+        }
+        if (key === 'hall') {
+          const fy = FLOOR_Y[curFloor] ?? FLOOR_Y[0];
+          return { position: [0.95, fy + 1.55, FRONT_WALL_INNER_Z + 3.0], target: [0, fy + 1.25, FRONT_WALL_INNER_Z], fit: true };
+        }
+        if (key === 'pit') {
+          return { position: [2.5, Y0 + 1.45, CAR_CTR_Z - 0.75], target: [-0.2, Y0 + 0.62, CAR_CTR_Z - 0.15], fit: true };
+        }
+        return null;
+      }
+      function go(key) {
+        const p = pose(key);
+        if (!p) return false;
+        closeAllMenus();
+        if (typeof PartGlow !== 'undefined') PartGlow.closeMenu();
+        if (overspeedActive || !controls.enabled) return false;
+        if (typeof CharacterWalk !== 'undefined' && CharacterWalk.active) CharacterWalk.exit(false);
+        leaveCabinView();
+        controls.minDistance = MANUAL_CAMERA.minDistance;
+        camera.near = MANUAL_CAMERA.near;
+        camera.updateProjectionMatrix();
+        gsap.killTweensOf(camera.position); gsap.killTweensOf(controls.target);
+        moveCam(...p.position, ...p.target, p.fit);
+        return true;
+      }
+      return { pose, go, keys: ['mr', 'cartop', 'hall', 'pit'] };
+    })();
+
+    // 외벽·카 벽 반투명 투시 보기(2026-11-22 브리핑용).
+    // 승강로 전면벽·좌측벽·로비 마감과 카 불투명 외판만 반투명으로 바꿔 내부 안전장치·움직임을 관찰한다.
+    // 고스트 재질은 WeakMap에 1회만 복제해 캐시하며, 과속 시연 절개(setOVSCutaway)와 충돌하지 않도록 카 부분만 일시 양보한다.
+    const XrayView = (() => {
+      const CAR_SHELL_NAMES = new Set([
+        'carWallLeft', 'carPanel_1', 'carPanel_11',
+        'entranceTransom', 'entranceFinishHeader', 'entranceHeaderSoffit',
+        'carRoof', 'carTerraceInterior'
+      ]);
+      let active = false, carSuspended = false, badge = null;
+      const wallSaved = [], carSaved = [];
+      const ghostCache = new WeakMap();
+
+      function makeGhost(mat, opacity) {
+        if (!mat) return mat;
+        let map = ghostCache.get(mat);
+        if (!map) { map = new Map(); ghostCache.set(mat, map); }
+        let g = map.get(opacity);
+        if (!g) {
+          g = mat.clone();
+          g.transparent = true;
+          g.opacity = Math.min(opacity, mat.opacity ?? 1);
+          g.depthWrite = false;
+          map.set(opacity, g);
+        }
+        return g;
+      }
+      function applyList(roots, opacity, bucket) {
+        for (const root of roots) {
+          if (!root) continue;
+          root.traverse(o => {
+            if (!o.isMesh || !o.material) return;
+            const orig = o.material;
+            const ghost = Array.isArray(orig) ? orig.map(m => makeGhost(m, opacity)) : makeGhost(orig, opacity);
+            bucket.push([o, orig, o.castShadow]);
+            o.material = ghost;
+            o.castShadow = false;
+          });
+        }
+      }
+      function restoreList(bucket) {
+        while (bucket.length) {
+          const [o, orig, shadow] = bucket.pop();
+          o.material = orig;
+          o.castShadow = shadow;
+        }
+      }
+      function wallRoots() {
+        const roots = [];
+        if (typeof wallGrp !== 'undefined' && wallGrp) roots.push(wallGrp);
+        if (typeof scene !== 'undefined' && scene) {
+          for (const child of scene.children) {
+            if (child.userData?.type === 'branch-logo') roots.push(child);
+          }
+        }
+        return roots;
+      }
+      function carShellRoots() {
+        const roots = [];
+        if (typeof carGrp === 'undefined' || !carGrp) return roots;
+        carGrp.traverse(o => { if (CAR_SHELL_NAMES.has(o.name)) roots.push(o); });
+        return roots;
+      }
+      function syncUI() {
+        const pc = document.getElementById('xray-toggle');
+        if (pc) { pc.classList.toggle('active', active); pc.setAttribute('aria-pressed', String(active)); }
+        const mob = document.getElementById('m-xray');
+        if (mob) { mob.classList.toggle('active', active); mob.setAttribute('aria-pressed', String(active)); }
+        if (badge) badge.hidden = !active;
+        document.body.classList.toggle('xray-active', active);
+      }
+      function set(on) {
+        on = !!on;
+        if (on === active) return active;
+        active = on;
+        if (active) {
+          applyList(wallRoots(), 0.16, wallSaved);
+          if (!carSuspended) applyList(carShellRoots(), 0.22, carSaved);
+        } else {
+          restoreList(wallSaved);
+          restoreList(carSaved);
+        }
+        if (typeof PartGlow !== 'undefined' && PartGlow.invalidateBlockers) PartGlow.invalidateBlockers();
+        syncUI();
+        return active;
+      }
+      function suspendCar(suspend) {
+        suspend = !!suspend;
+        if (suspend === carSuspended) return;
+        carSuspended = suspend;
+        if (!active) return;
+        if (suspend) restoreList(carSaved);
+        else applyList(carShellRoots(), 0.22, carSaved);
+      }
+      function initUI() {
+        if (badge) return;
+        const style = document.createElement('style');
+        style.textContent = `
+          #xray-badge{position:fixed;right:max(12px,env(safe-area-inset-right));bottom:max(12px,env(safe-area-inset-bottom));z-index:90;
+            display:inline-flex;align-items:center;gap:5px;min-height:30px;padding:4px 10px;border:1px solid #d9b252;border-radius:999px;
+            background:#fcfaf5ee;color:#4a3309;font:700 11px/1 var(--ui-font,sans-serif);cursor:pointer;box-shadow:0 2px 10px rgba(32,24,6,.22);touch-action:manipulation}
+          #xray-badge[hidden]{display:none!important}
+          #xray-badge span{font-size:13px;opacity:.8}
+          html.brief-mode #xray-badge{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 38px)}
+          body.m-hud #xray-badge{right:var(--m-right,10px);bottom:calc(var(--m-above,68px) + 6px)}
+          body.m-hud.m-demo-compact #xray-badge{bottom:calc(var(--m-above,68px) + 74px)}
+          body.m-hud[data-m-mode="walk"] #xray-badge{top:calc(var(--edge-t,10px) + 60px);bottom:auto}
+          body.m-hud.portrait-tools-hidden #xray-badge{visibility:hidden;pointer-events:none}
+        `;
+        document.head.append(style);
+        badge = document.createElement('button');
+        badge.id = 'xray-badge'; badge.type = 'button'; badge.hidden = true;
+        badge.innerHTML = '투시 <span aria-hidden="true">×</span>';
+        badge.title = '외벽 투시 보기 켜짐 — 누르면 원래 벽으로 복귀';
+        badge.setAttribute('aria-label', '외벽 투시 보기 끄기');
+        badge.addEventListener('click', () => set(false));
+        for (const type of ['pointerdown', 'pointerup', 'click']) window.addEventListener(type, e => {
+          if (!e.target.closest?.('#xray-badge')) return;
+          e.stopImmediatePropagation();
+          if (type === 'click') { e.preventDefault(); set(false); }
+        }, true);
+        document.body.append(badge);
+        syncUI();
+      }
+      return { set, toggle: () => set(!active), suspendCar, initUI, get active() { return active; } };
+    })();
 
     // makeDraggable(구 플로팅 메뉴 버튼용)은 상단 바 개편으로 제거됨

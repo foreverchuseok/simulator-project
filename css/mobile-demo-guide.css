@@ -4,7 +4,7 @@ body:not(.m-hud) #m-demo-guide { display:none !important; }
 body.m-hud :is(#terminal-demo-panel,#manual-rescue-panel,#ard-panel,#photo-eye-panel,
   #rope-measure-panel,#retention-demo-panel,#relay-demo-panel,#interlock-demo-panel,
   #ucm-summary,#ucm-stage,#ascent-stage,#brake-compare-ending,#brake-compare-stage,
-  #buffer-stage,#ovs-summary,#ovs-stage) { display:none !important; }
+  #buffer-stage,#buffer-demo-pause,#ovs-summary,#ovs-stage) { display:none !important; }
 body.m-hud #m-demo-guide {
   position:fixed; z-index:130; left:var(--edge); right:var(--m-right); bottom:var(--m-above);
   display:flex; align-items:center; gap:6px; height:68px; padding:5px 8px; box-sizing:border-box;
@@ -17,8 +17,8 @@ body.m-hud #m-demo-guide {
 body.m-hud #m-demo-guide-action { flex:none; min-width:64px; min-height:44px; padding:4px 6px; border:1px solid #86b1a377; border-radius:7px; background:#29463ee0; color:#e8f6ef; font:600 11px sans-serif; cursor:pointer; touch-action:manipulation; }
 body.m-hud #m-demo-guide-dismiss { flex:none; width:36px; min-height:44px; border:0; background:transparent; color:inherit; font:24px sans-serif; cursor:pointer; touch-action:manipulation; }
 #m-demo-guide button:focus-visible { outline:2px solid #a8e6ca; outline-offset:1px; }
-/* 취객 이야기에서 HUD가 숨겨져 있는 동안 자막은 화면 맨 아래로 내린다. */
-body.m-hud.retention-story #m-demo-guide { bottom:var(--edge-b); }
+/* 취객 이야기에서도 공통 하단 바(#m-bar) 위에 자막을 맞춰 14종 시연의 일시정지·첫 화면 동선을 통일한다. */
+body.m-hud.retention-story #m-demo-guide { bottom:var(--m-above); }
 /* 중복 설명·말풍선은 숨기고 실제 부품·치수선·효과는 유지한다. */
 body.m-hud.m-demo-compact :is(.buffer-demo-label,#manual-rescue-level,#photo-eye-callout,
   #photo-eye-bubble,#relay-story-bubble,#retention-demo-badge,.retention-part-label) { display:none !important; }
