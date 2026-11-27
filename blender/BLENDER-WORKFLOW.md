@@ -33,6 +33,7 @@ AI 공통 규칙과 `PLAN.md` 운영 방식은 루트 `AGENTS.md`를 따른다.
 - 비상통화장치: `blender/scripts/emergency_call_unit.py` → `models/gltf/emergency_call_unit.glb`(루트 `EmergencyCallUnit`, 노드 `EmergencyCallBody`·`CallLedRing`; JS가 링 재질을 인스턴스별로 바꿔 노랑/초록 표시). 장착·동작은 `js/emergency-call.js`.
 - 정전시 조명장치·원형 비상등: `blender/scripts/emergency_lighting.py` → `models/gltf/emergency_power_unit.glb`·`emergency_round_lamp.glb`. z=0 부착면·+Z 앞면. 치수는 Python 상수/GLB extras, JS가 `PowerStatus`·`LampLEDs`를 점등한다. 장착·아이콘은 `js/emergency-lighting.js`, 상세는 `docs/CAR-REBUILD.md`, 검증은 `tools/verify_emergency_lighting.mjs`.
 - 피트 사다리 배꼽 스위치: `blender/scripts/pit_ladder_switch.py` → `models/gltf/pit_ladder_switch.glb`. `js/pit-ladder.js`의 `PIT_LADDER_SWITCH`에서 눌린 끝 위치와 스트로크를 읽는다. `SwitchBody`는 고정, `SwitchPlunger`는 +X로 움직이며 끝의 원점이 X=0이다. JS 래퍼가 눌림/해제 위치를 적용한다. 높이 기준과 검증은 `docs/ROADMAP.md`의 사다리 인계 항목 및 `tools/verify_pit_ladder.mjs`를 참고한다.
+- 균형체인(보상체인) 체결부·횡빔·링크: `blender/scripts/comp_chain_hitch.py` → `models/gltf/comp_chain_hitch.glb` (루트 `CompChainRoot`, extras 치수 계약). 노드는 `HitchAssembly_Cwt`·`HitchAssembly_Car`(각 `MountPlate_*`·`BreakBracket_*`·`WireSleeves_*`·`SafetyWire_*`, 접미어는 Blender 고유 이름이라 JS가 접두어로 찾는다)·`CarCrossBeam`·`ChainLinkUnit`이다. 안전 와이어로프는 빔 웹을 앞→뒤 일직선 관통해 체인 2번 링크를 지나며, 파단 후 팽팽한 V는 같은 메시의 셰이프 키 `Taut`(glTF morph target, 길이 보존)다. 카·균형추 4개소 장착과 `InstancedMesh` 2본 동적 체인은 `js/comp-chain.js`, 이중체결 비교 시연은 `js/comp-chain-demo.js`, 검증은 `tools/verify_comp_chain.mjs`가 담당한다.
 
 앱이 읽는 최종 형식은 glTF Binary 단일 파일인 `.glb`다.
 현재 프로젝트는 `.blend` 파일을 필수 원본으로 사용하지 않고 Python `bpy` 스크립트를 형상 원본으로 사용한다.

@@ -169,6 +169,17 @@ function updateManualCameraNear() {
       function bufferImpact() { const c = ac(), t = c.currentTime; thump(c, t, 40, 0.6, 0.65); thump(c, t + 0.01, 88, 0.28, 0.32); clack(c, t, 170, 0.16, 0.3); clack(c, t + 0.006, 950, 0.05, 0.08); hiss(c, t + 0.04, 1.1, 0.03, 800); }
       // 승객이 에이프런에 부딪히는 가벼운 "쿵"
       function bump() { const c = ac(), t = c.currentTime; thump(c, t, 110, 0.12, 0.18); clack(c, t, 260, 0.05, 0.1); }
+      // 균형체인 주 브라켓 파단 · 안전 와이어 지지 · 피트 추락 굉음 (js/comp-chain-demo.js)
+      function chainBreak() { const c = ac(), t = c.currentTime; clack(c, t, 1450, 0.08, 0.36); clack(c, t + 0.03, 720, 0.12, 0.30); thump(c, t, 58, 0.32, 0.42); screech(c, t, 0.20, 0.08); }
+      function chainCatch() { const c = ac(), t = c.currentTime; thump(c, t, 76, 0.24, 0.38); clack(c, t, 980, 0.07, 0.25); clack(c, t + 0.09, 1320, 0.05, 0.14); clack(c, t + 0.18, 1180, 0.05, 0.09); }
+      function chainCrash() {
+        const c = ac(), t = c.currentTime;
+        thump(c, t, 34, 0.95, 0.65); thump(c, t + 0.07, 52, 0.65, 0.45);
+        [0, 0.06, 0.13, 0.22, 0.34, 0.48, 0.65, 0.85].forEach((d, i) => {
+          clack(c, t + d, 620 + (i % 3) * 340, 0.11, 0.32 - i * 0.03);
+        });
+        hiss(c, t + 0.04, 1.0, 0.06, 900);
+      }
       function overspeedImpact(kind, playbackSeconds=.58) {
         const c=ac(),t=c.currentTime;
         if(kind==='collision'){thump(c,t,28,1.25,.68);thump(c,t+.045,53,.85,.42);clack(c,t,135,.24,.32);hiss(c,t+.05,1.5,.07,500);}
@@ -255,7 +266,7 @@ function updateManualCameraNear() {
         });
       }
       function effect(play) { return { currentTime: 0, play() { try { play(); return Promise.resolve(); } catch (e) { return Promise.reject(e); } } }; }
-      return { resume, hold, motorOn, motorOff, setDrive, brakeRelease, brakeSet, duck, ropeBrakeBang, ucmBrakeFailure, brakeWarning, bufferImpact, bump, overspeedImpact,
+      return { resume, hold, motorOn, motorOff, setDrive, brakeRelease, brakeSet, duck, ropeBrakeBang, ucmBrakeFailure, brakeWarning, bufferImpact, bump, chainBreak, chainCatch, chainCrash, overspeedImpact,
         doorOpen: effect(() => door(false)), doorClose: effect(() => door(true)), chime: effect(chime) };
     })();
 
@@ -586,6 +597,7 @@ function updateManualCameraNear() {
         if(TerminalDemo.active)TerminalDemo.cancel();TerminalDemo.clearFaults(); // 파이널 리미트 수동 복귀 포함
         // Fault demonstrations retain their own mechanical recovery sequence.
         if(BrakeDemo.active){BrakeDemo.reset();await wait(()=>!BrakeDemo.active);}
+        if(typeof CompChainDemo!=='undefined'&&CompChainDemo.active){CompChainDemo.reset();await wait(()=>!CompChainDemo.active);}
         if(AscentDemo.active){AscentDemo.reset();await wait(()=>!AscentDemo.active);}
         if(UCMDemo.state.active){
           await wait(()=>!CarDoor.state.busy);
@@ -1283,6 +1295,7 @@ function updateManualCameraNear() {
       estopBtn.addEventListener('click', e => {
         if (ManualRescueDemo.active) { ManualRescueDemo.reset(); return; }
         if (BrakeDemo.active) { BrakeDemo.reset(); return; }
+        if (typeof CompChainDemo !== 'undefined' && CompChainDemo.active) { CompChainDemo.reset(); return; }
         if (AscentDemo.active) { AscentDemo.reset(); return; }
         if (ARDDemo.active) { ARDDemo.halt(); return; }
         if (PhotoEyeDemo.active) { PhotoEyeDemo.cancel(); return; }

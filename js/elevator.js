@@ -2238,6 +2238,7 @@
       // (운행·점검·과속 낙하 모든 경로가 refreshRopes 를 거치므로 호출점은 여기 하나다)
       refreshTravelCable();
       refreshTerminalDevices();
+      if (typeof CompChain !== 'undefined') CompChain.refresh();
       refreshLevelingSensors();
       refreshCarSafetyLinkage();
       if(typeof refreshOVSRopeBreak==='function')refreshOVSRopeBreak();

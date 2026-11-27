@@ -87,7 +87,7 @@ const MobileHUD = (() => {
     if (typeof BufferDemo !== 'undefined' && BufferDemo.active) return () => { if (BufferDemo.state.stage === 'approach') BufferDemo.halt(); BufferDemo.reset(); };
     const estopCancels = [
       typeof UCMDemo !== 'undefined' && UCMDemo.state.active, typeof AscentDemo !== 'undefined' && AscentDemo.active,
-      typeof BrakeDemo !== 'undefined' && BrakeDemo.active, typeof ManualRescueDemo !== 'undefined' && ManualRescueDemo.active,
+      typeof BrakeDemo !== 'undefined' && BrakeDemo.active, typeof CompChainDemo !== 'undefined' && CompChainDemo.active, typeof ManualRescueDemo !== 'undefined' && ManualRescueDemo.active,
       typeof PhotoEyeDemo !== 'undefined' && PhotoEyeDemo.active, typeof RopeMeasure !== 'undefined' && RopeMeasure.active,
       typeof TerminalDemo !== 'undefined' && TerminalDemo.active
     ];
@@ -328,6 +328,7 @@ const MobileHUD = (() => {
     lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
     link: '<circle cx="6" cy="12" r="3"/><circle cx="18" cy="12" r="3"/><path d="M9 12h6"/>',
     buffer: '<path d="M6 21h12M9 21v-4h6v4M12 17V4M8 8h8"/>',
+    chain: '<rect x="8.5" y="2.5" width="7" height="8" rx="3.5"/><rect x="8.5" y="13.5" width="7" height="8" rx="3.5"/><path d="M12 8.5v7"/>',
     shield: '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/>'
   };
   const clickIf = id => () => { const b = $(id); if (b) b.click(); };
@@ -336,6 +337,7 @@ const MobileHUD = (() => {
     ['door', '개문발차(UCM)', () => UCMDemo.start($('btn-ucm'))],
     ['up', '상승과속', () => AscentDemo.start('normal')],
     ['brake', '브레이크 비교', () => BrakeDemo.start('dual')],
+    ['chain', '균형체인', () => CompChainDemo.start('dual')],
     ['power', 'ARD 자동구출', () => ARDDemo.start()],
     ['hand', '수동 구출', () => ManualRescueDemo.start()],
     ['eye', '문닫힘 안전장치', () => PhotoEyeDemo.start()],
@@ -353,6 +355,7 @@ const MobileHUD = (() => {
   };
   const ascentChoice = mode => () => { document.querySelector(`[data-ascent-mode="${mode}"]`)?.click(); AscentDemo.start(mode); };
   const brakeChoice = mode => () => { document.querySelector(`[data-brake-mode="${mode}"]`)?.click(); BrakeDemo.start(mode); };
+  const chainChoice = mode => () => { document.querySelector(`[data-chain-mode="${mode}"]`)?.click(); CompChainDemo.start(mode); };
   const DEMO_CHOICES = {
     door: { options: [
       ['normal', '정상', ucmChoice('normal')],
@@ -365,6 +368,10 @@ const MobileHUD = (() => {
     brake: { options: [
       ['dual', '더블', brakeChoice('dual')],
       ['single', '싱글', brakeChoice('single')]
+    ] },
+    chain: { options: [
+      ['dual', '이중체결', chainChoice('dual')],
+      ['single', '미설치', chainChoice('single')]
     ] },
     buffer: { label: '대상', options: [
       ['car', '카', () => BufferDemo.start('car')],
@@ -384,6 +391,7 @@ const MobileHUD = (() => {
     door:'문이 열린 채 출발할 때 로프브레이크의 역할을 비교합니다.',
     up:'카가 과속으로 올라갈 때 안전장치의 작동을 비교합니다.',
     brake:'더블·싱글 브레이크의 고장 시 제동 차이를 봅니다.',
+    chain:'주 브라켓 파손 시 이중체결(안전 와이어로프) 유무에 따른 추락 차이를 봅니다.',
     power:'정전 후 비상 배터리로 승객을 구출하는 과정을 봅니다.',
     hand:'정지한 카에서 승객을 수동으로 구출하는 과정을 봅니다.',
     eye:'문 사이의 장애물을 감지하면 문이 다시 열리는 모습을 봅니다.',

@@ -16,6 +16,8 @@ const MobileDemoGuide = (() => {
     ['ascent-stage', '상승과속'],
     ['brake-compare-ending', '브레이크 비교 · 결과', 'strong', 'small'],
     ['brake-compare-stage', '브레이크 비교'],
+    ['comp-chain-ending', '균형체인 · 결과', 'strong', 'small'],
+    ['comp-chain-stage', '균형체인'],
     ['buffer-stage', '완충기'],
     ['ovs-summary', '조속기 · 결과', 'h2', 'p'],
     ['ovs-stage', '조속기 과속']
@@ -112,6 +114,8 @@ const MobileDemoGuide = (() => {
       brief = clean(el.querySelector('p'));
     } else if (id === 'brake-compare-ending') {
       brief = BrakeDemo.state.mode === 'dual' ? '남은 스프링·슈가 제동을 유지합니다.' : '공통 스프링 파손으로 제동력을 잃었습니다.';
+    } else if (id === 'comp-chain-ending') {
+      brief = CompChainDemo.state.mode === 'dual' ? '빔 관통 안전 와이어로프가 2번 링크를 붙잡아 추락을 막았습니다.' : '이중체결 미설치로 균형체인이 승강로로 추락했습니다.';
     } else if (id === 'ovs-summary') {
       brief = '로프 파단 → 과속 감지 → 비상정지.';
     }

@@ -12,6 +12,7 @@ const DemoPause = (() => {
     ['개문발차', () => typeof UCMDemo !== 'undefined' && UCMDemo.state.active],
     ['상승과속', () => typeof AscentDemo !== 'undefined' && AscentDemo.active],
     ['브레이크 비교', () => typeof BrakeDemo !== 'undefined' && BrakeDemo.active],
+    ['균형체인', () => typeof CompChainDemo !== 'undefined' && CompChainDemo.active],
     ['ARD 자동구출', () => typeof ARDDemo !== 'undefined' && ARDDemo.active],
     ['수동 구출', () => typeof ManualRescueDemo !== 'undefined' && ManualRescueDemo.active],
     ['문닫힘 안전장치', () => typeof PhotoEyeDemo !== 'undefined' && PhotoEyeDemo.active],

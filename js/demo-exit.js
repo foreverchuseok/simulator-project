@@ -4,6 +4,7 @@ const DemoExit = (() => {
     ['개문발차', () => UCMDemo.state.active, () => UCMDemo.cancel()],
     ['상승과속', () => AscentDemo.active, () => AscentDemo.cancel()],
     ['브레이크 비교', () => BrakeDemo.active, () => BrakeDemo.cancel()],
+    ['균형체인', () => typeof CompChainDemo !== 'undefined' && CompChainDemo.active, () => CompChainDemo.cancel()],
     ['ARD 자동구출', () => ARDDemo.active, () => ARDDemo.cancel()],
     ['수동 구출', () => ManualRescueDemo.active, () => ManualRescueDemo.reset()],
     ['문닫힘 안전장치', () => PhotoEyeDemo.active, () => PhotoEyeDemo.cancel()],
@@ -18,9 +19,11 @@ const DemoExit = (() => {
   const comparisons = [
     { key: 'door', name: '개문발차', state: () => UCMDemo.state, complete: s => s.stage === 'done' },
     { key: 'up', name: '상승과속', state: () => AscentDemo.state, complete: s => s.stage === 'done' },
-    { key: 'brake', name: '브레이크 비교', state: () => BrakeDemo.state, complete: s => s.stage === 'held' || s.stage === 'paused' }
+    { key: 'brake', name: '브레이크 비교', state: () => BrakeDemo.state, complete: s => s.stage === 'held' || s.stage === 'paused' },
+    { key: 'chain', name: '균형체인', state: () => typeof CompChainDemo !== 'undefined' ? CompChainDemo.state : { active: false }, complete: s => s.stage === 'done' }
   ];
   const modeLabel = { normal: '정상', fail: '미작동', none: '미설치', dual: '더블', single: '싱글' };
+  const labelFor = (key, mode) => key === 'chain' ? (mode === 'dual' ? '이중체결' : '미설치') : (modeLabel[mode] || mode);
   let button, compareButton, comparison = null, pendingComparison = null, busy = false, baseline, initialView;
   const current = () => demos.find(([, active]) => active());
   const exitButtons = '#demo-exit,#photo-eye-exit,#rope-measure-exit,#terminal-demo-exit,#relay-demo-exit,#retention-demo-exit,#interlock-demo-cancel';
@@ -77,7 +80,7 @@ const DemoExit = (() => {
   }
   function compareOpposite() {
     if (!comparison || pendingComparison || busy || compareButton.hidden) return;
-    const mode = comparison.key === 'brake' ? (comparison.mode === 'dual' ? 'single' : 'dual') : (comparison.mode === 'normal' ? 'none' : 'normal');
+    const mode = (comparison.key === 'brake' || comparison.key === 'chain') ? (comparison.mode === 'dual' ? 'single' : 'dual') : (comparison.mode === 'normal' ? 'none' : 'normal');
     pendingComparison = { ...comparison, mode, previous: comparison };
     comparison = null; compareButton.hidden = true;
     if (current()) cancel();
@@ -107,11 +110,11 @@ const DemoExit = (() => {
     if (compareButton.hidden) return;
     const result = String(!!live);
     if (compareButton.dataset.result !== result) compareButton.dataset.result = result;
-    const mode = comparison.key === 'brake' ? (comparison.mode === 'dual' ? 'single' : 'dual') : (comparison.mode === 'normal' ? 'none' : 'normal');
+    const mode = (comparison.key === 'brake' || comparison.key === 'chain') ? (comparison.mode === 'dual' ? 'single' : 'dual') : (comparison.mode === 'normal' ? 'none' : 'normal');
     if (compareButton.dataset.demo !== comparison.key || compareButton.dataset.demoMode !== mode) {
       compareButton.dataset.demo = comparison.key; compareButton.dataset.demoMode = mode;
-      compareButton.querySelector('span').textContent = modeLabel[mode] + ' 보기';
-      compareButton.title = comparison.name + ' · ' + modeLabel[comparison.mode] + ' → ' + modeLabel[mode] + ' 비교';
+      compareButton.querySelector('span').textContent = labelFor(comparison.key, mode) + ' 보기';
+      compareButton.title = comparison.name + ' · ' + labelFor(comparison.key, comparison.mode) + ' → ' + labelFor(comparison.key, mode) + ' 비교';
       compareButton.setAttribute('aria-label', compareButton.title);
     }
   }
@@ -299,11 +302,13 @@ const DemoTakeaway = (() => {
     'up:none': { tone: 'danger', tag: '위험 · 상승과속 방지장치 미설치', text: '상승 폭주를 막을 장치가 없으면 카가 최상부 슬래브와 정면 충돌합니다.' },
     'brake:dual': { tone: 'safe', tag: '안전 · 이중(더블) 주브레이크', text: '한쪽 스프링·슈가 고장 나도 독립된 나머지 브레이크가 카를 붙잡습니다.' },
     'brake:single': { tone: 'danger', tag: '위험 · 단일(싱글) 주브레이크', text: '공통 스프링 하나가 파손되면 제동력을 모두 잃어 카가 폭주합니다.' },
+    'chain:dual': { tone: 'safe', tag: '안전 · 균형체인 이중체결 (9.6.4)', text: '주 고정 브라켓이 파손되어도 별도 부재에 체결된 안전 와이어로프가 추락을 막습니다.' },
+    'chain:single': { tone: 'danger', tag: '위험 · 균형체인 이중체결 미설치', text: '추가 보호조치가 없으면 고정부 파손 시 무거운 체인이 승강로로 추락해 중대사고로 이어집니다.' },
     'retention:result': { tone: 'info', tag: '핵심 · 상부 비상가이드 + 하부 보강슈', text: '기존 가이드 손상 시 문 이탈을 억제합니다. 충격 예방·점검이 필수입니다.' }
   };
   let box = null, tagEl = null, textEl = null, dismissedKey = '', activeKey = '', placeAt = 0;
   // PC: 결과 화면 요소(요약 카드·브레이크 결과 글자·하단 자막·좌하단 조작 패널·상단 버튼)를 피해 상단 기본 자리 → 맨 아래 가운데 순으로 놓는다.
-  const PC_OBSTACLES = '#ucm-summary,#brake-compare-ending>div,#ucm-stage,#ascent-stage,#brake-compare-stage,#retention-demo-panel,#ovs-summary,' +
+  const PC_OBSTACLES = '#ucm-summary,#brake-compare-ending>div,#comp-chain-ending>div,#ucm-stage,#ascent-stage,#brake-compare-stage,#comp-chain-stage,#retention-demo-panel,#ovs-summary,' +
     '#pc-dock,#demo-pause,#ucm-exit,#demo-exit,#demo-compare-next,#fault-reset,#brief-badge,#xray-badge';
   const PC_TOP = 104, PC_EDGE = 16, PC_DOCK_GAP = 12;
 
@@ -318,6 +323,9 @@ const DemoTakeaway = (() => {
       }
       if (typeof BrakeDemo !== 'undefined' && BrakeDemo.active && ['held', 'paused'].includes(BrakeDemo.state.stage)) {
         return 'brake:' + (BrakeDemo.state.mode || 'dual');
+      }
+      if (typeof CompChainDemo !== 'undefined' && CompChainDemo.active && CompChainDemo.state.stage === 'done') {
+        return 'chain:' + (CompChainDemo.state.mode || 'dual');
       }
       if (typeof RetentionDemo !== 'undefined' && RetentionDemo.active && RetentionDemo.state.phase === 'result') {
         return 'retention:result';

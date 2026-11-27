@@ -1113,6 +1113,8 @@
   <script src="js/ascent-demo.js?v=20261106-pause-explore"></script>
   <script src="js/brake-grip-fx.js?v=20261108-grip"></script>
   <script src="js/brake-demo.js?v=20261108-grip"></script>
+  <script src="js/comp-chain.js?v=20261127-chain2"></script>
+  <script src="js/comp-chain-demo.js?v=20261127-chain2"></script>
   <script src="js/buffer-demo.js?v=20261106-pause-explore"></script>
   <script src="js/part-actions.js?v=20261105-governor-label"></script>
   <script src="js/overspeed-effects.js?v=20260930-ovs-1"></script>
@@ -1619,6 +1621,7 @@
       buildShaftCableHarness(); // 도어 접점 검정 배선 · 조명 · 상하 스위치 박스
       BuildingLights.build();   // 승강로 등 3로 스위치(피트·상부) + 기계실 일자형 LED 단독 스위치
       buildCounterWeight();     // 후면 균형추
+      CompChain.build();        // 균형체인(보상체인) 2본 + 카·균형추 이중체결 어셈블리
       buildTravelCable();       // 이동케이블(T-Cable) U 곡면 — 카·균형추 위치에서 길이 역산 (16.4)
       buildWireRopes();         // 로프
       buildPitFoundation();     // 피트
@@ -1629,6 +1632,7 @@
       UCMDemo.build(scene);     // 개문발차 시연 승객 「퉁이」(평소 숨김)
       AscentDemo.build();
       BrakeDemo.build();
+      CompChainDemo.build();    // 균형체인 이중체결 비교 시연 (js/comp-chain-demo.js)
       updateBuffers();          // 동적 완충기
       BufferDemo.build();       // 카 완충기 충돌 시연 아이콘·먼지·균형추 여유거리 치수 (js/buffer-demo.js)
       DemoPause.build();        // 모든 시연 공통 일시정지 버튼 (js/demo-pause.js)
@@ -1687,6 +1691,7 @@
       PartActions.update();
       AscentDemo.update();
       BrakeDemo.update();
+      CompChainDemo.update(performance.now());
       HallManual.update();
       ManualRescueDemo.update();
       InterlockDemo.update();

@@ -21,7 +21,7 @@ const PartGlow = (() => {
   const MAX_BEACONS = 32, OVERVIEW_DIST = 12;
   const OVERVIEW_REPS = new Map([
     ['과속 조절기', 10], ['로프브레이크', 9], ['권상기 주브레이크', 9], ['제어반', 8],
-    ['ARD 자동구출장치', 8], ['카 완충기', 8], ['균형추 완충기', 8], ['카 상부 주로프', 7], ['1층 승장문 비상키', 7], ['피트 사다리', 6]
+    ['ARD 자동구출장치', 8], ['카 완충기', 8], ['균형추 완충기', 8], ['균형체인 체결부', 7], ['카 상부 주로프', 7], ['1층 승장문 비상키', 7], ['피트 사다리', 6]
   ]);
   let beaconScene = null, beaconPts = null, beaconGeo = null, beaconMat = null, beaconCount = 0;
   let beaconPosArr = null, beaconPhaseArr = null, beaconScaleArr = null, beaconHits = [];
@@ -286,7 +286,7 @@ const PartGlow = (() => {
     if (typeof DemoPause !== 'undefined' && DemoPause.paused) return true;
     if (e.direct && e.button.id.startsWith('ec-action-')) return false;
     if (typeof overspeedActive !== 'undefined' && overspeedActive) return true;
-    if (bodyHas('ucm-active') || bodyHas('ard-active') || bodyHas('manual-rescue-active') || bodyHas('photo-eye-active') || bodyHas('rope-measure-active') || bodyHas('terminal-demo-active') || bodyHas('portrait-tools-hidden')) return true;
+    if (bodyHas('ucm-active') || bodyHas('ard-active') || bodyHas('manual-rescue-active') || bodyHas('photo-eye-active') || bodyHas('rope-measure-active') || bodyHas('terminal-demo-active') || bodyHas('comp-chain-active') || bodyHas('portrait-tools-hidden')) return true;
     if (bodyHas('buffer-demo-active') && !/buffer-demo-action$/.test(e.button.id)) return true;
     return false;
   }
@@ -448,7 +448,7 @@ const PartGlow = (() => {
   // MobileHUD.demoChoices / demoSummary 키 연결(조건 목록·실행 함수는 MobileHUD 원본만 공유).
   const ENTRY_DEMO_KEY = {
     'btn-overspeed': 'gov', 'rope-brake-action': 'door', 'ascent-action': 'up',
-    'brake-compare-action': 'brake', 'ard-action': 'power', 'manual-rescue-action': 'hand',
+    'brake-compare-action': 'brake', 'comp-chain-action': 'chain', 'ard-action': 'power', 'manual-rescue-action': 'hand',
     'photo-eye-action': 'eye', 'photo-eye-menu-action': 'eye', 'rope-measure-roof': 'rope',
     'buffer-demo-action': 'buffer', 'cwt-buffer-demo-action': 'buffer'
   };
@@ -466,6 +466,7 @@ const PartGlow = (() => {
     if (key === 'door') return typeof UCMDemo !== 'undefined' && UCMDemo.state.active;
     if (key === 'up') return typeof AscentDemo !== 'undefined' && AscentDemo.active;
     if (key === 'brake') return typeof BrakeDemo !== 'undefined' && BrakeDemo.active;
+    if (key === 'chain') return typeof CompChainDemo !== 'undefined' && CompChainDemo.active;
     if (key === 'buffer') return typeof BufferDemo !== 'undefined' && BufferDemo.active;
     return false;
   }
